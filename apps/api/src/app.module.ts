@@ -1,12 +1,22 @@
 import { Module, type MiddlewareConsumer, type NestModule } from '@nestjs/common';
+import { APP_GUARD, APP_INTERCEPTOR } from '@nestjs/core';
 import { LoggerModule } from 'nestjs-pino';
 import { randomUUID } from 'node:crypto';
 import { AppConfigModule } from './config/config.module';
 import { getEnv } from './config/config.service';
 import { PrismaModule } from './infra/prisma/prisma.module';
 import { JobsModule } from './infra/jobs/jobs.module';
+import { TelegramModule } from './infra/telegram/telegram.module';
 import { RequestIdMiddleware } from './common/interceptors/request-id.middleware';
+import { IdempotencyInterceptor } from './common/interceptors/idempotency.interceptor';
+import { RateLimitGuard } from './common/guards/rate-limit.guard';
 import { HealthModule } from './modules/health/health.module';
+import { UsersModule } from './modules/users/users.module';
+import { AuthModule } from './modules/auth/auth.module';
+import { SessionGuard } from './modules/auth/guards/session.guard';
+import { PlatformRoleGuard } from './modules/auth/guards/platform-role.guard';
+import { MeModule } from './modules/me/me.module';
+import { TelegramAppModule } from './modules/telegram/telegram-app.module';
 
 const REDACT_PATHS = [
   'req.headers.authorization',
@@ -39,7 +49,19 @@ const REDACT_PATHS = [
     }),
     PrismaModule,
     JobsModule,
+    TelegramModule,
+    UsersModule,
+    AuthModule,
     HealthModule,
+    MeModule,
+    TelegramAppModule,
+  ],
+  providers: [
+    // Порядок важен: сессия → роль платформы → ограничение частоты.
+    { provide: APP_GUARD, useClass: SessionGuard },
+    { provide: APP_GUARD, useClass: PlatformRoleGuard },
+    { provide: APP_GUARD, useClass: RateLimitGuard },
+    { provide: APP_INTERCEPTOR, useClass: IdempotencyInterceptor },
   ],
 })
 export class AppModule implements NestModule {

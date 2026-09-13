@@ -21,3 +21,136 @@ model WorkerHeartbeat {
 
   @@map("worker_heartbeats")
 }
+
+// ── Пользователи, сессии, роли платформы (этап 1) ─────────────────────────────
+
+enum PlatformRoleName {
+  admin
+  curator
+
+  @@map("platform_role_name")
+}
+
+enum SessionKind {
+  miniapp
+  web
+
+  @@map("session_kind")
+}
+
+enum WebLoginStatus {
+  pending
+  confirmed
+  expired
+  used
+
+  @@map("web_login_status")
+}
+
+model User {
+  id             String    @id @default(uuid()) @db.Uuid
+  telegramUserId BigInt    @unique @map("telegram_user_id")
+  firstName      String    @map("first_name")
+  lastName       String?   @map("last_name")
+  username       String?
+  languageCode   String?   @map("language_code")
+  photoUrl       String?   @map("photo_url")
+  phone          String?
+  email          String?
+  /// Бот не может писать пользователю (получен 403 от Telegram).
+  isBotBlocked   Boolean   @default(false) @map("is_bot_blocked")
+  /// Пользователь запустил бота или дал разрешение на сообщения.
+  botWriteAllowed Boolean  @default(false) @map("bot_write_allowed")
+  isBanned       Boolean   @default(false) @map("is_banned")
+  banReason      String?   @map("ban_reason")
+  lastSeenAt     DateTime? @map("last_seen_at") @db.Timestamptz(6)
+  createdAt      DateTime  @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt      DateTime  @updatedAt @map("updated_at") @db.Timestamptz(6)
+
+  sessions          Session[]
+  platformRoles     PlatformRole[]  @relation("UserPlatformRoles")
+  grantedRoles      PlatformRole[]  @relation("PlatformRoleGrantedBy")
+  webLoginRequests  WebLoginRequest[]
+  idempotencyKeys   IdempotencyKey[]
+
+  @@index([username])
+  @@index([phone])
+  @@map("users")
+}
+
+model Session {
+  id               String      @id @default(uuid()) @db.Uuid
+  userId           String      @map("user_id") @db.Uuid
+  /// sha256 от непрозрачного refresh-токена: сам токен в базе не хранится.
+  refreshTokenHash String      @unique @map("refresh_token_hash")
+  kind             SessionKind
+  userAgent        String?     @map("user_agent")
+  ip               String?
+  createdAt        DateTime    @default(now()) @map("created_at") @db.Timestamptz(6)
+  lastUsedAt       DateTime    @default(now()) @map("last_used_at") @db.Timestamptz(6)
+  expiresAt        DateTime    @map("expires_at") @db.Timestamptz(6)
+  revokedAt        DateTime?   @map("revoked_at") @db.Timestamptz(6)
+  revokeReason     String?     @map("revoke_reason")
+  /// Цепочка ротации: позволяет распознать повторное использование старого токена.
+  replacedById     String?     @unique @map("replaced_by_id") @db.Uuid
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
+  @@index([expiresAt])
+  @@map("sessions")
+}
+
+model PlatformRole {
+  userId      String           @map("user_id") @db.Uuid
+  role        PlatformRoleName
+  grantedById String?          @map("granted_by") @db.Uuid
+  createdAt   DateTime         @default(now()) @map("created_at") @db.Timestamptz(6)
+
+  user      User  @relation("UserPlatformRoles", fields: [userId], references: [id], onDelete: Cascade)
+  grantedBy User? @relation("PlatformRoleGrantedBy", fields: [grantedById], references: [id], onDelete: SetNull)
+
+  @@id([userId, role])
+  @@map("platform_roles")
+}
+
+model WebLoginRequest {
+  id          String         @id @default(uuid()) @db.Uuid
+  code        String         @unique
+  status      WebLoginStatus @default(pending)
+  userId      String?        @map("user_id") @db.Uuid
+  userAgent   String?        @map("user_agent")
+  ip          String?
+  createdAt   DateTime       @default(now()) @map("created_at") @db.Timestamptz(6)
+  expiresAt   DateTime       @map("expires_at") @db.Timestamptz(6)
+  confirmedAt DateTime?      @map("confirmed_at") @db.Timestamptz(6)
+
+  user User? @relation(fields: [userId], references: [id], onDelete: SetNull)
+
+  @@index([expiresAt])
+  @@map("web_login_requests")
+}
+
+model IdempotencyKey {
+  key            String   @db.VarChar(200)
+  userId         String   @map("user_id") @db.Uuid
+  requestHash    String   @map("request_hash")
+  responseStatus Int      @map("response_status")
+  responseBody   Json     @map("response_body")
+  createdAt      DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@id([userId, key])
+  @@index([createdAt])
+  @@map("idempotency_keys")
+}
+
+/// Обработанные обновления Telegram: защита от повторной доставки webhook.
+model TelegramUpdate {
+  updateId  BigInt   @id @map("update_id")
+  createdAt DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
+
+  @@index([createdAt])
+  @@map("telegram_updates")
+}

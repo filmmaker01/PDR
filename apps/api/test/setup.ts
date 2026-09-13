@@ -13,3 +13,6 @@ process.env.STORAGE_DRIVER ??= 'local';
 process.env.STORAGE_LOCAL_DIR ??= './storage-test';
 process.env.VIDEO_PROVIDER ??= 'mock';
 process.env.LOG_LEVEL ??= 'error';
+process.env.TELEGRAM_BOT_TOKEN ??= '123456:TEST-BOT-TOKEN-FOR-INTEGRATION';
+process.env.TELEGRAM_BOT_USERNAME ??= 'pdr_test_bot';
+process.env.TELEGRAM_WEBHOOK_SECRET ??= 'test-webhook-secret';

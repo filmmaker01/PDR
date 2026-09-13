@@ -3,6 +3,7 @@ import { ApiOperation, ApiTags } from '@nestjs/swagger';
 import { AppConfigService } from '@/config/config.service';
 import { PrismaService } from '@/infra/prisma/prisma.service';
 import { JobsService } from '@/infra/jobs/jobs.service';
+import { Public } from '@/modules/auth/decorators/auth.decorators';
 
 interface ReadyCheck {
   status: 'ok' | 'degraded';
@@ -12,6 +13,7 @@ interface ReadyCheck {
 }
 
 @ApiTags('health')
+@Public()
 @Controller('health')
 export class HealthController {
   constructor(
