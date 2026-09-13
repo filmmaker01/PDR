@@ -1,5 +1,18 @@
 import { z } from 'zod';
-import { ORDER_STATUSES, nonEmptyString, optionalString } from '@pdr/shared';
+import {
+  APPOINTMENT_KINDS,
+  APPOINTMENT_STATUSES,
+  ORDER_STATUSES,
+  nonEmptyString,
+  optionalString,
+} from '@pdr/shared';
+
+/** Локальное время мастерской: `YYYY-MM-DDTHH:mm`. */
+const localDateTime = z
+  .string()
+  .regex(/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}(:\d{2})?$/, 'Ожидается время в формате 2026-05-01T09:30');
+
+const dayIso = z.string().regex(/^\d{4}-\d{2}-\d{2}$/, 'Ожидается дата в формате 2026-05-01');
 
 export const clientListQuerySchema = z.object({
   q: z.string().trim().max(120).optional(),
@@ -77,6 +90,17 @@ export const createOrderSchema = z
     damageSummary: optionalString(4000),
     assigneeMemberId: z.string().uuid().nullable().optional(),
     internalNotes: optionalString(4000),
+    /** Запись в календарь создаётся вместе с заказом. */
+    appointment: z
+      .object({
+        startsAtLocal: localDateTime,
+        durationMin: z.number().int().min(15).max(600),
+        kind: z.enum(APPOINTMENT_KINDS).default('inspection'),
+        note: optionalString(1000),
+        allowOverlap: z.boolean().optional(),
+      })
+      .strict()
+      .optional(),
   })
   .strict()
   .refine((v) => Boolean(v.clientId || v.newClient), {
@@ -102,3 +126,60 @@ export const transitionSchema = z
   .strict();
 
 export const archiveSchema = z.object({ archived: z.boolean() }).strict();
+
+// ── Календарь и записи ───────────────────────────────────────────────────────
+
+export const appointmentRangeQuerySchema = z
+  .object({
+    from: z.coerce.date(),
+    to: z.coerce.date(),
+    assigneeMemberId: z.string().uuid().optional(),
+    status: z
+      .union([z.enum(APPOINTMENT_STATUSES), z.array(z.enum(APPOINTMENT_STATUSES))])
+      .optional()
+      .transform((v) => (v === undefined ? undefined : Array.isArray(v) ? v : [v])),
+  })
+  .strict();
+
+export const createAppointmentSchema = z
+  .object({
+    orderId: z.string().uuid().nullable().optional(),
+    clientId: z.string().uuid().nullable().optional(),
+    assigneeMemberId: z.string().uuid().nullable().optional(),
+    startsAtLocal: localDateTime,
+    durationMin: z.number().int().min(15).max(600),
+    kind: z.enum(APPOINTMENT_KINDS).default('repair'),
+    title: optionalString(200),
+    note: optionalString(1000),
+    allowOverlap: z.boolean().optional(),
+  })
+  .strict();
+
+export const updateAppointmentSchema = z
+  .object({
+    startsAtLocal: localDateTime.optional(),
+    durationMin: z.number().int().min(15).max(600).optional(),
+    assigneeMemberId: z.string().uuid().nullable().optional(),
+    kind: z.enum(APPOINTMENT_KINDS).optional(),
+    title: optionalString(200),
+    note: optionalString(1000),
+    allowOverlap: z.boolean().optional(),
+  })
+  .strict();
+
+export const appointmentStatusSchema = z
+  .object({
+    to: z.enum(APPOINTMENT_STATUSES),
+    reason: optionalString(500),
+  })
+  .strict();
+
+export const availabilityQuerySchema = z
+  .object({
+    day: dayIso,
+    assigneeMemberId: z.string().uuid().optional(),
+    durationMin: z.coerce.number().int().min(15).max(600).optional(),
+    stepMin: z.coerce.number().int().min(5).max(240).optional(),
+    excludeId: z.string().uuid().optional(),
+  })
+  .strict();

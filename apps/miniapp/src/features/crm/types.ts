@@ -21,6 +21,7 @@ export interface OrderListItem {
 }
 
 export interface OrderCard extends OrderListItem {
+  appointments: OrderAppointment[];
   damageSummary: string | null;
   internalNotes: string | null;
   clientNotes: string | null;
@@ -166,3 +167,84 @@ export const PAYMENT_LABELS: Record<PaymentStatus, string> = {
   paid: 'Оплачен',
   overpaid: 'Переплата',
 };
+
+export type AppointmentStatus = 'planned' | 'confirmed' | 'done' | 'cancelled' | 'no_show';
+export type AppointmentKind = 'inspection' | 'repair' | 'delivery' | 'other';
+
+export interface Appointment {
+  id: string;
+  startsAt: string;
+  endsAt: string;
+  /** Локальное время мастерской: `YYYY-MM-DDTHH:mm:ss`. */
+  startsAtLocal: string;
+  endsAtLocal: string;
+  durationMin: number;
+  kind: AppointmentKind;
+  kindLabel: string;
+  status: AppointmentStatus;
+  statusLabel: string;
+  allowedTransitions: { status: AppointmentStatus; label: string }[];
+  allowOverlap: boolean;
+  title: string | null;
+  note: string | null;
+  cancelReason: string | null;
+  client: { id: string; name: string; phone: string | null } | null;
+  order: {
+    id: string;
+    number: number;
+    title: string | null;
+    status: OrderStatus;
+    vehicle: { id: string; make: string; model: string; plate: string | null } | null;
+  } | null;
+  assignee: { id: string; name: string; color: string | null } | null;
+  createdAt: string;
+}
+
+export interface OrderAppointment {
+  id: string;
+  startsAt: string;
+  endsAt: string;
+  durationMin: number;
+  kind: AppointmentKind;
+  kindLabel: string;
+  status: AppointmentStatus;
+  statusLabel: string;
+  note: string | null;
+  assignee: { id: string; name: string } | null;
+}
+
+export interface AvailabilityResponse {
+  day: string;
+  timezone: string;
+  assigneeMemberId: string;
+  durationMin: number;
+  slots: { startsAtLocal: string; startsAt: string; endsAt: string }[];
+  busy: { startsAt: string; endsAt: string }[];
+}
+
+export interface OverlapConflict {
+  id: string;
+  startsAt: string;
+  endsAt: string;
+  title: string | null;
+  clientName: string | null;
+  orderNumber: number | null;
+}
+
+export const APPOINTMENT_STATUS_TONES: Record<
+  AppointmentStatus,
+  'info' | 'success' | 'warning' | 'muted' | 'danger'
+> = {
+  planned: 'info',
+  confirmed: 'success',
+  done: 'muted',
+  cancelled: 'danger',
+  no_show: 'warning',
+};
+
+export const APPOINTMENT_KIND_OPTIONS: { value: AppointmentKind; label: string }[] = [
+  { value: 'inspection', label: 'Осмотр' },
+  { value: 'repair', label: 'Ремонт' },
+  { value: 'delivery', label: 'Выдача' },
+  { value: 'other', label: 'Другое' },
+];

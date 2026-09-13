@@ -7,6 +7,11 @@ import { AllowExpiredAccess, Can, Workspace } from '@/modules/workspaces/guards/
 import { Ws } from '@/modules/workspaces/decorators/workspace.decorators';
 import type { WorkspaceContext } from '@/modules/workspaces/workspace.types';
 import { OrdersService } from './orders.service';
+import { AppointmentsService } from '../appointments/appointments.service';
+import {
+  APPOINTMENT_KIND_LABELS,
+  APPOINTMENT_STATUS_LABELS,
+} from '../appointments/appointment-rules';
 import { allowedFrom, ORDER_STATUS_LABELS } from './order-state-machine';
 import {
   archiveSchema,
@@ -55,7 +60,10 @@ function serializeListItem(order: OrderWithRelations): Record<string, unknown> {
 @Controller('workspaces/:workspaceId')
 @Workspace()
 export class OrdersController {
-  constructor(private readonly orders: OrdersService) {}
+  constructor(
+    private readonly orders: OrdersService,
+    private readonly appointments: AppointmentsService,
+  ) {}
 
   @Get('today')
   @Can('orders.read_own')
@@ -113,6 +121,7 @@ export class OrdersController {
   async get(@Ws() ws: WorkspaceContext, @Param('orderId') orderId: string) {
     const order = await this.orders.getById(ws, orderId);
     const history = await this.orders.history(ws, orderId);
+    const appointments = await this.appointments.listForOrder(ws, orderId);
 
     return {
       ...serializeListItem(order),
@@ -129,6 +138,29 @@ export class OrdersController {
       allowedTransitions: allowedFrom(order.status).map((status) => ({
         status,
         label: ORDER_STATUS_LABELS[status],
+      })),
+      appointments: appointments.map((appointment) => ({
+        id: appointment.id,
+        startsAt: appointment.startsAt.toISOString(),
+        endsAt: appointment.endsAt.toISOString(),
+        durationMin: Math.round(
+          (appointment.endsAt.getTime() - appointment.startsAt.getTime()) / 60_000,
+        ),
+        kind: appointment.kind,
+        kindLabel: APPOINTMENT_KIND_LABELS[appointment.kind] ?? appointment.kind,
+        status: appointment.status,
+        statusLabel: APPOINTMENT_STATUS_LABELS[appointment.status],
+        note: appointment.note,
+        assignee: appointment.assignee
+          ? {
+              id: appointment.assignee.id,
+              name:
+                appointment.assignee.displayName ??
+                [appointment.assignee.user.firstName, appointment.assignee.user.lastName]
+                  .filter(Boolean)
+                  .join(' '),
+            }
+          : null,
       })),
       history: history.map((entry) => ({
         id: entry.id,

@@ -527,14 +527,18 @@ appointments
   kind              enum appointment_kind (inspection, repair, delivery, other)
   status            enum appointment_status (planned, confirmed, done, cancelled, no_show)
   allow_overlap     boolean not null default false   -- подтверждённое владельцем пересечение
+  title             text null                 -- кого ждём, если заказа ещё нет
   note              text null
+  cancel_reason     text null                 -- причина отмены или неявки
   created_by        uuid → users
   created_at, updated_at
   check (ends_at > starts_at)
   index (workspace_id, starts_at), index (workspace_id, assignee_member_id, starts_at)
+  index (workspace_id, order_id), index (status, starts_at)   -- последний нужен задаче напоминаний
   -- защита от двойного бронирования (сырой SQL в миграции, требует btree_gist):
-  -- exclude using gist (workspace_id with =, assignee_member_id with =, tstzrange(starts_at, ends_at) with &&)
+  -- exclude using gist (workspace_id with =, assignee_member_id with =, tstzrange(starts_at, ends_at, '[)') with &&)
   --   where (status in ('planned','confirmed') and allow_overlap = false and assignee_member_id is not null)
+  -- границы полуоткрытые: запись 10:00–11:00 и следующая с 11:00 не конфликтуют
 
 order_photos
   id                uuid pk

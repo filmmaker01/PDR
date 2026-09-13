@@ -8,6 +8,7 @@ import { useWorkspace } from './api';
 
 const TABS = [
   { to: 'today', label: 'Сегодня' },
+  { to: 'calendar', label: 'Календарь' },
   { to: 'orders', label: 'Заказы' },
   { to: 'clients', label: 'Клиенты' },
   { to: 'settings', label: 'Ещё' },

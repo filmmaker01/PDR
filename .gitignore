@@ -14,3 +14,9 @@ coverage/
 playwright-report/
 test-results/
 apps/api/prisma/*.db
+
+# Артефакты tsc, случайно попадающие в src фронтенда
+apps/*/src/**/*.js
+apps/*/src/**/*.js.map
+apps/*/src/**/*.d.ts
+apps/*/src/**/*.d.ts.map

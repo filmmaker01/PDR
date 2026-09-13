@@ -1,16 +1,27 @@
+import { useMemo } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
 import { Badge, Button, Card, EmptyState, ListItem, SkeletonList } from '@pdr/ui';
+import { todayInZone, zonedTimeToUtc } from '@pdr/shared';
 import { formatMinor } from '@/shared/format';
-import { useDebts, useOrders, useToday } from './api';
-import { STATUS_TONES } from './types';
+import { useAppointments, useDebts, useOrders, useToday, useWorkspace } from './api';
+import { APPOINTMENT_STATUS_TONES, STATUS_TONES } from './types';
 
 export function TodayScreen() {
   const { workspaceId = '' } = useParams();
   const navigate = useNavigate();
 
   const summary = useToday(workspaceId);
+  const workspace = useWorkspace(workspaceId);
   const active = useOrders(workspaceId, { status: ['in_progress', 'ready'] });
   const debts = useDebts(workspaceId);
+
+  const timezone = workspace.data?.timezone ?? 'Europe/Moscow';
+  const todayRange = useMemo(() => {
+    const day = todayInZone(timezone);
+    const from = zonedTimeToUtc(`${day}T00:00:00`, timezone);
+    return { from: from.toISOString(), to: new Date(from.getTime() + 86_400_000).toISOString() };
+  }, [timezone]);
+  const appointments = useAppointments(workspaceId, todayRange);
 
   if (summary.isLoading) return <SkeletonList rows={3} />;
 
@@ -51,6 +62,48 @@ export function TodayScreen() {
           </button>
         </Card>
       ) : null}
+
+      <h2 className="pdr-subtitle">Записи на сегодня</h2>
+      {appointments.isLoading ? (
+        <SkeletonList rows={2} />
+      ) : (appointments.data?.items.length ?? 0) === 0 ? (
+        <EmptyState
+          title="На сегодня записей нет"
+          description="Запишите клиента в календаре."
+        />
+      ) : (
+        <Card flat>
+          <div className="pdr-list">
+            {appointments.data!.items.map((appointment) => (
+              <ListItem
+                key={appointment.id}
+                title={`${appointment.startsAtLocal.slice(11, 16)} · ${
+                  appointment.client?.name ?? appointment.title ?? 'Без клиента'
+                }`}
+                subtitle={[
+                  appointment.kindLabel,
+                  appointment.order ? `заказ №${appointment.order.number}` : null,
+                  appointment.assignee?.name,
+                ]
+                  .filter(Boolean)
+                  .join(' · ')}
+                right={
+                  <Badge tone={APPOINTMENT_STATUS_TONES[appointment.status]}>
+                    {appointment.statusLabel}
+                  </Badge>
+                }
+                onClick={() =>
+                  navigate(
+                    appointment.order
+                      ? `/workspace/${workspaceId}/orders/${appointment.order.id}`
+                      : `/workspace/${workspaceId}/calendar`,
+                  )
+                }
+              />
+            ))}
+          </div>
+        </Card>
+      )}
 
       <h2 className="pdr-subtitle">Активные заказы</h2>
       {active.isLoading ? (

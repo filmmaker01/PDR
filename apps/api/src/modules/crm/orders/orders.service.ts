@@ -13,6 +13,7 @@ import {
   type OrderListFilter,
   type OrderWithRelations,
 } from '../repositories/orders.repository';
+import { AppointmentsService } from '../appointments/appointments.service';
 import {
   ACTIVE_STATUSES,
   allowedFrom,
@@ -45,6 +46,14 @@ export interface CreateOrderInput {
   damageSummary?: string | null;
   assigneeMemberId?: string | null;
   internalNotes?: string | null;
+  /** Первая запись в календарь: создаётся вместе с заказом. */
+  appointment?: {
+    startsAtLocal: string;
+    durationMin: number;
+    kind?: 'inspection' | 'repair' | 'delivery' | 'other';
+    note?: string | null;
+    allowOverlap?: boolean;
+  };
 }
 
 @Injectable()
@@ -64,6 +73,7 @@ export class OrdersService {
     private readonly vehicles: VehiclesRepository,
     private readonly workspaces: WorkspacesService,
     private readonly notifications: NotificationsService,
+    private readonly appointments: AppointmentsService,
   ) {}
 
   onTransition(listener: OrderTransitionListener): void {
@@ -195,6 +205,21 @@ export class OrdersService {
           comment: 'Заказ создан',
         },
       });
+
+      // Заказ и первая запись появляются вместе: запись без заказа
+      // после ошибки оставила бы календарь рассинхронизированным.
+      if (input.appointment) {
+        await this.appointments.createWithin(tx, ctx, {
+          orderId: order.id,
+          clientId: clientId!,
+          assigneeMemberId,
+          startsAtLocal: input.appointment.startsAtLocal,
+          durationMin: input.appointment.durationMin,
+          kind: input.appointment.kind ?? 'inspection',
+          note: input.appointment.note ?? null,
+          allowOverlap: input.appointment.allowOverlap,
+        });
+      }
 
       return order;
     });

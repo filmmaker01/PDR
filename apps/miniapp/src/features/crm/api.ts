@@ -1,6 +1,8 @@
 import { useQuery } from '@tanstack/react-query';
 import { api } from '@/shared/api';
 import type {
+  Appointment,
+  AvailabilityResponse,
   ClientCard,
   ClientListItem,
   MemberInfo,
@@ -106,5 +108,52 @@ export function useDebts(workspaceId: string) {
           deliveredAt: string | null;
         }[]
       >(`/workspaces/${workspaceId}/debts`),
+  });
+}
+
+export function useAppointments(
+  workspaceId: string,
+  range: { from: string; to: string; assigneeMemberId?: string },
+) {
+  return useQuery({
+    queryKey: ['crm', 'appointments', workspaceId, range],
+    queryFn: () =>
+      api.get<{ timezone: string; items: Appointment[] }>(
+        `/workspaces/${workspaceId}/appointments`,
+        {
+          query: {
+            from: range.from,
+            to: range.to,
+            assigneeMemberId: range.assigneeMemberId,
+          },
+        },
+      ),
+  });
+}
+
+export function useAvailability(
+  workspaceId: string,
+  input: {
+    day: string;
+    assigneeMemberId?: string;
+    durationMin: number;
+    stepMin?: number;
+    excludeId?: string;
+    enabled?: boolean;
+  },
+) {
+  return useQuery({
+    queryKey: ['crm', 'availability', workspaceId, input],
+    enabled: input.enabled !== false,
+    queryFn: () =>
+      api.get<AvailabilityResponse>(`/workspaces/${workspaceId}/appointments/availability`, {
+        query: {
+          day: input.day,
+          assigneeMemberId: input.assigneeMemberId,
+          durationMin: input.durationMin,
+          stepMin: input.stepMin,
+          excludeId: input.excludeId,
+        },
+      }),
   });
 }

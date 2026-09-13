@@ -48,53 +48,54 @@ enum WebLoginStatus {
 }
 
 model User {
-  id             String    @id @default(uuid()) @db.Uuid
-  telegramUserId BigInt    @unique @map("telegram_user_id")
-  firstName      String    @map("first_name")
-  lastName       String?   @map("last_name")
-  username       String?
-  languageCode   String?   @map("language_code")
-  photoUrl       String?   @map("photo_url")
-  phone          String?
-  email          String?
+  id              String    @id @default(uuid()) @db.Uuid
+  telegramUserId  BigInt    @unique @map("telegram_user_id")
+  firstName       String    @map("first_name")
+  lastName        String?   @map("last_name")
+  username        String?
+  languageCode    String?   @map("language_code")
+  photoUrl        String?   @map("photo_url")
+  phone           String?
+  email           String?
   /// Бот не может писать пользователю (получен 403 от Telegram).
-  isBotBlocked   Boolean   @default(false) @map("is_bot_blocked")
+  isBotBlocked    Boolean   @default(false) @map("is_bot_blocked")
   /// Пользователь запустил бота или дал разрешение на сообщения.
-  botWriteAllowed Boolean  @default(false) @map("bot_write_allowed")
-  isBanned       Boolean   @default(false) @map("is_banned")
-  banReason      String?   @map("ban_reason")
-  lastSeenAt     DateTime? @map("last_seen_at") @db.Timestamptz(6)
-  createdAt      DateTime  @default(now()) @map("created_at") @db.Timestamptz(6)
-  updatedAt      DateTime  @updatedAt @map("updated_at") @db.Timestamptz(6)
+  botWriteAllowed Boolean   @default(false) @map("bot_write_allowed")
+  isBanned        Boolean   @default(false) @map("is_banned")
+  banReason       String?   @map("ban_reason")
+  lastSeenAt      DateTime? @map("last_seen_at") @db.Timestamptz(6)
+  createdAt       DateTime  @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt       DateTime  @updatedAt @map("updated_at") @db.Timestamptz(6)
 
-  sessions          Session[]
-  platformRoles     PlatformRole[]  @relation("UserPlatformRoles")
-  grantedRoles      PlatformRole[]  @relation("PlatformRoleGrantedBy")
-  webLoginRequests  WebLoginRequest[]
-  idempotencyKeys   IdempotencyKey[]
-  workspaceMemberships WorkspaceMember[]
-  createdWorkspaces    Workspace[]           @relation("WorkspaceCreatedBy")
-  createdInvitations   WorkspaceInvitation[] @relation("InvitationCreatedBy")
-  acceptedInvitations  WorkspaceInvitation[] @relation("InvitationAcceptedBy")
-  accessGrants         AccessGrant[]         @relation("GrantSubjectUser")
-  grantedAccess        AccessGrant[]         @relation("GrantGrantedBy")
-  revokedAccess        AccessGrant[]         @relation("GrantRevokedBy")
-  files                StoredFile[]          @relation("FileOwner")
-  notifications        Notification[]
+  sessions               Session[]
+  platformRoles          PlatformRole[]          @relation("UserPlatformRoles")
+  grantedRoles           PlatformRole[]          @relation("PlatformRoleGrantedBy")
+  webLoginRequests       WebLoginRequest[]
+  idempotencyKeys        IdempotencyKey[]
+  workspaceMemberships   WorkspaceMember[]
+  createdWorkspaces      Workspace[]             @relation("WorkspaceCreatedBy")
+  createdInvitations     WorkspaceInvitation[]   @relation("InvitationCreatedBy")
+  acceptedInvitations    WorkspaceInvitation[]   @relation("InvitationAcceptedBy")
+  accessGrants           AccessGrant[]           @relation("GrantSubjectUser")
+  grantedAccess          AccessGrant[]           @relation("GrantGrantedBy")
+  revokedAccess          AccessGrant[]           @relation("GrantRevokedBy")
+  files                  StoredFile[]            @relation("FileOwner")
+  notifications          Notification[]
   notificationPreference NotificationPreference?
-  auditEntries         AuditLog[]
-  publishedVersions    CourseVersion[]       @relation("CourseVersionPublishedBy")
-  uploadedVideos       VideoAsset[]          @relation("VideoUploadedBy")
-  enrollments          Enrollment[]
-  curatedCohorts       CohortCurator[]
-  stageOverrides       StageOverride[]       @relation("StageOverrideCreatedBy")
-  claimedSubmissions   Submission[]          @relation("SubmissionClaimedBy")
-  reviews              Review[]              @relation("ReviewAuthor")
-  reviewComments       ReviewComment[]       @relation("ReviewCommentAuthor")
-  gradedAttempts       ExamAttempt[]         @relation("AttemptGrader")
-  createdClients       Client[]              @relation("ClientCreatedBy")
-  createdOrders        Order[]               @relation("OrderCreatedBy")
-  orderStatusChanges   OrderStatusHistory[]  @relation("OrderStatusChangedBy")
+  auditEntries           AuditLog[]
+  publishedVersions      CourseVersion[]         @relation("CourseVersionPublishedBy")
+  uploadedVideos         VideoAsset[]            @relation("VideoUploadedBy")
+  enrollments            Enrollment[]
+  curatedCohorts         CohortCurator[]
+  stageOverrides         StageOverride[]         @relation("StageOverrideCreatedBy")
+  claimedSubmissions     Submission[]            @relation("SubmissionClaimedBy")
+  reviews                Review[]                @relation("ReviewAuthor")
+  reviewComments         ReviewComment[]         @relation("ReviewCommentAuthor")
+  gradedAttempts         ExamAttempt[]           @relation("AttemptGrader")
+  createdClients         Client[]                @relation("ClientCreatedBy")
+  createdOrders          Order[]                 @relation("OrderCreatedBy")
+  orderStatusChanges     OrderStatusHistory[]    @relation("OrderStatusChangedBy")
+  createdAppointments    Appointment[]           @relation("AppointmentCreatedBy")
 
   @@index([username])
   @@index([phone])
@@ -188,31 +189,32 @@ enum WorkspaceRole {
 }
 
 model Workspace {
-  id         String    @id @default(uuid()) @db.Uuid
-  name       String
+  id          String    @id @default(uuid()) @db.Uuid
+  name        String
   /// Часовой пояс IANA: определяет «сегодня» и отображение календаря.
-  timezone   String    @default("Europe/Moscow")
-  currency   String    @default("RUB") @db.Char(3)
-  phone      String?
-  address    String?
+  timezone    String    @default("Europe/Moscow")
+  currency    String    @default("RUB") @db.Char(3)
+  phone       String?
+  address     String?
   /// Рабочие часы, длительность записи по умолчанию, права сотрудников.
-  settings   Json      @default("{}")
+  settings    Json      @default("{}")
   /// Счётчик номеров заказов внутри мастерской.
-  orderSeq   Int       @default(0) @map("order_seq")
-  createdById String?  @map("created_by") @db.Uuid
-  archivedAt DateTime? @map("archived_at") @db.Timestamptz(6)
-  createdAt  DateTime  @default(now()) @map("created_at") @db.Timestamptz(6)
-  updatedAt  DateTime  @updatedAt @map("updated_at") @db.Timestamptz(6)
+  orderSeq    Int       @default(0) @map("order_seq")
+  createdById String?   @map("created_by") @db.Uuid
+  archivedAt  DateTime? @map("archived_at") @db.Timestamptz(6)
+  createdAt   DateTime  @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt   DateTime  @updatedAt @map("updated_at") @db.Timestamptz(6)
 
-  createdBy   User?                  @relation("WorkspaceCreatedBy", fields: [createdById], references: [id], onDelete: SetNull)
-  members     WorkspaceMember[]
-  invitations WorkspaceInvitation[]
-  grants      AccessGrant[]
-  files       StoredFile[]
+  createdBy    User?                 @relation("WorkspaceCreatedBy", fields: [createdById], references: [id], onDelete: SetNull)
+  members      WorkspaceMember[]
+  invitations  WorkspaceInvitation[]
+  grants       AccessGrant[]
+  files        StoredFile[]
   auditEntries AuditLog[]
-  clients     Client[]
-  vehicles    Vehicle[]
-  orders      Order[]
+  clients      Client[]
+  vehicles     Vehicle[]
+  orders       Order[]
+  appointments Appointment[]
 
   @@map("workspaces")
 }
@@ -229,9 +231,10 @@ model WorkspaceMember {
   joinedAt    DateTime      @default(now()) @map("joined_at") @db.Timestamptz(6)
   leftAt      DateTime?     @map("left_at") @db.Timestamptz(6)
 
-  workspace Workspace @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
-  user      User      @relation(fields: [userId], references: [id], onDelete: Cascade)
-  orders    Order[]
+  workspace    Workspace     @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  user         User          @relation(fields: [userId], references: [id], onDelete: Cascade)
+  orders       Order[]
+  appointments Appointment[]
 
   @@unique([workspaceId, userId])
   @@unique([workspaceId, id], name: "member_in_workspace")
@@ -359,38 +362,38 @@ enum FileStatus {
 }
 
 model StoredFile {
-  id           String     @id @default(uuid()) @db.Uuid
-  ownerUserId  String     @map("owner_user_id") @db.Uuid
+  id             String     @id @default(uuid()) @db.Uuid
+  ownerUserId    String     @map("owner_user_id") @db.Uuid
   /// Для файлов CRM: мастерская-владелец. Для учебных — null.
-  workspaceId  String?    @map("workspace_id") @db.Uuid
-  scope        FileScope
+  workspaceId    String?    @map("workspace_id") @db.Uuid
+  scope          FileScope
   /// Ключ объекта в хранилище: <scope>/<владелец>/<год>/<месяц>/<id>.<ext>
-  storageKey   String     @unique @map("storage_key")
-  bucket       String
-  mimeType     String     @map("mime_type")
-  sizeBytes    BigInt     @map("size_bytes")
-  originalName String?    @map("original_name")
-  status       FileStatus @default(pending)
-  width        Int?
-  height       Int?
-  durationSec  Int?       @map("duration_sec")
+  storageKey     String     @unique @map("storage_key")
+  bucket         String
+  mimeType       String     @map("mime_type")
+  sizeBytes      BigInt     @map("size_bytes")
+  originalName   String?    @map("original_name")
+  status         FileStatus @default(pending)
+  width          Int?
+  height         Int?
+  durationSec    Int?       @map("duration_sec")
   /// Производные: {"thumb":"<key>","preview":"<key>"}
-  variants     Json       @default("{}")
-  checksumSha256 String?  @map("checksum_sha256")
+  variants       Json       @default("{}")
+  checksumSha256 String?    @map("checksum_sha256")
   /// Незавершённая многочастная загрузка.
-  uploadId     String?    @map("upload_id")
-  error        String?
-  createdAt    DateTime   @default(now()) @map("created_at") @db.Timestamptz(6)
-  updatedAt    DateTime   @updatedAt @map("updated_at") @db.Timestamptz(6)
-  deletedAt    DateTime?  @map("deleted_at") @db.Timestamptz(6)
+  uploadId       String?    @map("upload_id")
+  error          String?
+  createdAt      DateTime   @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt      DateTime   @updatedAt @map("updated_at") @db.Timestamptz(6)
+  deletedAt      DateTime?  @map("deleted_at") @db.Timestamptz(6)
 
-  owner     User       @relation("FileOwner", fields: [ownerUserId], references: [id], onDelete: Cascade)
-  workspace Workspace? @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
-  stageCovers      Stage[]          @relation("StageCover")
-  lessonMaterials  LessonMaterial[] @relation("LessonMaterialFile")
-  questionImages   Question[]       @relation("QuestionImage")
-  submissionFiles  SubmissionFile[] @relation("SubmissionFiles")
-  attemptFiles     AttemptFile[]    @relation("AttemptFiles")
+  owner           User             @relation("FileOwner", fields: [ownerUserId], references: [id], onDelete: Cascade)
+  workspace       Workspace?       @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  stageCovers     Stage[]          @relation("StageCover")
+  lessonMaterials LessonMaterial[] @relation("LessonMaterialFile")
+  questionImages  Question[]       @relation("QuestionImage")
+  submissionFiles SubmissionFile[] @relation("SubmissionFiles")
+  attemptFiles    AttemptFile[]    @relation("AttemptFiles")
 
   @@index([workspaceId, scope])
   @@index([ownerUserId, scope])
@@ -449,20 +452,20 @@ model Notification {
 }
 
 model AuditLog {
-  id              BigInt   @id @default(autoincrement())
-  requestId       String?  @map("request_id")
+  id               BigInt   @id @default(autoincrement())
+  requestId        String?  @map("request_id")
   /// null — действие выполнено системой или фоновой задачей.
-  actorUserId     String?  @map("actor_user_id") @db.Uuid
-  actorRoleContext String? @map("actor_role_context")
-  workspaceId     String?  @map("workspace_id") @db.Uuid
-  entityType      String   @map("entity_type")
-  entityId        String?  @map("entity_id")
-  action          String
-  before          Json?
-  after           Json?
-  ip              String?
-  userAgent       String?  @map("user_agent")
-  createdAt       DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
+  actorUserId      String?  @map("actor_user_id") @db.Uuid
+  actorRoleContext String?  @map("actor_role_context")
+  workspaceId      String?  @map("workspace_id") @db.Uuid
+  entityType       String   @map("entity_type")
+  entityId         String?  @map("entity_id")
+  action           String
+  before           Json?
+  after            Json?
+  ip               String?
+  userAgent        String?  @map("user_agent")
+  createdAt        DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
 
   actor     User?      @relation(fields: [actorUserId], references: [id], onDelete: SetNull)
   workspace Workspace? @relation(fields: [workspaceId], references: [id], onDelete: SetNull)
@@ -544,8 +547,8 @@ model CourseVersion {
   createdAt     DateTime            @default(now()) @map("created_at") @db.Timestamptz(6)
   updatedAt     DateTime            @updatedAt @map("updated_at") @db.Timestamptz(6)
 
-  course      Course    @relation(fields: [courseId], references: [id], onDelete: Cascade)
-  publishedBy User?     @relation("CourseVersionPublishedBy", fields: [publishedById], references: [id], onDelete: SetNull)
+  course      Course   @relation(fields: [courseId], references: [id], onDelete: Cascade)
+  publishedBy User?    @relation("CourseVersionPublishedBy", fields: [publishedById], references: [id], onDelete: SetNull)
   stages      Stage[]
   cohorts     Cohort[]
 
@@ -554,16 +557,16 @@ model CourseVersion {
 }
 
 model Stage {
-  id              String  @id @default(uuid()) @db.Uuid
-  courseVersionId String  @map("course_version_id") @db.Uuid
+  id                    String  @id @default(uuid()) @db.Uuid
+  courseVersionId       String  @map("course_version_id") @db.Uuid
   /// Стабильный ключ между версиями: по нему переносится прогресс.
-  key             String
-  position        Int
-  title           String
-  description     String?
-  coverFileId     String? @map("cover_file_id") @db.Uuid
+  key                   String
+  position              Int
+  title                 String
+  description           String?
+  coverFileId           String? @map("cover_file_id") @db.Uuid
   /// Дней от старта обучения ученика (режим interval).
-  unlockDaysOffset Int    @default(0) @map("unlock_days_offset")
+  unlockDaysOffset      Int     @default(0) @map("unlock_days_offset")
   requiresPreviousStage Boolean @default(true) @map("requires_previous_stage")
 
   courseVersion CourseVersion @relation(fields: [courseVersionId], references: [id], onDelete: Cascade)
@@ -578,21 +581,21 @@ model Stage {
 }
 
 model Lesson {
-  id              String  @id @default(uuid()) @db.Uuid
-  stageId         String  @map("stage_id") @db.Uuid
-  key             String
-  position        Int
-  title           String
-  description     String?
-  isRequired      Boolean @default(true) @map("is_required")
-  videoAssetId    String? @map("video_asset_id") @db.Uuid
+  id               String  @id @default(uuid()) @db.Uuid
+  stageId          String  @map("stage_id") @db.Uuid
+  key              String
+  position         Int
+  title            String
+  description      String?
+  isRequired       Boolean @default(true) @map("is_required")
+  videoAssetId     String? @map("video_asset_id") @db.Uuid
   /// Вспомогательный порог просмотра. 0 — не учитывается.
-  minWatchPercent Int     @default(0) @map("min_watch_percent")
-  estimatedMinutes Int?   @map("estimated_minutes")
+  minWatchPercent  Int     @default(0) @map("min_watch_percent")
+  estimatedMinutes Int?    @map("estimated_minutes")
 
-  stage      Stage            @relation(fields: [stageId], references: [id], onDelete: Cascade)
-  videoAsset VideoAsset?      @relation(fields: [videoAssetId], references: [id], onDelete: SetNull)
-  materials  LessonMaterial[]
+  stage       Stage            @relation(fields: [stageId], references: [id], onDelete: Cascade)
+  videoAsset  VideoAsset?      @relation(fields: [videoAssetId], references: [id], onDelete: SetNull)
+  materials   LessonMaterial[]
   assignments Assignment[]
 
   @@unique([stageId, key])
@@ -638,18 +641,18 @@ model VideoAsset {
 }
 
 model Assignment {
-  id           String  @id @default(uuid()) @db.Uuid
-  stageId      String  @map("stage_id") @db.Uuid
+  id            String  @id @default(uuid()) @db.Uuid
+  stageId       String  @map("stage_id") @db.Uuid
   /// Задание к уроку или к этапу в целом.
-  lessonId     String? @map("lesson_id") @db.Uuid
-  key          String
-  position     Int
-  title        String
-  instructions String
-  isRequired   Boolean @default(true) @map("is_required")
+  lessonId      String? @map("lesson_id") @db.Uuid
+  key           String
+  position      Int
+  title         String
+  instructions  String
+  isRequired    Boolean @default(true) @map("is_required")
   /// {"min_photos":1,"min_videos":0,"text_required":false}
-  requiredMedia Json   @default("{\"min_photos\":1,\"min_videos\":0,\"text_required\":false}") @map("required_media")
-  maxVideoSec  Int?    @map("max_video_sec")
+  requiredMedia Json    @default("{\"min_photos\":1,\"min_videos\":0,\"text_required\":false}") @map("required_media")
+  maxVideoSec   Int?    @map("max_video_sec")
 
   stage  Stage   @relation(fields: [stageId], references: [id], onDelete: Cascade)
   lesson Lesson? @relation(fields: [lessonId], references: [id], onDelete: SetNull)
@@ -685,16 +688,16 @@ model Exam {
 }
 
 model Question {
-  id           String       @id @default(uuid()) @db.Uuid
-  examId       String       @map("exam_id") @db.Uuid
-  position     Int
-  kind         QuestionKind
-  body         String
-  imageFileId  String?      @map("image_file_id") @db.Uuid
-  explanation  String?
-  points       Int          @default(1)
+  id              String       @id @default(uuid()) @db.Uuid
+  examId          String       @map("exam_id") @db.Uuid
+  position        Int
+  kind            QuestionKind
+  body            String
+  imageFileId     String?      @map("image_file_id") @db.Uuid
+  explanation     String?
+  points          Int          @default(1)
   /// Принимаемые ответы для короткого текста.
-  acceptedAnswers Json?     @map("accepted_answers")
+  acceptedAnswers Json?        @map("accepted_answers")
 
   exam      Exam             @relation(fields: [examId], references: [id], onDelete: Cascade)
   imageFile StoredFile?      @relation("QuestionImage", fields: [imageFileId], references: [id], onDelete: SetNull)
@@ -759,8 +762,8 @@ model Cohort {
   createdAt       DateTime   @default(now()) @map("created_at") @db.Timestamptz(6)
   updatedAt       DateTime   @updatedAt @map("updated_at") @db.Timestamptz(6)
 
-  course        Course        @relation(fields: [courseId], references: [id], onDelete: Cascade)
-  courseVersion CourseVersion @relation(fields: [courseVersionId], references: [id], onDelete: Restrict)
+  course        Course          @relation(fields: [courseId], references: [id], onDelete: Cascade)
+  courseVersion CourseVersion   @relation(fields: [courseVersionId], references: [id], onDelete: Restrict)
   curators      CohortCurator[]
   enrollments   Enrollment[]
 
@@ -959,29 +962,29 @@ enum AttemptStatus {
 }
 
 model ExamAttempt {
-  id           String        @id @default(uuid()) @db.Uuid
-  enrollmentId String        @map("enrollment_id") @db.Uuid
+  id            String        @id @default(uuid()) @db.Uuid
+  enrollmentId  String        @map("enrollment_id") @db.Uuid
   /// Ключ экзамена: переживает смену версии курса.
-  examKey      String        @map("exam_key")
+  examKey       String        @map("exam_key")
   /// Конкретная версия экзамена, по которой шла попытка.
-  examId       String        @map("exam_id") @db.Uuid
-  attemptNo    Int           @map("attempt_no")
-  status       AttemptStatus @default(in_progress)
-  startedAt    DateTime      @default(now()) @map("started_at") @db.Timestamptz(6)
-  deadlineAt   DateTime?     @map("deadline_at") @db.Timestamptz(6)
-  submittedAt  DateTime?     @map("submitted_at") @db.Timestamptz(6)
-  gradedAt     DateTime?     @map("graded_at") @db.Timestamptz(6)
-  score        Int?
-  maxScore     Int?          @map("max_score")
-  percent      Int?
-  passed       Boolean?
-  graderId     String?       @map("grader_id") @db.Uuid
-  graderComment String?      @map("grader_comment")
+  examId        String        @map("exam_id") @db.Uuid
+  attemptNo     Int           @map("attempt_no")
+  status        AttemptStatus @default(in_progress)
+  startedAt     DateTime      @default(now()) @map("started_at") @db.Timestamptz(6)
+  deadlineAt    DateTime?     @map("deadline_at") @db.Timestamptz(6)
+  submittedAt   DateTime?     @map("submitted_at") @db.Timestamptz(6)
+  gradedAt      DateTime?     @map("graded_at") @db.Timestamptz(6)
+  score         Int?
+  maxScore      Int?          @map("max_score")
+  percent       Int?
+  passed        Boolean?
+  graderId      String?       @map("grader_id") @db.Uuid
+  graderComment String?       @map("grader_comment")
   /// Зафиксированные порядок и выборка вопросов для этой попытки.
-  questionOrder Json?        @map("question_order")
-  cancelReason String?       @map("cancel_reason")
-  createdAt    DateTime      @default(now()) @map("created_at") @db.Timestamptz(6)
-  updatedAt    DateTime      @updatedAt @map("updated_at") @db.Timestamptz(6)
+  questionOrder Json?         @map("question_order")
+  cancelReason  String?       @map("cancel_reason")
+  createdAt     DateTime      @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt     DateTime      @updatedAt @map("updated_at") @db.Timestamptz(6)
 
   enrollment Enrollment      @relation(fields: [enrollmentId], references: [id], onDelete: Cascade)
   exam       Exam            @relation(fields: [examId], references: [id], onDelete: Restrict)
@@ -1067,10 +1070,11 @@ model Client {
   createdAt        DateTime  @default(now()) @map("created_at") @db.Timestamptz(6)
   updatedAt        DateTime  @updatedAt @map("updated_at") @db.Timestamptz(6)
 
-  workspace Workspace @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
-  createdBy User?     @relation("ClientCreatedBy", fields: [createdById], references: [id], onDelete: SetNull)
-  vehicles  Vehicle[]
-  orders    Order[]
+  workspace    Workspace     @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  createdBy    User?         @relation("ClientCreatedBy", fields: [createdById], references: [id], onDelete: SetNull)
+  vehicles     Vehicle[]
+  orders       Order[]
+  appointments Appointment[]
 
   /// Нужен для составных внешних ключей: связь не может пересечь мастерскую.
   @@unique([workspaceId, id], name: "client_in_workspace")
@@ -1107,43 +1111,44 @@ model Vehicle {
 }
 
 model Order {
-  id                String        @id @default(uuid()) @db.Uuid
-  workspaceId       String        @map("workspace_id") @db.Uuid
+  id               String        @id @default(uuid()) @db.Uuid
+  workspaceId      String        @map("workspace_id") @db.Uuid
   /// Порядковый номер внутри мастерской.
-  number            Int
-  clientId          String        @map("client_id") @db.Uuid
-  vehicleId         String?       @map("vehicle_id") @db.Uuid
-  assigneeMemberId  String?       @map("assignee_member_id") @db.Uuid
-  status            OrderStatus   @default(new)
+  number           Int
+  clientId         String        @map("client_id") @db.Uuid
+  vehicleId        String?       @map("vehicle_id") @db.Uuid
+  assigneeMemberId String?       @map("assignee_member_id") @db.Uuid
+  status           OrderStatus   @default(new)
   /// Денормализовано: пересчитывается в транзакции с оплатой.
-  paymentStatus     PaymentStatus @default(unpaid) @map("payment_status")
-  agreedEstimateId  String?       @map("agreed_estimate_id") @db.Uuid
-  agreedTotalMinor  BigInt?       @map("agreed_total_minor")
-  paidMinor         BigInt        @default(0) @map("paid_minor")
-  currency          String        @db.Char(3)
-  title             String?
-  damageSummary     String?       @map("damage_summary")
-  internalNotes     String?       @map("internal_notes")
-  clientNotes       String?       @map("client_notes")
-  scheduledStartAt  DateTime?     @map("scheduled_start_at") @db.Timestamptz(6)
-  startedAt         DateTime?     @map("started_at") @db.Timestamptz(6)
-  readyAt           DateTime?     @map("ready_at") @db.Timestamptz(6)
-  deliveredAt       DateTime?     @map("delivered_at") @db.Timestamptz(6)
-  cancelledAt       DateTime?     @map("cancelled_at") @db.Timestamptz(6)
-  cancelReason      String?       @map("cancel_reason")
-  archivedAt        DateTime?     @map("archived_at") @db.Timestamptz(6)
-  createdById       String?       @map("created_by") @db.Uuid
-  createdAt         DateTime      @default(now()) @map("created_at") @db.Timestamptz(6)
-  updatedAt         DateTime      @updatedAt @map("updated_at") @db.Timestamptz(6)
+  paymentStatus    PaymentStatus @default(unpaid) @map("payment_status")
+  agreedEstimateId String?       @map("agreed_estimate_id") @db.Uuid
+  agreedTotalMinor BigInt?       @map("agreed_total_minor")
+  paidMinor        BigInt        @default(0) @map("paid_minor")
+  currency         String        @db.Char(3)
+  title            String?
+  damageSummary    String?       @map("damage_summary")
+  internalNotes    String?       @map("internal_notes")
+  clientNotes      String?       @map("client_notes")
+  scheduledStartAt DateTime?     @map("scheduled_start_at") @db.Timestamptz(6)
+  startedAt        DateTime?     @map("started_at") @db.Timestamptz(6)
+  readyAt          DateTime?     @map("ready_at") @db.Timestamptz(6)
+  deliveredAt      DateTime?     @map("delivered_at") @db.Timestamptz(6)
+  cancelledAt      DateTime?     @map("cancelled_at") @db.Timestamptz(6)
+  cancelReason     String?       @map("cancel_reason")
+  archivedAt       DateTime?     @map("archived_at") @db.Timestamptz(6)
+  createdById      String?       @map("created_by") @db.Uuid
+  createdAt        DateTime      @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt        DateTime      @updatedAt @map("updated_at") @db.Timestamptz(6)
 
-  workspace     Workspace           @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
-  client        Client              @relation(fields: [workspaceId, clientId], references: [workspaceId, id], onDelete: Restrict)
+  workspace     Workspace            @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  client        Client               @relation(fields: [workspaceId, clientId], references: [workspaceId, id], onDelete: Restrict)
   // Restrict, а не SetNull: workspace_id обязателен, да и автомобили с заказами
   // не удаляются — они архивируются.
-  vehicle       Vehicle?            @relation(fields: [workspaceId, vehicleId], references: [workspaceId, id], onDelete: Restrict)
-  assignee      WorkspaceMember?    @relation(fields: [workspaceId, assigneeMemberId], references: [workspaceId, id], onDelete: Restrict)
-  createdBy     User?               @relation("OrderCreatedBy", fields: [createdById], references: [id], onDelete: SetNull)
+  vehicle       Vehicle?             @relation(fields: [workspaceId, vehicleId], references: [workspaceId, id], onDelete: Restrict)
+  assignee      WorkspaceMember?     @relation(fields: [workspaceId, assigneeMemberId], references: [workspaceId, id], onDelete: Restrict)
+  createdBy     User?                @relation("OrderCreatedBy", fields: [createdById], references: [id], onDelete: SetNull)
   statusHistory OrderStatusHistory[]
+  appointments  Appointment[]
 
   @@unique([workspaceId, number], name: "order_number_in_workspace")
   @@unique([workspaceId, id], name: "order_in_workspace")
@@ -1169,4 +1174,59 @@ model OrderStatusHistory {
 
   @@index([orderId, createdAt])
   @@map("order_status_history")
+}
+
+// ── Календарь и записи (этап 10) ─────────────────────────────────────────────
+
+enum AppointmentKind {
+  inspection
+  repair
+  delivery
+  other
+
+  @@map("appointment_kind")
+}
+
+enum AppointmentStatus {
+  planned
+  confirmed
+  done
+  cancelled
+  no_show
+
+  @@map("appointment_status")
+}
+
+model Appointment {
+  id               String            @id @default(uuid()) @db.Uuid
+  workspaceId      String            @map("workspace_id") @db.Uuid
+  /// Запись может быть без заказа: первичный осмотр до оформления.
+  orderId          String?           @map("order_id") @db.Uuid
+  clientId         String?           @map("client_id") @db.Uuid
+  assigneeMemberId String?           @map("assignee_member_id") @db.Uuid
+  startsAt         DateTime          @map("starts_at") @db.Timestamptz(6)
+  endsAt           DateTime          @map("ends_at") @db.Timestamptz(6)
+  kind             AppointmentKind   @default(repair)
+  status           AppointmentStatus @default(planned)
+  /// Пересечение, подтверждённое владельцем: снимает запрет двойного бронирования.
+  allowOverlap     Boolean           @default(false) @map("allow_overlap")
+  title            String?
+  note             String?
+  /// Причина отмены или неявки.
+  cancelReason     String?           @map("cancel_reason")
+  createdById      String?           @map("created_by") @db.Uuid
+  createdAt        DateTime          @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt        DateTime          @updatedAt @map("updated_at") @db.Timestamptz(6)
+
+  workspace Workspace        @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  order     Order?           @relation(fields: [workspaceId, orderId], references: [workspaceId, id], onDelete: Cascade)
+  client    Client?          @relation(fields: [workspaceId, clientId], references: [workspaceId, id], onDelete: Restrict)
+  assignee  WorkspaceMember? @relation(fields: [workspaceId, assigneeMemberId], references: [workspaceId, id], onDelete: Restrict)
+  createdBy User?            @relation("AppointmentCreatedBy", fields: [createdById], references: [id], onDelete: SetNull)
+
+  @@index([workspaceId, startsAt])
+  @@index([workspaceId, assigneeMemberId, startsAt])
+  @@index([workspaceId, orderId])
+  @@index([status, startsAt])
+  @@map("appointments")
 }

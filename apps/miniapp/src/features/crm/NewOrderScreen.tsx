@@ -5,9 +5,9 @@ import { ApiError } from '@pdr/api-client';
 import { Button, Card, Field, Input, ListItem, Textarea } from '@pdr/ui';
 import { api } from '@/shared/api';
 import { formatPhoneRu } from '@/shared/format';
-import { alertDialog, haptic } from '@/shared/telegram';
+import { alertDialog, confirmDialog, haptic } from '@/shared/telegram';
 import { useClients, useMembers, useWorkspace } from './api';
-import type { ClientListItem } from './types';
+import { APPOINTMENT_KIND_OPTIONS, type AppointmentKind, type ClientListItem } from './types';
 
 /** Создание заказа: клиент, автомобиль и заказ одной операцией. */
 export function NewOrderScreen() {
@@ -30,13 +30,19 @@ export function NewOrderScreen() {
   const [assigneeMemberId, setAssigneeMemberId] = useState<string>('');
   const [idempotencyKey] = useState(() => crypto.randomUUID());
 
+  const [withAppointment, setWithAppointment] = useState(false);
+  const [day, setDay] = useState(() => new Date().toISOString().slice(0, 10));
+  const [time, setTime] = useState('10:00');
+  const [durationMin, setDurationMin] = useState(60);
+  const [kind, setKind] = useState<AppointmentKind>('inspection');
+
   const clients = useClients(workspaceId, search);
   const members = useMembers(workspaceId);
   const workspace = useWorkspace(workspaceId);
   const canAssign = workspace.data?.permissions.includes('orders.assign') ?? false;
 
   const create = useMutation({
-    mutationFn: () =>
+    mutationFn: (options: { allowOverlap?: boolean } = {}) =>
       api.post<{ id: string; number: number }>(
         `/workspaces/${workspaceId}/orders`,
         {
@@ -51,7 +57,19 @@ export function NewOrderScreen() {
           title: title || null,
           damageSummary: damageSummary || null,
           ...(assigneeMemberId ? { assigneeMemberId } : {}),
+          ...(withAppointment
+            ? {
+                appointment: {
+                  startsAtLocal: `${day}T${time}`,
+                  durationMin,
+                  kind,
+                  ...(options.allowOverlap ? { allowOverlap: true } : {}),
+                },
+              }
+            : {}),
         },
+        // Ключ идемпотентности один на экран: повтор после обрыва сети
+        // не создаёт второй заказ.
         { idempotencyKey },
       ),
     onSuccess: async (order) => {
@@ -61,6 +79,18 @@ export function NewOrderScreen() {
     },
     onError: async (e) => {
       haptic('error');
+      if (e instanceof ApiError && e.code === 'overlap') {
+        const details = e.details as { canOverride?: boolean } | undefined;
+        if (details?.canOverride) {
+          const force = await confirmDialog(
+            'В это время у исполнителя уже есть запись. Записать всё равно?',
+          );
+          if (force) create.mutate({ allowOverlap: true });
+          return;
+        }
+        await alertDialog('В это время у исполнителя уже есть запись. Выберите другое время.');
+        return;
+      }
       await alertDialog(e instanceof ApiError ? e.message : 'Не удалось создать заказ');
     },
   });
@@ -239,11 +269,65 @@ export function NewOrderScreen() {
         </div>
       </Card>
 
+      <h2 className="pdr-subtitle">Запись в календарь</h2>
+      <Card>
+        <div className="pdr-stack">
+          <label className="pdr-row" style={{ cursor: 'pointer' }}>
+            <input
+              type="checkbox"
+              checked={withAppointment}
+              onChange={(e) => setWithAppointment(e.target.checked)}
+            />
+            <span className="pdr-grow">Записать клиента на приём</span>
+          </label>
+
+          {withAppointment ? (
+            <>
+              <div className="pdr-row">
+                <Field label="Дата">
+                  <Input type="date" value={day} onChange={(e) => setDay(e.target.value)} />
+                </Field>
+                <Field label="Время">
+                  <Input type="time" value={time} onChange={(e) => setTime(e.target.value)} />
+                </Field>
+              </div>
+              <Field label="Длительность">
+                <select
+                  className="pdr-select"
+                  value={durationMin}
+                  onChange={(e) => setDurationMin(Number(e.target.value))}
+                >
+                  {[30, 60, 90, 120, 180, 240].map((value) => (
+                    <option key={value} value={value}>
+                      {value < 60 ? `${value} мин` : `${value / 60} ч`}
+                    </option>
+                  ))}
+                </select>
+              </Field>
+              <Field label="Тип">
+                <div className="pdr-chips">
+                  {APPOINTMENT_KIND_OPTIONS.map((option) => (
+                    <button
+                      key={option.value}
+                      type="button"
+                      className={`pdr-chip${kind === option.value ? ' pdr-chip--active' : ''}`}
+                      onClick={() => setKind(option.value)}
+                    >
+                      {option.label}
+                    </button>
+                  ))}
+                </div>
+              </Field>
+            </>
+          ) : null}
+        </div>
+      </Card>
+
       <Button
         block
-        disabled={!clientReady}
+        disabled={!clientReady || (withAppointment && (!day || !time))}
         loading={create.isPending}
-        onClick={() => create.mutate()}
+        onClick={() => create.mutate({})}
       >
         Создать заказ
       </Button>

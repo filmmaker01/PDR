@@ -7,6 +7,7 @@ import { InviteScreen } from '@/features/invite/InviteScreen';
 import { WorkspacePicker } from '@/features/workspace/WorkspacePicker';
 import { WorkspaceLayout } from '@/features/crm/WorkspaceLayout';
 import { TodayScreen } from '@/features/crm/TodayScreen';
+import { CalendarScreen } from '@/features/crm/CalendarScreen';
 import { OrdersScreen } from '@/features/crm/OrdersScreen';
 import { OrderScreen } from '@/features/crm/OrderScreen';
 import { NewOrderScreen } from '@/features/crm/NewOrderScreen';
@@ -58,6 +59,7 @@ export const router = createBrowserRouter([
         children: [
           { index: true, element: <TodayScreen /> },
           { path: 'today', element: <TodayScreen /> },
+          { path: 'calendar', element: <CalendarScreen /> },
           { path: 'orders', element: <OrdersScreen /> },
           { path: 'clients', element: <ClientsScreen /> },
           { path: 'settings', element: <WorkspaceSettingsScreen /> },

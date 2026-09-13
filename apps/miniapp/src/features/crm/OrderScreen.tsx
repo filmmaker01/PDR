@@ -17,7 +17,13 @@ import { api } from '@/shared/api';
 import { formatDateTime, formatMinor, formatPhoneRu } from '@/shared/format';
 import { alertDialog, confirmDialog, haptic } from '@/shared/telegram';
 import { useMembers, useOrder, useWorkspace } from './api';
-import { PAYMENT_LABELS, STATUS_TONES, type OrderStatus } from './types';
+import { AppointmentSheet } from './AppointmentSheet';
+import {
+  APPOINTMENT_STATUS_TONES,
+  PAYMENT_LABELS,
+  STATUS_TONES,
+  type OrderStatus,
+} from './types';
 
 type Tab = 'work' | 'photos' | 'estimate' | 'payments';
 
@@ -27,6 +33,7 @@ export function OrderScreen() {
   const queryClient = useQueryClient();
   const [tab, setTab] = useState<Tab>('work');
   const [statusSheet, setStatusSheet] = useState(false);
+  const [appointmentSheet, setAppointmentSheet] = useState(false);
   const [pendingStatus, setPendingStatus] = useState<OrderStatus | null>(null);
   const [comment, setComment] = useState('');
 
@@ -201,6 +208,45 @@ export function OrderScreen() {
             </div>
           </Card>
 
+          <h2 className="pdr-subtitle">Записи</h2>
+          <Card flat>
+            <div className="pdr-list">
+              {data.appointments.length === 0 ? (
+                <div className="pdr-list__item pdr-list__item--static">
+                  <span className="pdr-hint">Заказ не записан в календарь</span>
+                </div>
+              ) : (
+                data.appointments.map((appointment) => (
+                  <div key={appointment.id} className="pdr-list__item pdr-list__item--static">
+                    <span className="pdr-grow">
+                      <span style={{ display: 'block', fontWeight: 500 }}>
+                        {formatDateTime(appointment.startsAt, workspace.data?.timezone)} ·{' '}
+                        {appointment.kindLabel}
+                      </span>
+                      <span className="pdr-hint">
+                        {[
+                          `${appointment.durationMin} мин`,
+                          appointment.assignee?.name,
+                          appointment.note,
+                        ]
+                          .filter(Boolean)
+                          .join(' · ')}
+                      </span>
+                    </span>
+                    <Badge tone={APPOINTMENT_STATUS_TONES[appointment.status]}>
+                      {appointment.statusLabel}
+                    </Badge>
+                  </div>
+                ))
+              )}
+            </div>
+          </Card>
+          {canEdit ? (
+            <Button variant="secondary" block onClick={() => setAppointmentSheet(true)}>
+              + Записать в календарь
+            </Button>
+          ) : null}
+
           {data.damageSummary ? (
             <Card>
               <div className="pdr-hint">Повреждения</div>
@@ -254,6 +300,15 @@ export function OrderScreen() {
       {tab === 'payments' ? (
         <EmptyState title="Оплаты" description="Раздел появится на этапе 12." />
       ) : null}
+
+      <AppointmentSheet
+        open={appointmentSheet}
+        onClose={() => setAppointmentSheet(false)}
+        workspaceId={workspaceId}
+        defaultDay={new Date().toISOString().slice(0, 10)}
+        orderId={orderId}
+        clientId={data.client.id}
+      />
 
       <Sheet open={statusSheet} onClose={() => setStatusSheet(false)} title="Новый статус">
         <div className="pdr-stack">
