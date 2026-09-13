@@ -1,16 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
-import {
-  Alert,
-  Anchor,
-  Button,
-  Card,
-  Center,
-  Code,
-  Divider,
-  Stack,
-  Text,
-  Title,
-} from '@mantine/core';
+import { Alert, Anchor, Button, Card, Center, Divider, Stack, Text, Title } from '@mantine/core';
 import { ApiError } from '@pdr/api-client';
 import { api } from '@/shared/api';
 import { useAuth } from './AuthProvider';
@@ -117,24 +106,24 @@ export function LoginPage() {
 
           {error ? <Alert color="red">{error}</Alert> : null}
 
+          {/* Без бота оба способа входа через Telegram нерабочие: показывать
+              их отключёнными с упоминанием переменной сборки — значит просить
+              пользователя чинить то, что чинит администратор. */}
           {BOT_USERNAME ? (
-            <TelegramLoginButton botUsername={BOT_USERNAME} onAuth={handleWidgetAuth} />
+            <>
+              <TelegramLoginButton botUsername={BOT_USERNAME} onAuth={handleWidgetAuth} />
+
+              <Divider label="или" labelPosition="center" />
+
+              <Button variant="light" onClick={startBotLogin} loading={waiting}>
+                Подтвердить вход в боте
+              </Button>
+            </>
           ) : (
             <Alert color="yellow">
-              Не задана переменная <Code>VITE_BOT_USERNAME</Code>: вход через виджет недоступен.
+              Вход через Telegram пока не настроен. Обратитесь к администратору платформы.
             </Alert>
           )}
-
-          <Divider label="или" labelPosition="center" />
-
-          <Button
-            variant="light"
-            onClick={startBotLogin}
-            loading={waiting}
-            disabled={!BOT_USERNAME}
-          >
-            Подтвердить вход в боте
-          </Button>
 
           {demoAccounts && demoAccounts.length > 0 ? (
             <>
