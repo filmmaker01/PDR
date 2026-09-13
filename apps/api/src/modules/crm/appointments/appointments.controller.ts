@@ -50,7 +50,11 @@ function serialize(
     note: appointment.note,
     cancelReason: appointment.cancelReason,
     client: appointment.client
-      ? { id: appointment.client.id, name: appointment.client.name, phone: appointment.client.phone }
+      ? {
+          id: appointment.client.id,
+          name: appointment.client.name,
+          phone: appointment.client.phone,
+        }
       : null,
     order: appointment.order
       ? {

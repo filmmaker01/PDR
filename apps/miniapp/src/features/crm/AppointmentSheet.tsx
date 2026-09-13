@@ -143,8 +143,7 @@ export function AppointmentSheet({
       haptic('error');
       if (e instanceof ApiError && e.code === 'overlap') {
         const details = e.details as
-          | { conflicts?: OverlapConflict[]; canOverride?: boolean }
-          | undefined;
+          { conflicts?: OverlapConflict[]; canOverride?: boolean } | undefined;
         setConflicts(details?.conflicts ?? []);
         setCanOverride(Boolean(details?.canOverride));
         setError(null);
@@ -192,8 +191,8 @@ export function AppointmentSheet({
         {canAssignOthers && (members.data?.length ?? 0) > 1 ? (
           <Field label="Исполнитель">
             <div className="pdr-chips">
-              {members.data!
-                .filter((member) => member.isActive)
+              {members
+                .data!.filter((member) => member.isActive)
                 .map((member) => (
                   <button
                     key={member.id}

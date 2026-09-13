@@ -153,6 +153,36 @@ export class ApiClient {
   get<T>(path: string, options?: Omit<RequestOptions, 'method' | 'body'>): Promise<T> {
     return this.request<T>(path, { ...options, method: 'GET' });
   }
+
+  /**
+   * Бинарный ответ (печатная форма сметы): файл отдаётся только по токену,
+   * поэтому обычная ссылка не подходит — нужен запрос с заголовком.
+   */
+  async getBlob(
+    path: string,
+    options: Omit<RequestOptions, 'method' | 'body'> = {},
+  ): Promise<Blob> {
+    let response = await this.rawRequest(path, { ...options, method: 'GET' });
+    if (response.status === 401 && !options.skipRefresh && (await this.refreshSession())) {
+      response = await this.rawRequest(path, { ...options, method: 'GET' });
+    }
+    if (!response.ok) {
+      const text = await response.text().catch(() => '');
+      let body: ApiErrorBody | null = null;
+      try {
+        body = text ? (JSON.parse(text) as ApiErrorBody) : null;
+      } catch {
+        body = null;
+      }
+      throw new ApiError(
+        body?.error?.code ?? 'internal_error',
+        body?.error?.message ?? `Ошибка ${response.status}`,
+        response.status,
+        body?.error?.details,
+      );
+    }
+    return response.blob();
+  }
   post<T>(
     path: string,
     body?: unknown,

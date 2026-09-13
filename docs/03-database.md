@@ -580,6 +580,9 @@ estimates
   order_id          uuid not null             -- (workspace_id, order_id) → orders
   version_no        int not null
   status            enum estimate_status (draft, sent, agreed, rejected, superseded)
+  sent_at           timestamptz null
+  rejected_at       timestamptz null
+  reject_reason     text null
   currency          char(3) not null
   subtotal_minor    bigint not null default 0
   discount_kind     enum discount_kind (none, percent, fixed)
@@ -595,6 +598,9 @@ estimates
   unique (order_id, version_no)
   unique (workspace_id, id)
   -- ровно одна agreed-смета на заказ: partial unique (order_id) where status='agreed'
+  check (discount_value >= 0 and (discount_kind <> 'percent' or discount_value <= 100))
+  check (subtotal_minor >= 0 and discount_minor >= 0 and total_minor >= 0
+         and discount_minor <= subtotal_minor)
 
 estimate_items
   id                uuid pk
@@ -612,8 +618,9 @@ estimate_items
   on_edge           boolean not null default false
   unit_price_minor  bigint not null
   line_total_minor  bigint not null           -- quantity * unit_price (или фиксированная сумма позиции)
-  price_list_item_id uuid → price_list_items null
+  price_list_item_id uuid → price_list_items null   -- on delete no action: использованная позиция прайса деактивируется
   comment           text null
+  check (quantity > 0)
   index (estimate_id, position)
 ```
 

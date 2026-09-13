@@ -295,3 +295,12 @@
 - Конфликт отвечает `409 overlap` с `details.conflicts` (время, клиент, номер заказа) и `details.canOverride`. Повтор с `allowOverlap: true` проходит только у владельца.
 - `GET /workspaces/:id/appointments/availability?day=&assigneeMemberId=&durationMin=&stepMin=` возвращает свободные слоты по рабочим часам мастерской, занятые интервалы и длительность по умолчанию.
 - `POST /workspaces/:id/orders` принимает `appointment` и создаёт заказ вместе с записью в одной транзакции; карточка заказа отдаёт его записи в поле `appointments`.
+
+## Реализация смет (этап 11)
+
+- `GET /workspaces/:id/pdr-dictionaries` отдаёт элементы кузова, типы повреждений, размеры и подписи материалов и сложности доступа — интерфейс не хранит эти списки у себя.
+- `PUT /workspaces/:id/estimates/:estimateId/items` заменяет весь список позиций. Позиция задаётся либо `priceListItemId` (цена и название берутся из прайса), либо явной `unitPriceMinor`; название можно не присылать — сервер соберёт его из справочников.
+- Итоги (`subtotalMinor`, `discountMinor`, `totalMinor`) всегда приходят из ответа: клиент их не считает.
+- `POST .../estimates` отвечает `409 conflict` с `details.estimateId`, если черновик уже есть; интерфейс открывает существующий черновик.
+- `GET /workspaces/:id/estimates/:estimateId/pdf` отдаёт `application/pdf`. Файл доступен только по токену, поэтому Mini App запрашивает его как blob, а не открывает ссылкой.
+- `DELETE /workspaces/:id/price-list/:itemId` возвращает `{ deleted: boolean }`: использованная в сметах позиция деактивируется, а не удаляется.

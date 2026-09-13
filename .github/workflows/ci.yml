@@ -35,6 +35,9 @@ jobs:
       DATABASE_URL: postgresql://postgres:postgres@localhost:5432/pdr_test?schema=public
     steps:
       - uses: actions/checkout@v4
+      # Печатная форма сметы встраивает системный TrueType: без него кириллица
+      # в PDF не собирается, и тест печати падает.
+      - run: sudo apt-get update && sudo apt-get install -y --no-install-recommends fonts-dejavu-core
       - uses: pnpm/action-setup@v4
         with: { version: 10 }
       - uses: actions/setup-node@v4

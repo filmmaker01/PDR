@@ -14,6 +14,8 @@ import { NewOrderScreen } from '@/features/crm/NewOrderScreen';
 import { ClientScreen, ClientsScreen, VehicleScreen } from '@/features/crm/ClientsScreen';
 import { DebtsScreen } from '@/features/crm/DebtsScreen';
 import { WorkspaceSettingsScreen } from '@/features/crm/WorkspaceSettingsScreen';
+import { PriceListScreen } from '@/features/crm/PriceListScreen';
+import { EstimateEditorScreen } from '@/features/crm/EstimateEditorScreen';
 import { StartActionRedirect } from './StartActionRedirect';
 import { CourseMapRoute, LearningEntryScreen } from '@/features/learning/CourseMapScreen';
 import { StageScreen } from '@/features/learning/StageScreen';
@@ -70,6 +72,8 @@ export const router = createBrowserRouter([
       { path: 'workspace/:workspaceId/clients/:clientId', element: <ClientScreen /> },
       { path: 'workspace/:workspaceId/vehicles/:vehicleId', element: <VehicleScreen /> },
       { path: 'workspace/:workspaceId/debts', element: <DebtsScreen /> },
+      { path: 'workspace/:workspaceId/price-list', element: <PriceListScreen /> },
+      { path: 'workspace/:workspaceId/estimates/:estimateId', element: <EstimateEditorScreen /> },
       { path: 'profile', element: <ProfileScreen /> },
       { path: 'profile/notifications', element: <NotificationsScreen /> },
       { path: 'invite/:token', element: <InviteScreen /> },

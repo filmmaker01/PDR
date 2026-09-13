@@ -102,10 +102,7 @@ export function WorkspaceSettingsScreen() {
                   onChange={(e) => setDefaultMinutes(Number(e.target.value))}
                 />
               </Field>
-              <Field
-                label="Напоминать за, мин"
-                hint="0 — не напоминать о записях в Telegram"
-              >
+              <Field label="Напоминать за, мин" hint="0 — не напоминать о записях в Telegram">
                 <Input
                   type="number"
                   min={0}
@@ -167,6 +164,11 @@ export function WorkspaceSettingsScreen() {
             title="Задолженность"
             subtitle="Заказы, оплаченные не полностью"
             onClick={() => navigate(`/workspace/${workspaceId}/debts`)}
+          />
+          <ListItem
+            title="Прайс"
+            subtitle="Типовые работы и цены для сметы"
+            onClick={() => navigate(`/workspace/${workspaceId}/price-list`)}
           />
           {isOwner ? (
             <ListItem

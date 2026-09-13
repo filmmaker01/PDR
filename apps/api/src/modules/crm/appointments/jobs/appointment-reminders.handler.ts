@@ -58,7 +58,10 @@ export class AppointmentRemindersHandler extends JobHandler<
         type: 'appointment_reminder',
         payload: {
           minutes: Math.max(minutesLeft, 0),
-          time: utcToZonedString(appointment.startsAt, appointment.workspace.timezone).slice(11, 16),
+          time: utcToZonedString(appointment.startsAt, appointment.workspace.timezone).slice(
+            11,
+            16,
+          ),
           clientName: appointment.client?.name ?? appointment.title ?? 'Без клиента',
           vehicle: appointment.order?.vehicle
             ? `${appointment.order.vehicle.make} ${appointment.order.vehicle.model}`

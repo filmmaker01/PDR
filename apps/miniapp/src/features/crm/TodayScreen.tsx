@@ -67,10 +67,7 @@ export function TodayScreen() {
       {appointments.isLoading ? (
         <SkeletonList rows={2} />
       ) : (appointments.data?.items.length ?? 0) === 0 ? (
-        <EmptyState
-          title="На сегодня записей нет"
-          description="Запишите клиента в календаре."
-        />
+        <EmptyState title="На сегодня записей нет" description="Запишите клиента в календаре." />
       ) : (
         <Card flat>
           <div className="pdr-list">

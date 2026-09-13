@@ -18,12 +18,8 @@ import { formatDateTime, formatMinor, formatPhoneRu } from '@/shared/format';
 import { alertDialog, confirmDialog, haptic } from '@/shared/telegram';
 import { useMembers, useOrder, useWorkspace } from './api';
 import { AppointmentSheet } from './AppointmentSheet';
-import {
-  APPOINTMENT_STATUS_TONES,
-  PAYMENT_LABELS,
-  STATUS_TONES,
-  type OrderStatus,
-} from './types';
+import { EstimatesTab } from './EstimatesTab';
+import { APPOINTMENT_STATUS_TONES, PAYMENT_LABELS, STATUS_TONES, type OrderStatus } from './types';
 
 type Tab = 'work' | 'photos' | 'estimate' | 'payments';
 
@@ -295,7 +291,7 @@ export function OrderScreen() {
         <EmptyState title="Фотографии" description="Раздел появится на этапе 12." />
       ) : null}
       {tab === 'estimate' ? (
-        <EmptyState title="Расчёт" description="Раздел появится на этапе 11." />
+        <EstimatesTab workspaceId={workspaceId} orderId={orderId} canEdit={canEdit} />
       ) : null}
       {tab === 'payments' ? (
         <EmptyState title="Оплаты" description="Раздел появится на этапе 12." />

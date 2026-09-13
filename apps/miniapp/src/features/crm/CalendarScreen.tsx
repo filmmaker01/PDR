@@ -122,7 +122,10 @@ export function CalendarScreen() {
       />
 
       <div className="pdr-row">
-        <Button variant="secondary" onClick={() => setAnchor(shiftDay(anchor, view === 'day' ? -1 : -7))}>
+        <Button
+          variant="secondary"
+          onClick={() => setAnchor(shiftDay(anchor, view === 'day' ? -1 : -7))}
+        >
           ←
         </Button>
         <button
@@ -135,7 +138,10 @@ export function CalendarScreen() {
             ? formatDayTitle(anchor)
             : `${formatDayTitle(days[0]!)} — ${formatDayTitle(days.at(-1)!)}`}
         </button>
-        <Button variant="secondary" onClick={() => setAnchor(shiftDay(anchor, view === 'day' ? 1 : 7))}>
+        <Button
+          variant="secondary"
+          onClick={() => setAnchor(shiftDay(anchor, view === 'day' ? 1 : 7))}
+        >
           →
         </Button>
       </div>
@@ -149,8 +155,8 @@ export function CalendarScreen() {
           >
             Все
           </button>
-          {members.data!
-            .filter((member) => member.isActive)
+          {members
+            .data!.filter((member) => member.isActive)
             .map((member) => (
               <button
                 key={member.id}

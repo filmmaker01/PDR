@@ -445,9 +445,8 @@ describe('CRM: календарь и записи', () => {
 
       await createAppointment(owner, { startsAtLocal: local, durationMin: 60 });
 
-      const { AppointmentRemindersHandler } = await import(
-        '@/modules/crm/appointments/jobs/appointment-reminders.handler'
-      );
+      const { AppointmentRemindersHandler } =
+        await import('@/modules/crm/appointments/jobs/appointment-reminders.handler');
       const handler = ctx.app.get(AppointmentRemindersHandler);
 
       await handler.handle();
@@ -481,9 +480,8 @@ describe('CRM: календарь и записи', () => {
         .send({ to: 'cancelled', reason: 'перенос' })
         .expect(201);
 
-      const { AppointmentRemindersHandler } = await import(
-        '@/modules/crm/appointments/jobs/appointment-reminders.handler'
-      );
+      const { AppointmentRemindersHandler } =
+        await import('@/modules/crm/appointments/jobs/appointment-reminders.handler');
       await ctx.app.get(AppointmentRemindersHandler).handle();
 
       expect(await ctx.prisma.notification.count({ where: { type: 'appointment_reminder' } })).toBe(

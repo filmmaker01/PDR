@@ -1,8 +1,13 @@
 import { z } from 'zod';
 import {
+  ACCESS_DIFFICULTIES,
   APPOINTMENT_KINDS,
   APPOINTMENT_STATUSES,
+  DISCOUNT_KINDS,
+  ESTIMATE_ITEM_KINDS,
+  MATERIALS,
   ORDER_STATUSES,
+  PRICE_UNITS,
   nonEmptyString,
   optionalString,
 } from '@pdr/shared';
@@ -183,3 +188,64 @@ export const availabilityQuerySchema = z
     excludeId: z.string().uuid().optional(),
   })
   .strict();
+
+// ── Прайс и сметы ────────────────────────────────────────────────────────────
+
+export const priceListItemSchema = z
+  .object({
+    kind: z.enum(ESTIMATE_ITEM_KINDS).default('damage'),
+    title: nonEmptyString(200),
+    panelCode: optionalString(40),
+    damageType: optionalString(40),
+    sizeClass: z.enum(['S', 'M', 'L', 'XL']).nullable().optional(),
+    unitPriceMinor: z.number().int().min(0).max(100_000_000),
+    unit: z.enum(PRICE_UNITS).default('per_item'),
+    isActive: z.boolean().optional(),
+  })
+  .strict();
+
+export const updatePriceListItemSchema = priceListItemSchema.partial().strict();
+
+export const reorderPriceListSchema = z
+  .object({ ids: z.array(z.string().uuid()).min(1).max(500) })
+  .strict();
+
+export const createEstimateSchema = z
+  .object({ fromEstimateId: z.string().uuid().nullable().optional() })
+  .strict();
+
+export const estimateSettingsSchema = z
+  .object({
+    discountKind: z.enum(DISCOUNT_KINDS).optional(),
+    discountValue: z.number().int().min(0).max(100_000_000).optional(),
+    noteForClient: optionalString(2000),
+    internalNote: optionalString(2000),
+  })
+  .strict();
+
+export const estimateItemsSchema = z
+  .object({
+    items: z
+      .array(
+        z
+          .object({
+            kind: z.enum(ESTIMATE_ITEM_KINDS).optional(),
+            title: optionalString(200),
+            panelCode: optionalString(40),
+            damageType: optionalString(40),
+            sizeClass: z.enum(['S', 'M', 'L', 'XL']).nullable().optional(),
+            quantity: z.number().int().min(1).max(1000).default(1),
+            material: z.enum(MATERIALS).nullable().optional(),
+            accessDifficulty: z.enum(ACCESS_DIFFICULTIES).nullable().optional(),
+            onEdge: z.boolean().optional(),
+            unitPriceMinor: z.number().int().min(0).max(100_000_000).optional(),
+            priceListItemId: z.string().uuid().nullable().optional(),
+            comment: optionalString(500),
+          })
+          .strict(),
+      )
+      .max(300),
+  })
+  .strict();
+
+export const rejectEstimateSchema = z.object({ reason: optionalString(500) }).strict();

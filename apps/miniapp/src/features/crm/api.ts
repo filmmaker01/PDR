@@ -4,6 +4,9 @@ import type {
   Appointment,
   AvailabilityResponse,
   ClientCard,
+  Estimate,
+  PdrDictionaries,
+  PriceListItem,
   ClientListItem,
   MemberInfo,
   OrderCard,
@@ -155,5 +158,39 @@ export function useAvailability(
           excludeId: input.excludeId,
         },
       }),
+  });
+}
+
+export function useEstimates(workspaceId: string, orderId: string) {
+  return useQuery({
+    queryKey: ['crm', 'estimates', workspaceId, orderId],
+    queryFn: () => api.get<Estimate[]>(`/workspaces/${workspaceId}/orders/${orderId}/estimates`),
+  });
+}
+
+export function useEstimate(workspaceId: string, estimateId: string) {
+  return useQuery({
+    queryKey: ['crm', 'estimate', workspaceId, estimateId],
+    queryFn: () => api.get<Estimate>(`/workspaces/${workspaceId}/estimates/${estimateId}`),
+  });
+}
+
+export function usePriceList(workspaceId: string, includeInactive = false) {
+  return useQuery({
+    queryKey: ['crm', 'price-list', workspaceId, includeInactive],
+    queryFn: () =>
+      api.get<PriceListItem[]>(`/workspaces/${workspaceId}/price-list`, {
+        query: includeInactive ? { all: 'true' } : undefined,
+      }),
+    staleTime: 60_000,
+  });
+}
+
+export function useDictionaries(workspaceId: string) {
+  return useQuery({
+    queryKey: ['crm', 'dictionaries', workspaceId],
+    queryFn: () => api.get<PdrDictionaries>(`/workspaces/${workspaceId}/pdr-dictionaries`),
+    // Справочники не меняются в пределах сессии.
+    staleTime: Infinity,
   });
 }

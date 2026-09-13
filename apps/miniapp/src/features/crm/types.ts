@@ -248,3 +248,85 @@ export const APPOINTMENT_KIND_OPTIONS: { value: AppointmentKind; label: string }
   { value: 'delivery', label: 'Выдача' },
   { value: 'other', label: 'Другое' },
 ];
+
+export type EstimateStatus = 'draft' | 'sent' | 'agreed' | 'rejected' | 'superseded';
+export type EstimateItemKind = 'damage' | 'disassembly' | 'extra';
+export type DiscountKind = 'none' | 'percent' | 'fixed';
+
+export interface EstimateItem {
+  id: string;
+  position: number;
+  kind: EstimateItemKind;
+  kindLabel: string;
+  title: string;
+  panelCode: string | null;
+  damageType: string | null;
+  sizeClass: string | null;
+  quantity: number;
+  material: 'steel' | 'aluminum' | 'other' | null;
+  accessDifficulty: 'easy' | 'medium' | 'hard' | null;
+  onEdge: boolean;
+  unitPriceMinor: number;
+  lineTotalMinor: number;
+  priceListItemId: string | null;
+  comment: string | null;
+}
+
+export interface Estimate {
+  id: string;
+  orderId: string;
+  versionNo: number;
+  status: EstimateStatus;
+  statusLabel: string;
+  currency: string;
+  subtotalMinor: number;
+  discountKind: DiscountKind;
+  discountValue: number;
+  discountMinor: number;
+  totalMinor: number;
+  noteForClient: string | null;
+  internalNote: string | null;
+  sentAt: string | null;
+  agreedAt: string | null;
+  rejectedAt: string | null;
+  rejectReason: string | null;
+  createdAt: string;
+  createdBy: string | null;
+  agreedBy: string | null;
+  items: EstimateItem[];
+}
+
+export interface PriceListItem {
+  id: string;
+  kind: EstimateItemKind;
+  title: string;
+  panelCode: string | null;
+  damageType: string | null;
+  sizeClass: string | null;
+  unitPriceMinor: number;
+  unit: 'per_item' | 'per_dent' | 'per_hour';
+  unitLabel: string;
+  isActive: boolean;
+  position: number;
+}
+
+export interface PdrDictionaries {
+  panels: { code: string; label: string; group: string }[];
+  damageTypes: { code: string; label: string; hint?: string }[];
+  sizeClasses: { code: string; label: string; hint: string }[];
+  itemKinds: Record<string, string>;
+  materials: Record<string, string>;
+  accessDifficulties: Record<string, string>;
+  priceUnits: Record<string, string>;
+}
+
+export const ESTIMATE_STATUS_TONES: Record<
+  EstimateStatus,
+  'info' | 'success' | 'warning' | 'muted' | 'danger'
+> = {
+  draft: 'muted',
+  sent: 'warning',
+  agreed: 'success',
+  rejected: 'danger',
+  superseded: 'muted',
+};

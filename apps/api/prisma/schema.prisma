@@ -96,6 +96,8 @@ model User {
   createdOrders          Order[]                 @relation("OrderCreatedBy")
   orderStatusChanges     OrderStatusHistory[]    @relation("OrderStatusChangedBy")
   createdAppointments    Appointment[]           @relation("AppointmentCreatedBy")
+  createdEstimates       Estimate[]              @relation("EstimateCreatedBy")
+  agreedEstimates        Estimate[]              @relation("EstimateAgreedBy")
 
   @@index([username])
   @@index([phone])
@@ -205,16 +207,19 @@ model Workspace {
   createdAt   DateTime  @default(now()) @map("created_at") @db.Timestamptz(6)
   updatedAt   DateTime  @updatedAt @map("updated_at") @db.Timestamptz(6)
 
-  createdBy    User?                 @relation("WorkspaceCreatedBy", fields: [createdById], references: [id], onDelete: SetNull)
-  members      WorkspaceMember[]
-  invitations  WorkspaceInvitation[]
-  grants       AccessGrant[]
-  files        StoredFile[]
-  auditEntries AuditLog[]
-  clients      Client[]
-  vehicles     Vehicle[]
-  orders       Order[]
-  appointments Appointment[]
+  createdBy     User?                 @relation("WorkspaceCreatedBy", fields: [createdById], references: [id], onDelete: SetNull)
+  members       WorkspaceMember[]
+  invitations   WorkspaceInvitation[]
+  grants        AccessGrant[]
+  files         StoredFile[]
+  auditEntries  AuditLog[]
+  clients       Client[]
+  vehicles      Vehicle[]
+  orders        Order[]
+  appointments  Appointment[]
+  priceList     PriceListItem[]
+  estimates     Estimate[]
+  estimateItems EstimateItem[]
 
   @@map("workspaces")
 }
@@ -1140,15 +1145,19 @@ model Order {
   createdAt        DateTime      @default(now()) @map("created_at") @db.Timestamptz(6)
   updatedAt        DateTime      @updatedAt @map("updated_at") @db.Timestamptz(6)
 
-  workspace     Workspace            @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
-  client        Client               @relation(fields: [workspaceId, clientId], references: [workspaceId, id], onDelete: Restrict)
+  workspace      Workspace            @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  client         Client               @relation(fields: [workspaceId, clientId], references: [workspaceId, id], onDelete: Restrict)
   // Restrict, а не SetNull: workspace_id обязателен, да и автомобили с заказами
   // не удаляются — они архивируются.
-  vehicle       Vehicle?             @relation(fields: [workspaceId, vehicleId], references: [workspaceId, id], onDelete: Restrict)
-  assignee      WorkspaceMember?     @relation(fields: [workspaceId, assigneeMemberId], references: [workspaceId, id], onDelete: Restrict)
-  createdBy     User?                @relation("OrderCreatedBy", fields: [createdById], references: [id], onDelete: SetNull)
-  statusHistory OrderStatusHistory[]
-  appointments  Appointment[]
+  vehicle        Vehicle?             @relation(fields: [workspaceId, vehicleId], references: [workspaceId, id], onDelete: Restrict)
+  assignee       WorkspaceMember?     @relation(fields: [workspaceId, assigneeMemberId], references: [workspaceId, id], onDelete: Restrict)
+  createdBy      User?                @relation("OrderCreatedBy", fields: [createdById], references: [id], onDelete: SetNull)
+  statusHistory  OrderStatusHistory[]
+  appointments   Appointment[]
+  estimates      Estimate[]           @relation("OrderEstimates")
+  // NoAction, а не SetNull: составной ключ включает workspace_id, обнулить его нельзя.
+  // Согласованная смета не удаляется — новая версия помечает старую superseded.
+  agreedEstimate Estimate?            @relation("OrderAgreedEstimate", fields: [workspaceId, agreedEstimateId], references: [workspaceId, id], onDelete: NoAction, onUpdate: NoAction)
 
   @@unique([workspaceId, number], name: "order_number_in_workspace")
   @@unique([workspaceId, id], name: "order_in_workspace")
@@ -1229,4 +1238,152 @@ model Appointment {
   @@index([workspaceId, orderId])
   @@index([status, startsAt])
   @@map("appointments")
+}
+
+// ── Сметы и прайс (этап 11) ──────────────────────────────────────────────────
+
+enum EstimateStatus {
+  draft
+  sent
+  agreed
+  rejected
+  superseded
+
+  @@map("estimate_status")
+}
+
+enum EstimateItemKind {
+  damage
+  disassembly
+  extra
+
+  @@map("estimate_item_kind")
+}
+
+enum DiscountKind {
+  none
+  percent
+  fixed
+
+  @@map("discount_kind")
+}
+
+enum PriceUnit {
+  per_item
+  per_dent
+  per_hour
+
+  @@map("price_unit")
+}
+
+enum Material {
+  steel
+  aluminum
+  other
+
+  @@map("material")
+}
+
+enum AccessDifficulty {
+  easy
+  medium
+  hard
+
+  @@map("access_difficulty")
+}
+
+model PriceListItem {
+  id             String           @id @default(uuid()) @db.Uuid
+  workspaceId    String           @map("workspace_id") @db.Uuid
+  kind           EstimateItemKind @default(damage)
+  title          String
+  panelCode      String?          @map("panel_code")
+  damageType     String?          @map("damage_type")
+  sizeClass      String?          @map("size_class")
+  unitPriceMinor BigInt           @map("unit_price_minor")
+  unit           PriceUnit        @default(per_item)
+  isActive       Boolean          @default(true) @map("is_active")
+  position       Int
+  createdAt      DateTime         @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt      DateTime         @updatedAt @map("updated_at") @db.Timestamptz(6)
+
+  workspace     Workspace      @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  estimateItems EstimateItem[]
+
+  @@unique([workspaceId, id], name: "price_item_in_workspace")
+  @@index([workspaceId, isActive, position])
+  @@map("price_list_items")
+}
+
+model Estimate {
+  id            String         @id @default(uuid()) @db.Uuid
+  workspaceId   String         @map("workspace_id") @db.Uuid
+  orderId       String         @map("order_id") @db.Uuid
+  /// Номер версии внутри заказа: v1, v2, …
+  versionNo     Int            @map("version_no")
+  status        EstimateStatus @default(draft)
+  currency      String         @db.Char(3)
+  subtotalMinor BigInt         @default(0) @map("subtotal_minor")
+  discountKind  DiscountKind   @default(none) @map("discount_kind")
+  /// Проценты (0–100) или сумма в минимальных единицах — смотря какой discountKind.
+  discountValue Int            @default(0) @map("discount_value")
+  discountMinor BigInt         @default(0) @map("discount_minor")
+  totalMinor    BigInt         @default(0) @map("total_minor")
+  noteForClient String?        @map("note_for_client")
+  internalNote  String?        @map("internal_note")
+  sentAt        DateTime?      @map("sent_at") @db.Timestamptz(6)
+  agreedAt      DateTime?      @map("agreed_at") @db.Timestamptz(6)
+  agreedById    String?        @map("agreed_by") @db.Uuid
+  rejectedAt    DateTime?      @map("rejected_at") @db.Timestamptz(6)
+  rejectReason  String?        @map("reject_reason")
+  createdById   String?        @map("created_by") @db.Uuid
+  createdAt     DateTime       @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt     DateTime       @updatedAt @map("updated_at") @db.Timestamptz(6)
+
+  workspace    Workspace      @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  order        Order          @relation("OrderEstimates", fields: [workspaceId, orderId], references: [workspaceId, id], onDelete: Cascade)
+  agreedBy     User?          @relation("EstimateAgreedBy", fields: [agreedById], references: [id], onDelete: SetNull)
+  createdBy    User?          @relation("EstimateCreatedBy", fields: [createdById], references: [id], onDelete: SetNull)
+  items        EstimateItem[]
+  // NoAction, а не SetNull: составной ключ включает workspace_id, обнулить его нельзя.
+  // Согласованная смета не удаляется — новая версия помечает старую superseded.
+  agreedOrders Order[]        @relation("OrderAgreedEstimate")
+
+  @@unique([orderId, versionNo], name: "estimate_version_in_order")
+  @@unique([workspaceId, id], name: "estimate_in_workspace")
+  @@index([workspaceId, orderId])
+  @@map("estimates")
+}
+
+model EstimateItem {
+  id               String            @id @default(uuid()) @db.Uuid
+  workspaceId      String            @map("workspace_id") @db.Uuid
+  estimateId       String            @map("estimate_id") @db.Uuid
+  position         Int
+  kind             EstimateItemKind  @default(damage)
+  title            String
+  panelCode        String?           @map("panel_code")
+  damageType       String?           @map("damage_type")
+  sizeClass        String?           @map("size_class")
+  quantity         Int               @default(1)
+  material         Material?
+  accessDifficulty AccessDifficulty? @map("access_difficulty")
+  onEdge           Boolean           @default(false) @map("on_edge")
+  unitPriceMinor   BigInt            @map("unit_price_minor")
+  lineTotalMinor   BigInt            @map("line_total_minor")
+  priceListItemId  String?           @map("price_list_item_id") @db.Uuid
+  comment          String?
+  createdAt        DateTime          @default(now()) @map("created_at") @db.Timestamptz(6)
+
+  workspace     Workspace      @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  estimate      Estimate       @relation(fields: [workspaceId, estimateId], references: [workspaceId, id], onDelete: Cascade)
+  // Прайс — справочник: цена копируется в позицию сметы при добавлении,
+  // поэтому изменение прайса не трогает уже составленные сметы.
+  // NoAction: использованная позиция прайса деактивируется, а не удаляется
+  // (проверка в сервисе), обнулить составной ключ с workspace_id нельзя.
+  priceListItem PriceListItem? @relation(fields: [workspaceId, priceListItemId], references: [workspaceId, id], onDelete: NoAction, onUpdate: NoAction)
+
+  @@unique([workspaceId, id], name: "estimate_item_in_workspace")
+  @@index([estimateId, position])
+  @@map("estimate_items")
 }

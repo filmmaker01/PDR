@@ -1,6 +1,6 @@
-import { formatMinor, formatPhoneRu } from '@pdr/shared';
+import { formatMinor, formatPhoneRu, parseMajorToMinor } from '@pdr/shared';
 
-export { formatMinor, formatPhoneRu };
+export { formatMinor, formatPhoneRu, parseMajorToMinor };
 
 export function formatDateTime(iso: string, timeZone?: string): string {
   return new Intl.DateTimeFormat('ru-RU', {
