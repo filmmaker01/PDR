@@ -1,0 +1,25 @@
+# syntax=docker/dockerfile:1
+# Сборка статики Mini App или админки. APP выбирает приложение.
+ARG APP=miniapp
+
+FROM node:22-bookworm-slim AS build
+ARG APP
+ARG VITE_API_URL
+ENV PNPM_HOME=/pnpm PATH=/pnpm:$PATH VITE_API_URL=$VITE_API_URL
+RUN corepack enable
+WORKDIR /app
+COPY package.json pnpm-lock.yaml pnpm-workspace.yaml .npmrc tsconfig.base.json ./
+COPY apps/${APP}/package.json apps/${APP}/
+COPY packages/shared/package.json packages/shared/
+COPY packages/api-client/package.json packages/api-client/
+COPY packages/ui/package.json packages/ui/
+RUN pnpm install --frozen-lockfile
+COPY packages packages
+COPY apps/${APP} apps/${APP}
+RUN pnpm --filter @pdr/shared build && pnpm --filter @pdr/${APP} build
+
+FROM caddy:2-alpine AS runtime
+ARG APP
+COPY --from=build /app/apps/${APP}/dist /srv
+COPY infra/caddy/spa.Caddyfile /etc/caddy/Caddyfile
+EXPOSE 80

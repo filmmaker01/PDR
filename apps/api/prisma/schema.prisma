@@ -1,0 +1,23 @@
+// Схема PDR Platform. Соответствует docs/03-database.md.
+// Модели добавляются по этапам roadmap; каждая миграция обратно совместима.
+
+generator client {
+  provider        = "prisma-client-js"
+  previewFeatures = ["postgresqlExtensions"]
+}
+
+datasource db {
+  provider   = "postgresql"
+  url        = env("DATABASE_URL")
+  extensions = [pgcrypto, btree_gist]
+}
+
+// ── Служебное (этап 0) ────────────────────────────────────────────────────────
+
+model WorkerHeartbeat {
+  workerId   String   @id @map("worker_id")
+  lastBeatAt DateTime @map("last_beat_at") @db.Timestamptz(6)
+  version    String?
+
+  @@map("worker_heartbeats")
+}

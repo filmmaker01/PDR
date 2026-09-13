@@ -106,7 +106,7 @@ type LockReason =
 
 1. Если есть действующий `stage_overrides` с `action='lock'` → `locked(manual_lock)`.
 2. Если есть действующий `unlock` → `open` (пропуская даты и предыдущий этап).
-3. Дата: режим `interval` — `enrollment.started_at + stage.unlock_days_offset дней`; режим `dates` — `cohort.stage_dates[stage.key]` (для первого этапа — `cohort.starts_at`). Если в будущем → `locked(date)`.
+3. Дата: режим `interval` (по умолчанию) — `enrollment.started_at + stage.unlock_days_offset дней`; режим `dates` — `cohort.stage_dates[stage.key]` (для первого этапа — `cohort.starts_at`). Если в будущем → `locked(date)`. Временное условие и требования предыдущего этапа проверяются **оба**: выполнение одного не открывает этап.
 4. Если `requires_previous_stage` и предыдущий этап не в `stage_completions` → `locked(previous_stage, missing)`, где `missing` вычисляется по `completion_rule`: все обязательные уроки отмечены (и, если `min_watch_percent>0`, достигнут процент), все обязательные задания имеют `accepted` сдачу, все обязательные экзамены имеют `passed=true` попытку.
 5. Иначе `open`; если сам этап выполнен → `completed`.
 

@@ -1,0 +1,80 @@
+name: pdr
+
+# Развёртывание staging/production. Секреты приходят из .env рядом с файлом.
+services:
+  postgres:
+    image: postgres:16-alpine
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
+      POSTGRES_DB: ${POSTGRES_DB}
+    volumes: ['pgdata:/var/lib/postgresql/data']
+    healthcheck:
+      test: ['CMD-SHELL', 'pg_isready -U ${POSTGRES_USER}']
+      interval: 10s
+      timeout: 5s
+      retries: 10
+
+  migrate:
+    image: ${API_IMAGE}
+    command: ['npx', 'prisma', 'migrate', 'deploy']
+    env_file: [.env]
+    depends_on: { postgres: { condition: service_healthy } }
+    restart: 'no'
+
+  api:
+    image: ${API_IMAGE}
+    restart: unless-stopped
+    env_file: [.env]
+    depends_on:
+      postgres: { condition: service_healthy }
+      migrate: { condition: service_completed_successfully }
+    expose: ['3000']
+
+  worker:
+    image: ${API_IMAGE}
+    command: ['node', 'dist/worker.js']
+    restart: unless-stopped
+    env_file: [.env]
+    depends_on:
+      postgres: { condition: service_healthy }
+      migrate: { condition: service_completed_successfully }
+
+  miniapp:
+    image: ${MINIAPP_IMAGE}
+    restart: unless-stopped
+    expose: ['80']
+
+  admin:
+    image: ${ADMIN_IMAGE}
+    restart: unless-stopped
+    expose: ['80']
+
+  caddy:
+    image: caddy:2-alpine
+    restart: unless-stopped
+    ports: ['80:80', '443:443']
+    environment:
+      API_DOMAIN: ${API_DOMAIN}
+      APP_DOMAIN: ${APP_DOMAIN}
+      ADMIN_DOMAIN: ${ADMIN_DOMAIN}
+    volumes:
+      - ../caddy/Caddyfile:/etc/caddy/Caddyfile:ro
+      - caddydata:/data
+      - caddyconfig:/config
+    depends_on: [api, miniapp, admin]
+
+  backup:
+    image: ${API_IMAGE}
+    restart: unless-stopped
+    entrypoint: ['/bin/sh', '/app/infra/backup/cron.sh']
+    env_file: [.env]
+    volumes:
+      - ../backup:/app/infra/backup:ro
+    depends_on: { postgres: { condition: service_healthy } }
+
+volumes:
+  pgdata:
+  caddydata:
+  caddyconfig:

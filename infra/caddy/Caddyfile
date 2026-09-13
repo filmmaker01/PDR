@@ -1,0 +1,21 @@
+# Production/staging reverse proxy.
+# Домены задаются переменными окружения Caddy: API_DOMAIN, APP_DOMAIN, ADMIN_DOMAIN.
+{$API_DOMAIN} {
+	encode gzip zstd
+	reverse_proxy api:3000
+	header {
+		-Server
+		X-Content-Type-Options nosniff
+		Strict-Transport-Security "max-age=31536000; includeSubDomains"
+	}
+}
+
+{$APP_DOMAIN} {
+	encode gzip zstd
+	reverse_proxy miniapp:80
+}
+
+{$ADMIN_DOMAIN} {
+	encode gzip zstd
+	reverse_proxy admin:80
+}
