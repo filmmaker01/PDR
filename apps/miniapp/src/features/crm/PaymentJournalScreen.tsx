@@ -4,6 +4,7 @@ import { Badge, Card, EmptyState, ListItem, SkeletonList, Button } from '@pdr/ui
 import { todayInZone, zonedTimeToUtc } from '@pdr/shared';
 import { formatDateTime, formatMinor } from '@/shared/format';
 import { usePaymentJournal, useWorkspace } from './api';
+import { ScreenError } from './ScreenError';
 
 type Period = 'today' | 'week' | 'month';
 
@@ -40,6 +41,16 @@ export function PaymentJournalScreen() {
   const returned = (journal.data?.totals ?? [])
     .filter((total) => total.kind !== 'payment')
     .reduce((sum, total) => sum + total.totalMinor, 0);
+
+  if (journal.isError) {
+    return (
+      <ScreenError
+        error={journal.error}
+        onRetry={() => void journal.refetch()}
+        backTo={`/workspace/${workspaceId}/settings`}
+      />
+    );
+  }
 
   return (
     <div className="pdr-stack">

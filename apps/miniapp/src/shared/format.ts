@@ -21,6 +21,15 @@ export function formatDate(iso: string, timeZone?: string): string {
   }).format(new Date(iso));
 }
 
+/** Короткая дата для подписей графиков: «21 авг.». */
+export function formatDayShort(day: string, timeZone?: string): string {
+  return new Intl.DateTimeFormat('ru-RU', {
+    day: 'numeric',
+    month: 'short',
+    timeZone,
+  }).format(new Date(`${day}T12:00:00Z`));
+}
+
 export function formatTime(iso: string, timeZone?: string): string {
   return new Intl.DateTimeFormat('ru-RU', { hour: '2-digit', minute: '2-digit', timeZone }).format(
     new Date(iso),

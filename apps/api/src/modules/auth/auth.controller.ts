@@ -17,7 +17,15 @@ import { zodBody } from '@/common/pipes/zod-validation.pipe';
 import { RateLimit, RateLimitGuard } from '@/common/guards/rate-limit.guard';
 import { AuthService, type RequestMeta } from './auth.service';
 import { SessionService } from './session.service';
+import { DemoLoginService } from './demo-login.service';
 import { CurrentAuth, Public, type AuthContext } from './decorators/auth.decorators';
+
+const demoLoginSchema = z
+  .object({
+    key: z.string().min(1).max(40),
+    secret: z.string().max(200).nullable().optional(),
+  })
+  .strict();
 
 function meta(req: Request): RequestMeta {
   const forwarded = (req.headers['x-forwarded-for'] as string | undefined)?.split(',')[0]?.trim();
@@ -37,7 +45,34 @@ export class AuthController {
   constructor(
     private readonly auth: AuthService,
     private readonly sessions: SessionService,
+    private readonly demo: DemoLoginService,
   ) {}
+
+  @Get('demo/accounts')
+  @Public()
+  @RateLimit({ limit: 60, windowSec: 60 })
+  @ApiOperation({ summary: 'Демо-аккаунты staging (только вне production)' })
+  async demoAccounts(@Req() req: Request) {
+    const secret = (req.query.secret as string | undefined) ?? null;
+    return this.demo.accounts(secret);
+  }
+
+  @Post('demo/login')
+  @Public()
+  @HttpCode(HttpStatus.OK)
+  @RateLimit({ limit: 30, windowSec: 60 })
+  @ApiOperation({ summary: 'Вход демо-аккаунтом без Telegram (только вне production)' })
+  async demoLogin(
+    @Body(zodBody(demoLoginSchema)) body: { key: string; secret?: string | null },
+    @Req() req: Request,
+  ): Promise<TokensResponse> {
+    const issued = await this.demo.login(body.key, meta(req), body.secret);
+    return {
+      accessToken: issued.accessToken,
+      refreshToken: issued.refreshToken,
+      expiresIn: issued.expiresIn,
+    };
+  }
 
   @Post('telegram/miniapp')
   @Public()

@@ -1,10 +1,11 @@
 import type { ReactNode } from 'react';
 import { Button, Spinner } from '@pdr/ui';
 import { useAuth } from './AuthProvider';
+import { DemoLoginScreen } from './DemoLoginScreen';
 
 /** Пока сессия не установлена, приложение не показывается. */
 export function AuthGate({ children }: { children: ReactNode }) {
-  const { status, error } = useAuth();
+  const { status, error, reload } = useAuth();
 
   if (status === 'loading') {
     return (
@@ -16,15 +17,9 @@ export function AuthGate({ children }: { children: ReactNode }) {
   }
 
   if (status === 'outside_telegram') {
-    return (
-      <div className="app-splash">
-        <h1 className="pdr-title">Откройте приложение в Telegram</h1>
-        <p className="pdr-hint">
-          Это приложение работает внутри Telegram: вход выполняется автоматически и подтверждается
-          подписью Telegram.
-        </p>
-      </div>
-    );
+    // Вне Telegram работает демо-вход (если он включён на сервере),
+    // иначе экран сам объяснит, что приложение открывают из Telegram.
+    return <DemoLoginScreen onLoggedIn={() => void reload()} />;
   }
 
   if (status === 'error') {

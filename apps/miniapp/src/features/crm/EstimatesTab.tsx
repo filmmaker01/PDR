@@ -3,7 +3,7 @@ import { useMutation, useQueryClient } from '@tanstack/react-query';
 import { ApiError } from '@pdr/api-client';
 import { Badge, Button, Card, EmptyState, ListItem, SkeletonList } from '@pdr/ui';
 import { api } from '@/shared/api';
-import { formatDateTime, formatMinor } from '@/shared/format';
+import { formatDateTime, formatMinor, plural } from '@/shared/format';
 import { alertDialog, haptic } from '@/shared/telegram';
 import { useEstimates } from './api';
 import { ESTIMATE_STATUS_TONES, type Estimate } from './types';
@@ -98,7 +98,7 @@ export function EstimatesTab({
                 key={estimate.id}
                 title={`Версия ${estimate.versionNo} · ${formatMinor(estimate.totalMinor, estimate.currency)}`}
                 subtitle={[
-                  `${estimate.items.length} позиц.`,
+                  `${estimate.items.length} ${plural(estimate.items.length, ['позиция', 'позиции', 'позиций'])}`,
                   estimate.discountMinor > 0
                     ? `скидка ${formatMinor(estimate.discountMinor, estimate.currency)}`
                     : null,

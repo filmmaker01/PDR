@@ -1,7 +1,7 @@
 import { Injectable, Logger, type OnModuleDestroy, type OnModuleInit } from '@nestjs/common';
 import PgBoss from 'pg-boss';
 import { AppConfigService } from '@/config/config.service';
-import type { JobName, JobPayloads } from './job-queue';
+import { JOB, type JobName, type JobPayloads } from './job-queue';
 
 export interface EnqueueOptions {
   /** Задержка перед выполнением, секунды. */
@@ -56,6 +56,12 @@ export class JobsService implements OnModuleInit, OnModuleDestroy {
     });
     this.boss.on('error', (err) => this.logger.error({ err }, 'Ошибка очереди'));
     await this.boss.start();
+    // pg-boss 10 не создаёт очередь сам: и send(), и work() требуют,
+    // чтобы запись в pgboss.queue уже существовала. Команда идемпотентна,
+    // поэтому её безопасно выполнять при каждом старте любого процесса.
+    for (const name of Object.values(JOB)) {
+      await this.boss.createQueue(name);
+    }
     this.started = true;
     this.logger.log('Очередь запущена');
   }

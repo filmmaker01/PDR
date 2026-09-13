@@ -8,6 +8,7 @@ import { api } from '@/shared/api';
 import { alertDialog, haptic } from '@/shared/telegram';
 import { useAppointments, useMembers, useWorkspace } from './api';
 import { AppointmentSheet } from './AppointmentSheet';
+import { ScreenError } from './ScreenError';
 import { APPOINTMENT_STATUS_TONES, type Appointment, type AppointmentStatus } from './types';
 
 type View = 'day' | 'week';
@@ -109,6 +110,10 @@ export function CalendarScreen() {
   }, [appointments.data, days]);
 
   const today = todayInZone(timezone);
+
+  if (appointments.isError) {
+    return <ScreenError error={appointments.error} onRetry={() => void appointments.refetch()} />;
+  }
 
   return (
     <div className="pdr-stack">

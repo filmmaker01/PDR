@@ -2,12 +2,22 @@ import { useNavigate, useParams } from 'react-router-dom';
 import { Badge, Card, EmptyState, ListItem, SkeletonList } from '@pdr/ui';
 import { formatDateTime, formatMinor, formatPhoneRu } from '@/shared/format';
 import { useDebts } from './api';
+import { ScreenError } from './ScreenError';
 
 export function DebtsScreen() {
   const { workspaceId = '' } = useParams();
   const navigate = useNavigate();
   const debts = useDebts(workspaceId);
 
+  if (debts.isError) {
+    return (
+      <ScreenError
+        error={debts.error}
+        onRetry={() => void debts.refetch()}
+        backTo={`/workspace/${workspaceId}/settings`}
+      />
+    );
+  }
   if (debts.isLoading) return <SkeletonList rows={4} />;
 
   const items = debts.data ?? [];

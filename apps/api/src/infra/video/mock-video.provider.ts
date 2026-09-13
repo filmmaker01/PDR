@@ -37,9 +37,10 @@ export class MockVideoProvider implements VideoProvider {
     providerVideoId: string,
     options: { userId: string; ttlSec: number },
   ): Promise<PlaybackTicket> {
+    // HLS не отдаём: настоящего потока здесь нет, и элемент video показал бы
+    // сломанный плеер. Встраивается страница-заглушка с объяснением.
     return {
       embedUrl: `${this.config.env.PUBLIC_API_URL}/v1/mock-player/${providerVideoId}?u=${options.userId}`,
-      hlsUrl: `${this.config.env.PUBLIC_API_URL}/v1/mock-player/${providerVideoId}/index.m3u8`,
       expiresAt: new Date(Date.now() + options.ttlSec * 1000),
     };
   }

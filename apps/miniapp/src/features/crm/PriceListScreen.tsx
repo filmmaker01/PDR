@@ -17,6 +17,7 @@ import { api } from '@/shared/api';
 import { formatMinor, parseMajorToMinor } from '@/shared/format';
 import { alertDialog, confirmDialog, haptic } from '@/shared/telegram';
 import { useDictionaries, usePriceList, useWorkspace } from './api';
+import { ScreenError } from './ScreenError';
 import type { EstimateItemKind, PriceListItem } from './types';
 
 interface FormState {
@@ -122,6 +123,16 @@ export function PriceListScreen() {
   };
 
   const currency = workspace.data?.currency ?? 'RUB';
+
+  if (priceList.isError) {
+    return (
+      <ScreenError
+        error={priceList.error}
+        onRetry={() => void priceList.refetch()}
+        backTo={`/workspace/${workspaceId}/settings`}
+      />
+    );
+  }
 
   return (
     <div className="pdr-stack">

@@ -15,6 +15,7 @@ import { ApiError } from '@pdr/api-client';
 import { api } from '@/shared/api';
 import { useAuth } from './AuthProvider';
 import { TelegramLoginButton } from './TelegramLoginButton';
+import { demoLogin, fetchDemoAccounts, type DemoAccount } from './demo';
 
 const BOT_USERNAME = import.meta.env.VITE_BOT_USERNAME ?? '';
 const POLL_INTERVAL_MS = 2000;
@@ -29,7 +30,14 @@ export function LoginPage() {
   const [error, setError] = useState<string | null>(null);
   const [code, setCode] = useState<string | null>(null);
   const [waiting, setWaiting] = useState(false);
+  const [demoAccounts, setDemoAccounts] = useState<DemoAccount[] | null>(null);
+  const [demoPending, setDemoPending] = useState<string | null>(null);
   const pollRef = useRef<number | null>(null);
+
+  // Демо-вход доступен только там, где он включён на сервере (не в production).
+  useEffect(() => {
+    void (async () => setDemoAccounts(await fetchDemoAccounts()))();
+  }, []);
 
   const stopPolling = useCallback(() => {
     if (pollRef.current !== null) {
@@ -127,6 +135,35 @@ export function LoginPage() {
           >
             Подтвердить вход в боте
           </Button>
+
+          {demoAccounts && demoAccounts.length > 0 ? (
+            <>
+              <Divider label="демо-доступ" labelPosition="center" />
+              <Text size="sm" c="dimmed">
+                Демонстрационное окружение: вход без Telegram.
+              </Text>
+              {demoAccounts.map((account) => (
+                <Button
+                  key={account.key}
+                  variant="default"
+                  loading={demoPending === account.key}
+                  onClick={async () => {
+                    setError(null);
+                    setDemoPending(account.key);
+                    try {
+                      await setTokens(await demoLogin(account.key));
+                    } catch (e) {
+                      setError(e instanceof ApiError ? e.message : 'Не удалось войти');
+                    } finally {
+                      setDemoPending(null);
+                    }
+                  }}
+                >
+                  {account.name} — {account.platformRoles.join(', ')}
+                </Button>
+              ))}
+            </>
+          ) : null}
 
           {code && waiting ? (
             <Text size="sm" c="dimmed">

@@ -10,7 +10,7 @@ import {
   UnstyledButton,
 } from '@mantine/core';
 import { useDisclosure } from '@mantine/hooks';
-import { Outlet, useLocation, useNavigate } from 'react-router-dom';
+import { Link, Outlet, useLocation } from 'react-router-dom';
 import { AuthGate, type NavItem } from './nav';
 import { useAuth } from '@/features/auth/AuthProvider';
 
@@ -23,8 +23,7 @@ export function AdminLayout() {
 }
 
 function AdminShell() {
-  const [opened, { toggle }] = useDisclosure();
-  const navigate = useNavigate();
+  const [opened, { toggle, close }] = useDisclosure();
   const location = useLocation();
   const { me, isAdmin, isCurator, logout } = useAuth();
 
@@ -92,12 +91,16 @@ function AdminShell() {
         </Group>
       </AppShell.Header>
       <AppShell.Navbar p="xs">
+        {/* Пункт меню — настоящая ссылка с href: работает средняя кнопка,
+            «открыть в новой вкладке» и адрес виден в строке состояния. */}
         {visible.map((item) => (
           <NavLink
             key={item.to}
+            component={Link}
+            to={item.to}
             label={item.label}
             active={location.pathname.startsWith(item.to)}
-            onClick={() => navigate(item.to)}
+            onClick={() => close()}
           />
         ))}
       </AppShell.Navbar>

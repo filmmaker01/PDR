@@ -17,6 +17,7 @@ import { api } from '@/shared/api';
 import { formatMinor, formatPhoneRu } from '@/shared/format';
 import { alertDialog, confirmDialog, haptic } from '@/shared/telegram';
 import { useClient, useClients, useVehicle, useWorkspace } from './api';
+import { ScreenError } from './ScreenError';
 import { STATUS_TONES } from './types';
 
 export function ClientsScreen() {
@@ -48,6 +49,10 @@ export function ClientsScreen() {
     onError: async (e) =>
       alertDialog(e instanceof ApiError ? e.message : 'Не удалось создать клиента'),
   });
+
+  if (clients.isError) {
+    return <ScreenError error={clients.error} onRetry={() => void clients.refetch()} />;
+  }
 
   return (
     <div className="pdr-stack">

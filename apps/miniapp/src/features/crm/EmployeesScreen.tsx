@@ -17,6 +17,7 @@ import { api } from '@/shared/api';
 import { formatDate } from '@/shared/format';
 import { alertDialog, confirmDialog, haptic } from '@/shared/telegram';
 import { useInvitations, useMembers, useWorkspace } from './api';
+import { ScreenError } from './ScreenError';
 import type { MemberInfo } from './types';
 
 const COLORS = ['#2f80ed', '#27ae60', '#eb5757', '#f2994a', '#9b51e0', '#00bcd4'];
@@ -89,6 +90,15 @@ export function EmployeesScreen() {
       alertDialog(e instanceof ApiError ? e.message : 'Не удалось передать владение'),
   });
 
+  if (members.isError) {
+    return (
+      <ScreenError
+        error={members.error}
+        onRetry={() => void members.refetch()}
+        backTo={`/workspace/${workspaceId}/settings`}
+      />
+    );
+  }
   if (members.isLoading) return <SkeletonList rows={3} />;
 
   const openEdit = (member: MemberInfo): void => {

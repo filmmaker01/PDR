@@ -2,8 +2,9 @@ import { useMemo } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
 import { Badge, Button, Card, EmptyState, ListItem, SkeletonList } from '@pdr/ui';
 import { todayInZone, zonedTimeToUtc } from '@pdr/shared';
-import { formatMinor } from '@/shared/format';
+import { formatMinor, plural } from '@/shared/format';
 import { useAppointments, useDebts, useOrders, useToday, useWorkspace } from './api';
+import { ScreenError } from './ScreenError';
 import { APPOINTMENT_STATUS_TONES, STATUS_TONES } from './types';
 
 export function TodayScreen() {
@@ -22,6 +23,10 @@ export function TodayScreen() {
     return { from: from.toISOString(), to: new Date(from.getTime() + 86_400_000).toISOString() };
   }, [timezone]);
   const appointments = useAppointments(workspaceId, todayRange);
+
+  if (summary.isError) {
+    return <ScreenError error={summary.error} onRetry={() => void summary.refetch()} />;
+  }
 
   if (summary.isLoading) return <SkeletonList rows={3} />;
 
@@ -55,7 +60,15 @@ export function TodayScreen() {
             <div className="pdr-row">
               <span className="pdr-grow">
                 <span style={{ display: 'block', fontWeight: 600 }}>Задолженность</span>
-                <span className="pdr-hint">{data.debt.count} заказ(ов) не оплачены полностью</span>
+                <span className="pdr-hint">
+                  {data.debt.count}{' '}
+                  {plural(data.debt.count, [
+                    'заказ оплачен',
+                    'заказа оплачены',
+                    'заказов оплачены',
+                  ])}{' '}
+                  не полностью
+                </span>
               </span>
               <Badge tone="danger">{formatMinor(data.debt.totalMinor, currency)}</Badge>
             </div>

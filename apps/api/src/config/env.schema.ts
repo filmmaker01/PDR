@@ -19,6 +19,13 @@ export const envSchema = z
     ACCESS_TOKEN_TTL_SEC: z.coerce.number().int().positive().default(900),
     REFRESH_TOKEN_TTL_SEC: z.coerce.number().int().positive().default(2_592_000),
 
+    /**
+     * Вход демо-аккаунтами без Telegram: нужен на staging для QA и демонстрации.
+     * В production запрещён проверкой ниже.
+     */
+    DEMO_LOGIN_ENABLED: bool.default(false),
+    DEMO_LOGIN_SECRET: z.string().default(''),
+
     TELEGRAM_ENABLED: bool.default(false),
     TELEGRAM_BOT_TOKEN: z.string().default(''),
     TELEGRAM_BOT_USERNAME: z.string().default(''),
@@ -107,22 +114,42 @@ export const envSchema = z
       });
     }
 
+    if (env.DEMO_LOGIN_ENABLED && env.APP_ENV === 'production') {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        path: ['DEMO_LOGIN_ENABLED'],
+        message: 'DEMO_LOGIN_ENABLED недопустим в production: это вход без проверки Telegram',
+      });
+    }
+
+    if (env.DEMO_LOGIN_ENABLED && env.APP_ENV === 'staging' && env.DEMO_LOGIN_SECRET.length < 16) {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        path: ['DEMO_LOGIN_SECRET'],
+        message: 'На staging демо-вход должен быть закрыт секретом не короче 16 символов',
+      });
+    }
+
     if (isProdLike) {
-      if (env.STORAGE_DRIVER === 'local') {
+      // На staging демо-режим разрешает работать без внешних сервисов:
+      // окружение поднимается до того, как появятся ключи S3, Kinescope и бота.
+      const demoStaging = env.APP_ENV === 'staging' && env.DEMO_LOGIN_ENABLED;
+
+      if (env.STORAGE_DRIVER === 'local' && !demoStaging) {
         ctx.addIssue({
           code: z.ZodIssueCode.custom,
           path: ['STORAGE_DRIVER'],
           message: 'STORAGE_DRIVER=local запрещён на staging и production',
         });
       }
-      if (env.VIDEO_PROVIDER === 'mock') {
+      if (env.VIDEO_PROVIDER === 'mock' && !demoStaging) {
         ctx.addIssue({
           code: z.ZodIssueCode.custom,
           path: ['VIDEO_PROVIDER'],
           message: 'VIDEO_PROVIDER=mock запрещён на staging и production',
         });
       }
-      if (!env.TELEGRAM_ENABLED) {
+      if (!env.TELEGRAM_ENABLED && !demoStaging) {
         ctx.addIssue({
           code: z.ZodIssueCode.custom,
           path: ['TELEGRAM_ENABLED'],

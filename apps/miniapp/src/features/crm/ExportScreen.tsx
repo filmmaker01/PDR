@@ -7,6 +7,7 @@ import { api } from '@/shared/api';
 import { formatDateTime } from '@/shared/format';
 import { alertDialog, haptic, openLink } from '@/shared/telegram';
 import { useWorkspace } from './api';
+import { ScreenError } from './ScreenError';
 
 interface ExportRecord {
   id: string;
@@ -74,6 +75,16 @@ export function ExportScreen() {
   });
 
   const storage = workspace.data?.storage;
+
+  if (exports.isError) {
+    return (
+      <ScreenError
+        error={exports.error}
+        onRetry={() => void exports.refetch()}
+        backTo={`/workspace/${workspaceId}/settings`}
+      />
+    );
+  }
 
   return (
     <div className="pdr-stack">

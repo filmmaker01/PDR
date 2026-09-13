@@ -2,6 +2,7 @@ import { Global, Module } from '@nestjs/common';
 import { AuthController } from './auth.controller';
 import { AuthService } from './auth.service';
 import { SessionService } from './session.service';
+import { DemoLoginService } from './demo-login.service';
 import { SessionGuard } from './guards/session.guard';
 import { PlatformRoleGuard } from './guards/platform-role.guard';
 import { SessionsCleanupHandler } from './jobs/sessions-cleanup.handler';
@@ -13,11 +14,12 @@ import { IdempotencyCleanupHandler } from './jobs/idempotency-cleanup.handler';
   providers: [
     AuthService,
     SessionService,
+    DemoLoginService,
     SessionGuard,
     PlatformRoleGuard,
     SessionsCleanupHandler,
     IdempotencyCleanupHandler,
   ],
-  exports: [AuthService, SessionService, SessionGuard, PlatformRoleGuard],
+  exports: [AuthService, SessionService, DemoLoginService, SessionGuard, PlatformRoleGuard],
 })
 export class AuthModule {}

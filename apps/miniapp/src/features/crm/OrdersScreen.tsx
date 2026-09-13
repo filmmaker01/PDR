@@ -3,6 +3,7 @@ import { useNavigate, useParams } from 'react-router-dom';
 import { Badge, Button, Card, Chips, EmptyState, Input, ListItem, SkeletonList } from '@pdr/ui';
 import { formatMinor } from '@/shared/format';
 import { useMembers, useOrders } from './api';
+import { ScreenError } from './ScreenError';
 import { STATUS_TONES, type OrderStatus } from './types';
 
 const STATUS_FILTERS: { value: OrderStatus; label: string }[] = [
@@ -29,6 +30,10 @@ export function OrdersScreen() {
     assigneeMemberId: assigneeMemberId ?? undefined,
     q: query || undefined,
   });
+
+  if (orders.isError) {
+    return <ScreenError error={orders.error} onRetry={() => void orders.refetch()} />;
+  }
 
   return (
     <div className="pdr-stack">

@@ -61,6 +61,8 @@ model User {
   isBotBlocked    Boolean   @default(false) @map("is_bot_blocked")
   /// Пользователь запустил бота или дал разрешение на сообщения.
   botWriteAllowed Boolean   @default(false) @map("bot_write_allowed")
+  /// Демо-аккаунт staging: ключ для входа без Telegram. В production всегда null.
+  demoKey         String?   @unique @map("demo_key")
   isBanned        Boolean   @default(false) @map("is_banned")
   banReason       String?   @map("ban_reason")
   lastSeenAt      DateTime? @map("last_seen_at") @db.Timestamptz(6)

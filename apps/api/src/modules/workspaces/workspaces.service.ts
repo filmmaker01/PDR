@@ -232,13 +232,27 @@ export class WorkspacesService {
   }
 
   /** Следующий номер заказа внутри мастерской (атомарно). */
+  /**
+   * Следующий номер заказа в мастерской.
+   *
+   * Счётчик может отстать от данных: базу восстановили из копии, заказы
+   * перенесли импортом, кто-то вставил строки руками. Тогда обычный инкремент
+   * выдал бы занятый номер, и создание заказа падало бы с ошибкой уникальности.
+   * Поэтому счётчик подтягивается до фактического максимума одним запросом.
+   */
   async nextOrderNumber(workspaceId: string, tx?: Prisma.TransactionClient): Promise<number> {
     const client = tx ?? this.prisma;
-    const updated = await client.workspace.update({
-      where: { id: workspaceId },
-      data: { orderSeq: { increment: 1 } },
-      select: { orderSeq: true },
-    });
-    return updated.orderSeq;
+    const rows = await client.$queryRaw<{ order_seq: number }[]>`
+      UPDATE workspaces
+         SET order_seq = GREATEST(
+               order_seq,
+               COALESCE((SELECT max(number) FROM orders WHERE workspace_id = ${workspaceId}::uuid), 0)
+             ) + 1
+       WHERE id = ${workspaceId}::uuid
+      RETURNING order_seq
+    `;
+    const next = rows[0]?.order_seq;
+    if (next === undefined) throw AppError.notFound('Мастерская не найдена');
+    return next;
   }
 }

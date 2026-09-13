@@ -2,7 +2,7 @@ import { useMemo, useState } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
 import { Button, Card, EmptyState, SkeletonList } from '@pdr/ui';
 import { todayInZone } from '@pdr/shared';
-import { formatDuration, formatMinor } from '@/shared/format';
+import { formatDayShort, formatDuration, formatMinor, plural } from '@/shared/format';
 import {
   useAnalyticsEmployees,
   useAnalyticsSeries,
@@ -10,6 +10,7 @@ import {
   useMembers,
   useWorkspace,
 } from './api';
+import { ScreenError } from './ScreenError';
 
 const PERIODS: { value: string; label: string; days: number }[] = [
   { value: 'week', label: 'Неделя', days: 7 },
@@ -47,6 +48,16 @@ export function AnalyticsScreen() {
     granularity: periodValue === 'quarter' ? 'week' : 'day',
   });
   const employees = useAnalyticsEmployees(workspaceId, period);
+
+  if (summary.isError) {
+    return (
+      <ScreenError
+        error={summary.error}
+        onRetry={() => void summary.refetch()}
+        backTo={`/workspace/${workspaceId}/settings`}
+      />
+    );
+  }
 
   const currency = workspace.data?.currency ?? 'RUB';
   const points = series.data?.points ?? [];
@@ -162,8 +173,12 @@ export function AnalyticsScreen() {
             ))}
           </div>
           <div className="pdr-row" style={{ marginTop: 6 }}>
-            <span className="pdr-hint pdr-grow">{points[0]?.bucket}</span>
-            <span className="pdr-hint">{points.at(-1)?.bucket}</span>
+            <span className="pdr-hint pdr-grow">
+              {points[0] ? formatDayShort(points[0].bucket) : null}
+            </span>
+            <span className="pdr-hint">
+              {points.at(-1) ? formatDayShort(points.at(-1)!.bucket) : null}
+            </span>
           </div>
         </Card>
       )}
@@ -181,7 +196,8 @@ export function AnalyticsScreen() {
                 <span className="pdr-grow">
                   <span style={{ display: 'block', fontWeight: 500 }}>{row.name}</span>
                   <span className="pdr-hint">
-                    {row.completedOrders} заказ(ов) ·{' '}
+                    {row.completedOrders}{' '}
+                    {plural(row.completedOrders, ['заказ', 'заказа', 'заказов'])} ·{' '}
                     {formatMinor(row.completedTotalMinor, currency)} · получено{' '}
                     {formatMinor(row.receivedMinor, currency)} ·{' '}
                     {formatDuration(row.appointmentMinutes)} в календаре

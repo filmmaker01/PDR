@@ -75,7 +75,25 @@ export function ClubScreen() {
         ) : null}
       </Card>
 
-      {data.hasAccess && data.inviteLink ? (
+      {/* Три разных случая. Раньше последние два сливались в один, и человек
+          с действующим доступом читал, что доступа у него нет. */}
+      {!data.hasAccess ? (
+        <Card>
+          <div style={{ fontWeight: 600, marginBottom: 4 }}>Доступ к клубу не действует</div>
+          <div className="pdr-hint">
+            Вступить в группу можно только с действующим доступом. Продлите его у администратора —
+            после продления вернуться можно по той же ссылке.
+          </div>
+        </Card>
+      ) : !data.inviteLink ? (
+        <Card>
+          <div style={{ fontWeight: 600, marginBottom: 4 }}>Ссылка на группу пока не настроена</div>
+          <div className="pdr-hint">
+            Доступ у вас есть. Как только администратор укажет ссылку на группу, здесь появится
+            кнопка вступления.
+          </div>
+        </Card>
+      ) : (
         <>
           <Button block onClick={() => openLink(data.inviteLink!)}>
             {data.status === 'member' ? 'Открыть группу' : 'Вступить в клуб'}
@@ -84,14 +102,6 @@ export function ClubScreen() {
             По ссылке отправляется заявка. Бот одобрит её автоматически, пока действует доступ.
           </div>
         </>
-      ) : (
-        <Card>
-          <div style={{ fontWeight: 600, marginBottom: 4 }}>Доступ к клубу не действует</div>
-          <div className="pdr-hint">
-            Вступить в группу можно только с действующим доступом. Продлите его у администратора —
-            после продления вернуться можно по той же ссылке.
-          </div>
-        </Card>
       )}
 
       <Button variant="secondary" block onClick={() => navigate('/profile')}>

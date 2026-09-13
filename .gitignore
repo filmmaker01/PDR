@@ -21,3 +21,9 @@ apps/*/src/**/*.js
 apps/*/src/**/*.js.map
 apps/*/src/**/*.d.ts
 apps/*/src/**/*.d.ts.map
+
+# Локальный staging
+apps/api/.env.staging
+/.staging-logs/
+apps/api/storage-staging/
+/.qa-screens/

@@ -2,6 +2,7 @@ import { useNavigate, useParams } from 'react-router-dom';
 import { Button, Card, EmptyState, ListItem, SkeletonList } from '@pdr/ui';
 import { formatDateTime } from '@/shared/format';
 import { useMembers, useWorkspaceAudit } from './api';
+import { ScreenError } from './ScreenError';
 
 const ENTITY_LABELS: Record<string, string> = {
   order: 'Заказ',
@@ -45,6 +46,16 @@ export function WorkspaceAuditScreen() {
     const member = members.data?.find((m) => m.userId === userId);
     return member?.name ?? 'участник мастерской';
   };
+
+  if (audit.isError) {
+    return (
+      <ScreenError
+        error={audit.error}
+        onRetry={() => void audit.refetch()}
+        backTo={`/workspace/${workspaceId}/settings`}
+      />
+    );
+  }
 
   return (
     <div className="pdr-stack">
