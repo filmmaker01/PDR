@@ -9,7 +9,7 @@
  * Запуск: pnpm --filter @pdr/api seed:staging
  */
 import { randomUUID } from 'node:crypto';
-import { mkdir, writeFile } from 'node:fs/promises';
+import { mkdir, rm, writeFile } from 'node:fs/promises';
 import { dirname, join, resolve } from 'node:path';
 import { PrismaClient, type Prisma } from '@prisma/client';
 import { todayInZone, zonedTimeToUtc } from '@pdr/shared';
@@ -72,8 +72,8 @@ async function createPhotoFile(input: {
   const svg = Buffer.from(
     `<svg xmlns="http://www.w3.org/2000/svg" width="1200" height="900">
        <rect width="1200" height="900" fill="${input.color}"/>
-       <text x="60" y="480" font-family="sans-serif" font-size="72" fill="#ffffff">${input.label}</text>
-       <text x="60" y="560" font-family="sans-serif" font-size="36" fill="#ffffffcc">демонстрационное фото</text>
+       <text x="600" y="460" text-anchor="middle" font-family="sans-serif" font-size="72" fill="#ffffff">${input.label}</text>
+       <text x="600" y="540" text-anchor="middle" font-family="sans-serif" font-size="36" fill="#ffffffcc">демонстрационное фото</text>
      </svg>`,
   );
 
@@ -121,6 +121,11 @@ async function wipe(): Promise<void> {
   if (rows.length === 0) return;
   const list = rows.map((r) => `"public"."${r.tablename}"`).join(', ');
   await prisma.$executeRawUnsafe(`TRUNCATE TABLE ${list} RESTART IDENTITY CASCADE`);
+
+  // Файлы удаляются вместе с записями: иначе каталог хранилища растёт от
+  // пересева к пересеву мёртвыми снимками, на которые уже никто не ссылается.
+  await rm(join(STORAGE_DIR, 'order_photo'), { recursive: true, force: true });
+  await rm(join(STORAGE_DIR, 'submission'), { recursive: true, force: true });
 }
 
 // ── Курс ─────────────────────────────────────────────────────────────────────

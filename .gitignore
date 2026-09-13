@@ -27,3 +27,4 @@ apps/api/.env.staging
 /.staging-logs/
 apps/api/storage-staging/
 /.qa-screens/
+/storage-staging/

@@ -31,6 +31,10 @@ export class LocalStorageProvider implements StorageProvider {
     this.root = resolve(process.cwd(), config.env.STORAGE_LOCAL_DIR);
     this.secret = config.env.SESSION_JWT_SECRET;
     this.baseUrl = `${config.env.PUBLIC_API_URL}/v1/files/local`;
+    // Путь раскрывается от рабочего каталога процесса: если API и сидер
+    // запущены из разных каталогов, файлы окажутся в разных местах. Корень
+    // пишется в лог, чтобы это было видно сразу, а не по 404 на картинке.
+    this.logger.log(`Локальное хранилище: ${this.root}`);
   }
 
   private pathFor(key: string): string {

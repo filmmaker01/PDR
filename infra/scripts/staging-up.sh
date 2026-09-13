@@ -24,6 +24,17 @@ set -a
 . "${ENV_FILE}"
 set +a
 
+# Относительный путь к хранилищу раскрывается от корня репозитория: иначе
+# сидер (запускается из apps/api) и API (из корня) пишут в разные каталоги,
+# и фотографии демо-данных отдаются как «не найдено».
+case "${STORAGE_LOCAL_DIR:-}" in
+  "" ) STORAGE_LOCAL_DIR="${ROOT}/storage-staging" ;;
+  /* ) : ;;
+  *  ) STORAGE_LOCAL_DIR="${ROOT}/${STORAGE_LOCAL_DIR#./}" ;;
+esac
+export STORAGE_LOCAL_DIR
+echo "[staging] хранилище: ${STORAGE_LOCAL_DIR}"
+
 echo "[staging] база: ${DATABASE_URL%%\?*}"
 # psql не понимает параметр schema из строки Prisma — отрезаем query.
 DB_URL_CLEAN="${DATABASE_URL%%\?*}"

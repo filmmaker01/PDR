@@ -269,7 +269,7 @@ const browser = await launch();
   await shot(page, 'заказ-работа');
 
   for (const [tab, marker] of [
-    ['Фото', /Снимк|Добавить/],
+    ['Фото', /До ·|Снимк|Добавить/],
     ['Расчёт', /Согласованная сумма|Сметы нет|Новая версия/],
     ['Оплаты', /Оплат|Внести|Платеж/],
   ]) {
@@ -277,6 +277,19 @@ const browser = await launch();
     const body = await text(page);
     record('заказ', `вкладка «${tab}» показывает содержимое`, marker.test(body), body.slice(0, 60));
     await shot(page, `заказ-${tab.toLowerCase()}`);
+    if (tab === 'Фото') {
+      // Снимок мог сохраниться в один каталог, а отдаваться из другого:
+      // визуально это ломается только тем, что картинка не загрузилась.
+      const broken = await page.evaluate(
+        () => [...document.images].filter((img) => img.complete && img.naturalWidth === 0).length,
+      );
+      record(
+        'заказ',
+        'фотографии заказа действительно загружаются',
+        broken === 0,
+        `битых: ${broken}`,
+      );
+    }
   }
   collect(page, 'заказ');
   await page.context().close();
