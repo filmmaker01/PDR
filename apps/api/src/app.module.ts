@@ -29,6 +29,7 @@ import { AuditInterceptor } from './modules/audit/audit.interceptor';
 import { CatalogModule } from './modules/learning/catalog/catalog.module';
 import { LearningModule } from './modules/learning/learning.module';
 import { AssignmentsModule } from './modules/learning/assignments/assignments.module';
+import { ExamsModule } from './modules/learning/exams/exams.module';
 import { TelegramAppModule } from './modules/telegram/telegram-app.module';
 
 const REDACT_PATHS = [
@@ -75,6 +76,7 @@ const REDACT_PATHS = [
     CatalogModule,
     LearningModule,
     AssignmentsModule,
+    ExamsModule,
     HealthModule,
     MeModule,
     AdminModule,

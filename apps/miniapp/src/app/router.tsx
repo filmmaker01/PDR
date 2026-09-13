@@ -12,6 +12,9 @@ import { StageScreen } from '@/features/learning/StageScreen';
 import { LessonScreen } from '@/features/learning/LessonScreen';
 import { AssignmentScreen } from '@/features/learning/AssignmentScreen';
 import { SubmissionEditorScreen } from '@/features/learning/SubmissionEditorScreen';
+import { ExamScreen } from '@/features/learning/ExamScreen';
+import { AttemptScreen } from '@/features/learning/AttemptScreen';
+import { AttemptResultScreen } from '@/features/learning/AttemptResultScreen';
 import { ReviewQueueScreen } from '@/features/curator/ReviewQueueScreen';
 import { ReviewScreen } from '@/features/curator/ReviewScreen';
 
@@ -35,9 +38,11 @@ export const router = createBrowserRouter([
       },
       { path: 'curator', element: <ReviewQueueScreen /> },
       { path: 'curator/submissions/:submissionId', element: <ReviewScreen /> },
+      { path: 'learning/:enrollmentId/exams/:examKey', element: <ExamScreen /> },
+      { path: 'learning/:enrollmentId/attempts/:attemptId', element: <AttemptScreen /> },
       {
-        path: 'learning/:enrollmentId/exams/:examKey',
-        element: <PlaceholderScreen title="Экзамен" hint="Появится на этапе 8" />,
+        path: 'learning/:enrollmentId/attempts/:attemptId/result',
+        element: <AttemptResultScreen />,
       },
       { path: 'workspace', element: <WorkspacePicker /> },
       { path: 'workspace/:workspaceId', element: <WorkspaceScreen /> },

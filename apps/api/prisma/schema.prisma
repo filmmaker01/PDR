@@ -91,6 +91,7 @@ model User {
   claimedSubmissions   Submission[]          @relation("SubmissionClaimedBy")
   reviews              Review[]              @relation("ReviewAuthor")
   reviewComments       ReviewComment[]       @relation("ReviewCommentAuthor")
+  gradedAttempts       ExamAttempt[]         @relation("AttemptGrader")
 
   @@index([username])
   @@index([phone])
@@ -382,6 +383,7 @@ model StoredFile {
   lessonMaterials  LessonMaterial[] @relation("LessonMaterialFile")
   questionImages   Question[]       @relation("QuestionImage")
   submissionFiles  SubmissionFile[] @relation("SubmissionFiles")
+  attemptFiles     AttemptFile[]    @relation("AttemptFiles")
 
   @@index([workspaceId, scope])
   @@index([ownerUserId, scope])
@@ -667,8 +669,9 @@ model Exam {
   showExplanations    Boolean  @default(true) @map("show_explanations")
   isRequired          Boolean  @default(true) @map("is_required")
 
-  stage     Stage      @relation(fields: [stageId], references: [id], onDelete: Cascade)
+  stage     Stage         @relation(fields: [stageId], references: [id], onDelete: Cascade)
   questions Question[]
+  attempts  ExamAttempt[]
 
   @@unique([stageId, key])
   @@map("exams")
@@ -689,6 +692,7 @@ model Question {
   exam      Exam             @relation(fields: [examId], references: [id], onDelete: Cascade)
   imageFile StoredFile?      @relation("QuestionImage", fields: [imageFileId], references: [id], onDelete: SetNull)
   options   QuestionOption[]
+  answers   AttemptAnswer[]
 
   @@unique([examId, position])
   @@map("questions")
@@ -787,6 +791,7 @@ model Enrollment {
   user             User              @relation(fields: [userId], references: [id], onDelete: Cascade)
   lessonProgress   LessonProgress[]
   submissions      Submission[]
+  examAttempts     ExamAttempt[]
   stageOverrides   StageOverride[]
   stageCompletions StageCompletion[]
 
@@ -932,4 +937,82 @@ model ReviewComment {
 
   @@index([submissionId, createdAt])
   @@map("review_comments")
+}
+
+// ── Экзамены: попытки и ответы (этап 8) ──────────────────────────────────────
+
+enum AttemptStatus {
+  in_progress
+  submitted
+  graded
+  expired
+  cancelled
+
+  @@map("attempt_status")
+}
+
+model ExamAttempt {
+  id           String        @id @default(uuid()) @db.Uuid
+  enrollmentId String        @map("enrollment_id") @db.Uuid
+  /// Ключ экзамена: переживает смену версии курса.
+  examKey      String        @map("exam_key")
+  /// Конкретная версия экзамена, по которой шла попытка.
+  examId       String        @map("exam_id") @db.Uuid
+  attemptNo    Int           @map("attempt_no")
+  status       AttemptStatus @default(in_progress)
+  startedAt    DateTime      @default(now()) @map("started_at") @db.Timestamptz(6)
+  deadlineAt   DateTime?     @map("deadline_at") @db.Timestamptz(6)
+  submittedAt  DateTime?     @map("submitted_at") @db.Timestamptz(6)
+  gradedAt     DateTime?     @map("graded_at") @db.Timestamptz(6)
+  score        Int?
+  maxScore     Int?          @map("max_score")
+  percent      Int?
+  passed       Boolean?
+  graderId     String?       @map("grader_id") @db.Uuid
+  graderComment String?      @map("grader_comment")
+  /// Зафиксированные порядок и выборка вопросов для этой попытки.
+  questionOrder Json?        @map("question_order")
+  cancelReason String?       @map("cancel_reason")
+  createdAt    DateTime      @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt    DateTime      @updatedAt @map("updated_at") @db.Timestamptz(6)
+
+  enrollment Enrollment      @relation(fields: [enrollmentId], references: [id], onDelete: Cascade)
+  exam       Exam            @relation(fields: [examId], references: [id], onDelete: Restrict)
+  grader     User?           @relation("AttemptGrader", fields: [graderId], references: [id], onDelete: SetNull)
+  answers    AttemptAnswer[]
+  files      AttemptFile[]
+
+  @@unique([enrollmentId, examKey, attemptNo])
+  @@index([enrollmentId, examKey])
+  @@index([status, deadlineAt])
+  @@map("exam_attempts")
+}
+
+model AttemptAnswer {
+  id                String   @id @default(uuid()) @db.Uuid
+  attemptId         String   @map("attempt_id") @db.Uuid
+  questionId        String   @map("question_id") @db.Uuid
+  selectedOptionIds String[] @map("selected_option_ids") @db.Uuid
+  textAnswer        String?  @map("text_answer")
+  isCorrect         Boolean? @map("is_correct")
+  pointsAwarded     Int?     @map("points_awarded")
+  answeredAt        DateTime @default(now()) @map("answered_at") @db.Timestamptz(6)
+
+  attempt  ExamAttempt @relation(fields: [attemptId], references: [id], onDelete: Cascade)
+  question Question    @relation(fields: [questionId], references: [id], onDelete: Cascade)
+
+  @@unique([attemptId, questionId])
+  @@map("attempt_answers")
+}
+
+model AttemptFile {
+  attemptId String @map("attempt_id") @db.Uuid
+  fileId    String @map("file_id") @db.Uuid
+  position  Int
+
+  attempt ExamAttempt @relation(fields: [attemptId], references: [id], onDelete: Cascade)
+  file    StoredFile  @relation("AttemptFiles", fields: [fileId], references: [id], onDelete: Cascade)
+
+  @@id([attemptId, fileId])
+  @@map("attempt_files")
 }

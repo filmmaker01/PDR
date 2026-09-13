@@ -16,6 +16,7 @@ import { StudentsPage } from '@/features/students/StudentsPage';
 import { StudentCardPage } from '@/features/students/StudentCardPage';
 import { ReviewQueuePage } from '@/features/reviews/ReviewQueuePage';
 import { ReviewPage } from '@/features/reviews/ReviewPage';
+import { ExamGradingPage, ExamQueuePage } from '@/features/reviews/ExamQueuePage';
 
 export const router = createBrowserRouter([
   {
@@ -32,6 +33,8 @@ export const router = createBrowserRouter([
       { path: 'cohorts/:cohortId', element: <CohortPage /> },
       { path: 'reviews', element: <ReviewQueuePage /> },
       { path: 'reviews/:submissionId', element: <ReviewPage /> },
+      { path: 'exam-reviews', element: <ExamQueuePage /> },
+      { path: 'exam-reviews/:attemptId', element: <ExamGradingPage /> },
       { path: 'students', element: <StudentsPage /> },
       { path: 'students/:enrollmentId', element: <StudentCardPage /> },
       { path: 'users', element: <UsersPage /> },

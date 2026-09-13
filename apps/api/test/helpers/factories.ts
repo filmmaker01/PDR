@@ -166,6 +166,25 @@ export async function addEmployee(
   return member.id;
 }
 
+export interface ExamSpec {
+  key: string;
+  title: string;
+  kind: 'test' | 'practical';
+  passingScore: number;
+  maxAttempts?: number | null;
+  timeLimitSec?: number | null;
+  cooldownHours?: number;
+  questionsPerAttempt?: number | null;
+  shuffle?: boolean;
+  questions?: {
+    body: string;
+    kind?: 'single' | 'multiple' | 'boolean' | 'short_text';
+    points?: number;
+    options?: [string, boolean][];
+    acceptedAnswers?: string[];
+  }[];
+}
+
 export interface AssignmentSpec {
   key: string;
   title: string;
@@ -195,6 +214,7 @@ export async function createPublishedCourse(
       unlockDaysOffset: number;
       lessons?: string[];
       assignments?: AssignmentSpec[];
+      exams?: ExamSpec[];
     }[];
     unlockMode?: 'interval' | 'dates';
     cohortStartsAt?: Date;
@@ -234,6 +254,42 @@ export async function createPublishedCourse(
         requiresPreviousStage: true,
       },
     });
+    for (const [examIndex, spec] of (stage.exams ?? []).entries()) {
+      const exam = await ctx.prisma.exam.create({
+        data: {
+          stageId: createdStage.id,
+          key: spec.key,
+          position: examIndex + 1,
+          title: spec.title,
+          kind: spec.kind,
+          passingScore: spec.passingScore,
+          maxAttempts: spec.maxAttempts ?? null,
+          timeLimitSec: spec.timeLimitSec ?? null,
+          cooldownHours: spec.cooldownHours ?? 0,
+          questionsPerAttempt: spec.questionsPerAttempt ?? null,
+          shuffleQuestions: spec.shuffle ?? false,
+          isRequired: true,
+        },
+      });
+      for (const [questionIndex, question] of (spec.questions ?? []).entries()) {
+        const created = await ctx.prisma.question.create({
+          data: {
+            examId: exam.id,
+            position: questionIndex + 1,
+            kind: question.kind ?? 'single',
+            body: question.body,
+            points: question.points ?? 1,
+            acceptedAnswers: question.acceptedAnswers ?? undefined,
+          },
+        });
+        for (const [optionIndex, [body, isCorrect]] of (question.options ?? []).entries()) {
+          await ctx.prisma.questionOption.create({
+            data: { questionId: created.id, position: optionIndex + 1, body, isCorrect },
+          });
+        }
+      }
+    }
+
     for (const [assignmentIndex, assignment] of (stage.assignments ?? []).entries()) {
       await ctx.prisma.assignment.create({
         data: {
@@ -349,6 +405,23 @@ export async function createReadySubmissionFile(
       bucket: 'test',
       mimeType,
       sizeBytes: BigInt(1024),
+      status: 'ready',
+      variants: { thumb: 'thumb-key' },
+    },
+  });
+  return file.id;
+}
+
+/** Файл, приложенный к практическому экзамену. */
+export async function createReadyAttemptFile(ctx: TestApp, ownerUserId: string): Promise<string> {
+  const file = await ctx.prisma.storedFile.create({
+    data: {
+      ownerUserId,
+      scope: 'exam_attempt',
+      storageKey: `exam_attempt/${ownerUserId}/${Math.random().toString(36).slice(2)}.jpg`,
+      bucket: 'test',
+      mimeType: 'image/jpeg',
+      sizeBytes: BigInt(2048),
       status: 'ready',
       variants: { thumb: 'thumb-key' },
     },
