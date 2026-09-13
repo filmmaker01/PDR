@@ -137,3 +137,15 @@ export function shareUrl(url: string, text?: string): void {
   if (wa) wa.openTelegramLink(share);
   else window.open(share, '_blank');
 }
+
+/** Открытие ссылки: внутри Telegram — родным способом, иначе новой вкладкой. */
+export function openLink(url: string): void {
+  const wa = getWebApp();
+  if (!wa) {
+    window.open(url, '_blank');
+    return;
+  }
+  // Ссылки t.me открываются внутри клиента, остальные — во внешнем браузере.
+  if (/^https?:\/\/t\.me\//.test(url)) wa.openTelegramLink(url);
+  else wa.openLink(url);
+}

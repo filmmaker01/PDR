@@ -4,6 +4,7 @@ import { JOB } from '@/infra/jobs/job-queue';
 import { PrismaService } from '@/infra/prisma/prisma.service';
 import { NotificationsService } from '@/modules/notifications/notifications.service';
 import { AccessService } from '../access.service';
+import { ClubService } from '@/modules/club/club.service';
 
 const PRODUCT_LABELS: Record<string, string> = {
   course: 'Доступ к курсу',
@@ -31,6 +32,7 @@ export class AccessExpireHandler extends JobHandler<typeof JOB.accessExpire> {
     private readonly access: AccessService,
     private readonly notifications: NotificationsService,
     private readonly prisma: PrismaService,
+    private readonly club: ClubService,
   ) {
     super();
   }
@@ -49,7 +51,14 @@ export class AccessExpireHandler extends JobHandler<typeof JOB.accessExpire> {
       return acc;
     }, {});
     this.logger.log(`Истекли доступы: ${JSON.stringify(byProduct)}`);
-    // Удаление из клуба подключается на этапе 14.
+
+    // Истёкший доступ к клубу означает выход из группы: иначе доступ
+    // закончился только на бумаге.
+    for (const grant of expired) {
+      if (grant.product === 'club' && grant.userId) {
+        await this.club.onGrantEnded(grant.userId, 'access_expired');
+      }
+    }
   }
 
   private async warn(): Promise<void> {

@@ -16,3 +16,5 @@ process.env.LOG_LEVEL ??= 'error';
 process.env.TELEGRAM_BOT_TOKEN ??= '123456:TEST-BOT-TOKEN-FOR-INTEGRATION';
 process.env.TELEGRAM_BOT_USERNAME ??= 'pdr_test_bot';
 process.env.TELEGRAM_WEBHOOK_SECRET ??= 'test-webhook-secret';
+process.env.TELEGRAM_CLUB_CHAT_ID ??= '-1001234567890';
+process.env.TELEGRAM_CLUB_INVITE_LINK ??= 'https://t.me/+testclubinvite';

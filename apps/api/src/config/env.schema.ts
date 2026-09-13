@@ -24,6 +24,8 @@ export const envSchema = z
     TELEGRAM_BOT_USERNAME: z.string().default(''),
     TELEGRAM_WEBHOOK_SECRET: z.string().default(''),
     TELEGRAM_CLUB_CHAT_ID: z.string().default(''),
+    /// Постоянная ссылка-заявка в группу клуба (creates_join_request).
+    TELEGRAM_CLUB_INVITE_LINK: z.string().default(''),
     TELEGRAM_INITDATA_MAX_AGE_SEC: z.coerce.number().int().positive().default(300),
     TELEGRAM_LOGIN_MAX_AGE_SEC: z.coerce.number().int().positive().default(300),
 

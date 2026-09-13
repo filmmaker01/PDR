@@ -4,6 +4,7 @@ import { PlaceholderScreen } from './PlaceholderScreen';
 import { ProfileScreen } from '@/features/profile/ProfileScreen';
 import { NotificationsScreen } from '@/features/profile/NotificationsScreen';
 import { InviteScreen } from '@/features/invite/InviteScreen';
+import { ClubScreen } from '@/features/club/ClubScreen';
 import { WorkspacePicker } from '@/features/workspace/WorkspacePicker';
 import { WorkspaceLayout } from '@/features/crm/WorkspaceLayout';
 import { TodayScreen } from '@/features/crm/TodayScreen';
@@ -82,6 +83,7 @@ export const router = createBrowserRouter([
       { path: 'workspace/:workspaceId/members', element: <EmployeesScreen /> },
       { path: 'workspace/:workspaceId/audit', element: <WorkspaceAuditScreen /> },
       { path: 'workspace/:workspaceId/estimates/:estimateId', element: <EstimateEditorScreen /> },
+      { path: 'club', element: <ClubScreen /> },
       { path: 'profile', element: <ProfileScreen /> },
       { path: 'profile/notifications', element: <NotificationsScreen /> },
       { path: 'invite/:token', element: <InviteScreen /> },

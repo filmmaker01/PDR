@@ -28,7 +28,22 @@ function AdminShell() {
   const location = useLocation();
   const { me, isAdmin, isCurator, logout } = useAuth();
 
-  const items: NavItem[] = [{ to: '/dashboard', label: 'Дашборд', roles: ['admin'] }];
+  // Полный список разделов панели: маршруты существуют, и до каждого
+  // должен быть один клик, а не набранный вручную адрес.
+  const items: NavItem[] = [
+    { to: '/dashboard', label: 'Дашборд', roles: ['admin'] },
+    { to: '/reviews', label: 'Проверка работ', roles: ['admin', 'curator'] },
+    { to: '/exam-reviews', label: 'Экзамены', roles: ['admin', 'curator'] },
+    { to: '/students', label: 'Ученики', roles: ['admin', 'curator'] },
+    { to: '/cohorts', label: 'Группы', roles: ['admin'] },
+    { to: '/courses', label: 'Курсы', roles: ['admin'] },
+    { to: '/videos', label: 'Видео', roles: ['admin'] },
+    { to: '/users', label: 'Пользователи', roles: ['admin'] },
+    { to: '/access', label: 'Доступы', roles: ['admin'] },
+    { to: '/workspaces', label: 'Мастерские', roles: ['admin'] },
+    { to: '/club', label: 'Клуб', roles: ['admin'] },
+    { to: '/audit', label: 'Журнал действий', roles: ['admin'] },
+  ];
   const visible = items.filter(
     (item) =>
       (item.roles.includes('admin') && isAdmin) || (item.roles.includes('curator') && isCurator),

@@ -5,6 +5,7 @@ import { AppConfigService } from '@/config/config.service';
 import { TelegramService } from '@/infra/telegram/telegram.service';
 import { UsersService } from '@/modules/users/users.service';
 import { AuthService } from '@/modules/auth/auth.service';
+import { ClubService } from '@/modules/club/club.service';
 
 const START_HELP = [
   'Это приложение для PDR-мастеров: обучение и учёт заказов.',
@@ -27,6 +28,7 @@ export class TelegramUpdateService {
     private readonly telegram: TelegramService,
     private readonly users: UsersService,
     private readonly auth: AuthService,
+    private readonly club: ClubService,
   ) {}
 
   /** Защита от повторной доставки одного и того же обновления. */
@@ -51,6 +53,22 @@ export class TelegramUpdateService {
     }
     if (update.callback_query) {
       await this.handleCallback(update.callback_query);
+      return;
+    }
+    if (update.chat_join_request) {
+      await this.club.onJoinRequest(
+        String(update.chat_join_request.from.id),
+        String(update.chat_join_request.chat.id),
+      );
+      return;
+    }
+    if (update.chat_member) {
+      // Человек вышел сам или его удалили вручную — состояние нужно знать.
+      await this.club.onChatMemberUpdate(
+        String(update.chat_member.new_chat_member.user.id),
+        String(update.chat_member.chat.id),
+        update.chat_member.new_chat_member.status,
+      );
       return;
     }
     this.logger.debug({ keys: Object.keys(update) }, 'Обновление без обработчика');

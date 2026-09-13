@@ -126,6 +126,11 @@ export function ProfileScreen() {
             />
           ) : null}
           <ListItem
+            title="Закрытый клуб"
+            subtitle="Состояние доступа и ссылка на группу"
+            onClick={() => navigate('/club')}
+          />
+          <ListItem
             title="Уведомления"
             subtitle="Какие сообщения присылать в Telegram"
             onClick={() => navigate('/profile/notifications')}

@@ -11,6 +11,7 @@ import {
 import { AccessService } from '@/modules/access/access.service';
 import { Audited } from '@/modules/audit/audit.interceptor';
 import { NotificationsService } from '@/modules/notifications/notifications.service';
+import { ClubService } from '@/modules/club/club.service';
 import {
   createGrantSchema,
   extendGrantSchema,
@@ -49,6 +50,7 @@ export class AdminAccessController {
   constructor(
     private readonly access: AccessService,
     private readonly notifications: NotificationsService,
+    private readonly club: ClubService,
   ) {}
 
   @Get()
@@ -113,6 +115,12 @@ export class AdminAccessController {
     assertUuid(grantId);
     const grant = await this.access.revoke(grantId, auth.user.id, body.reason);
 
+    // Отзыв доступа к клубу немедленно исключает из группы:
+    // иначе доступ «на бумаге» закончился, а по факту остался.
+    if (grant.product === 'club' && grant.userId) {
+      await this.club.onGrantEnded(grant.userId, 'access_revoked');
+    }
+
     // Пользователь должен узнать об отзыве, не обнаружив его в интерфейсе.
     if (grant.userId) {
       await this.notifications.notify({
@@ -133,7 +141,11 @@ export class AdminAccessController {
     @Body(zodBody(revokeGrantSchema)) body: { reason: string },
   ) {
     assertUuid(grantId);
-    return serialize(await this.access.suspend(grantId, body.reason));
+    const grant = await this.access.suspend(grantId, body.reason);
+    if (grant.product === 'club' && grant.userId) {
+      await this.club.onGrantEnded(grant.userId, 'access_suspended');
+    }
+    return serialize(grant);
   }
 
   @Post(':grantId/resume')

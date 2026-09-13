@@ -99,6 +99,8 @@ model User {
   createdEstimates       Estimate[]              @relation("EstimateCreatedBy")
   createdPayments        PaymentEntry[]          @relation("PaymentCreatedBy")
   createdOrderPhotos     OrderPhoto[]            @relation("OrderPhotoCreatedBy")
+  clubMembership         ClubMembership?
+  clubEvents             ClubEvent[]
   agreedEstimates        Estimate[]              @relation("EstimateAgreedBy")
 
   @@index([username])
@@ -331,10 +333,11 @@ model AccessGrant {
   createdAt   DateTime     @default(now()) @map("created_at") @db.Timestamptz(6)
   updatedAt   DateTime     @updatedAt @map("updated_at") @db.Timestamptz(6)
 
-  user      User?      @relation("GrantSubjectUser", fields: [userId], references: [id], onDelete: Cascade)
-  workspace Workspace? @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
-  grantedBy User?      @relation("GrantGrantedBy", fields: [grantedById], references: [id], onDelete: SetNull)
-  revokedBy User?      @relation("GrantRevokedBy", fields: [revokedById], references: [id], onDelete: SetNull)
+  user            User?            @relation("GrantSubjectUser", fields: [userId], references: [id], onDelete: Cascade)
+  workspace       Workspace?       @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  grantedBy       User?            @relation("GrantGrantedBy", fields: [grantedById], references: [id], onDelete: SetNull)
+  revokedBy       User?            @relation("GrantRevokedBy", fields: [revokedById], references: [id], onDelete: SetNull)
+  clubMemberships ClubMembership[]
 
   @@index([userId, product, status])
   @@index([workspaceId, product, status])
@@ -1489,4 +1492,58 @@ model OrderPhoto {
   @@unique([orderId, fileId], name: "photo_file_in_order")
   @@index([orderId, category, position])
   @@map("order_photos")
+}
+
+// ── Закрытый клуб (этап 14) ──────────────────────────────────────────────────
+
+enum ClubStatus {
+  none
+  invited
+  join_requested
+  approved
+  member
+  left
+  removed
+  declined
+
+  @@map("club_status")
+}
+
+/// Членство в закрытой группе: одно на пользователя, состояние синхронизируется
+/// с Telegram по заявкам, событиям `chat_member` и ежедневной сверке.
+model ClubMembership {
+  id             String     @id @default(uuid()) @db.Uuid
+  userId         String     @unique @map("user_id") @db.Uuid
+  /// Грант, на основании которого человек состоит в клубе.
+  accessGrantId  String?    @map("access_grant_id") @db.Uuid
+  chatId         String     @map("chat_id")
+  telegramStatus ClubStatus @default(none) @map("telegram_status")
+  joinRequestAt  DateTime?  @map("join_request_at") @db.Timestamptz(6)
+  joinedAt       DateTime?  @map("joined_at") @db.Timestamptz(6)
+  removedAt      DateTime?  @map("removed_at") @db.Timestamptz(6)
+  /// Последняя ошибка обращения к Telegram: видна администратору.
+  lastError      String?    @map("last_error")
+  createdAt      DateTime   @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt      DateTime   @updatedAt @map("updated_at") @db.Timestamptz(6)
+
+  user  User         @relation(fields: [userId], references: [id], onDelete: Cascade)
+  grant AccessGrant? @relation(fields: [accessGrantId], references: [id], onDelete: SetNull)
+
+  @@index([telegramStatus])
+  @@map("club_memberships")
+}
+
+/// Журнал событий клуба: заявки, одобрения, отказы, исключения и ошибки.
+model ClubEvent {
+  id        String   @id @default(uuid()) @db.Uuid
+  userId    String?  @map("user_id") @db.Uuid
+  event     String
+  payload   Json     @default("{}")
+  createdAt DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
+
+  user User? @relation(fields: [userId], references: [id], onDelete: SetNull)
+
+  @@index([userId, createdAt])
+  @@index([event, createdAt])
+  @@map("club_events")
 }

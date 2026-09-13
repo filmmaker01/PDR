@@ -32,6 +32,7 @@ import { AssignmentsModule } from './modules/learning/assignments/assignments.mo
 import { ExamsModule } from './modules/learning/exams/exams.module';
 import { CrmModule } from './modules/crm/crm.module';
 import { TelegramAppModule } from './modules/telegram/telegram-app.module';
+import { ClubModule } from './modules/club/club.module';
 
 const REDACT_PATHS = [
   'req.headers.authorization',
@@ -79,6 +80,7 @@ const REDACT_PATHS = [
     AssignmentsModule,
     ExamsModule,
     CrmModule,
+    ClubModule,
     HealthModule,
     MeModule,
     AdminModule,

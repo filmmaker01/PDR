@@ -5,6 +5,7 @@ import { PlaceholderPage } from './PlaceholderPage';
 import { UsersPage } from '@/features/users/UsersPage';
 import { AccessPage } from '@/features/access/AccessPage';
 import { WorkspacesPage } from '@/features/workspaces/WorkspacesPage';
+import { ClubPage } from '@/features/club/ClubPage';
 import { DashboardPage } from '@/features/dashboard/DashboardPage';
 import { AuditPage } from '@/features/audit/AuditPage';
 import { CoursesPage } from '@/features/course/CoursesPage';
@@ -40,6 +41,7 @@ export const router = createBrowserRouter([
       { path: 'users', element: <UsersPage /> },
       { path: 'access', element: <AccessPage /> },
       { path: 'workspaces', element: <WorkspacesPage /> },
+      { path: 'club', element: <ClubPage /> },
       { path: '*', element: <PlaceholderPage title="Страница не найдена" /> },
     ],
   },
