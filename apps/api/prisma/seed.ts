@@ -367,6 +367,11 @@ async function seedDemoCourse(adminId: string | null): Promise<void> {
 }
 
 async function main(): Promise<void> {
+  // Демо-данные в production — это чужой курс и чужая мастерская в живой базе.
+  if (process.env.APP_ENV === 'production' && process.env.SEED_DEMO === 'true') {
+    throw new Error('SEED_DEMO=true недопустим в production: демо-данные туда не переносятся');
+  }
+
   const adminId = await seedAdmin();
   await seedDemoCourse(adminId);
   console.log('Seed завершён.');
