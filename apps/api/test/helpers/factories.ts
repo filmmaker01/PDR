@@ -165,3 +165,140 @@ export async function addEmployee(
   });
   return member.id;
 }
+
+export interface TestCourse {
+  courseId: string;
+  versionId: string;
+  cohortId: string;
+  stageKeys: string[];
+}
+
+/**
+ * Опубликованный курс из нескольких этапов и группа на нём.
+ * Каждый этап: один обязательный урок с готовым видео.
+ */
+export async function createPublishedCourse(
+  ctx: TestApp,
+  options: {
+    adminId: string;
+    stages?: { key: string; title: string; unlockDaysOffset: number; lessons?: string[] }[];
+    unlockMode?: 'interval' | 'dates';
+    cohortStartsAt?: Date;
+    stageDates?: Record<string, string>;
+  },
+): Promise<TestCourse> {
+  const stages = options.stages ?? [
+    { key: 'stage-1', title: 'База', unlockDaysOffset: 0, lessons: ['light'] },
+    { key: 'stage-2', title: 'Сложное', unlockDaysOffset: 30, lessons: ['hail'] },
+    { key: 'stage-3', title: 'Самостоятельно', unlockDaysOffset: 60, lessons: ['estimate'] },
+  ];
+
+  const course = await ctx.prisma.course.create({
+    data: {
+      slug: `course-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`,
+      title: 'Тестовый курс',
+    },
+  });
+  const version = await ctx.prisma.courseVersion.create({
+    data: {
+      courseId: course.id,
+      versionNo: 1,
+      status: 'published',
+      publishedAt: new Date(),
+      publishedById: options.adminId,
+    },
+  });
+
+  for (const [index, stage] of stages.entries()) {
+    const createdStage = await ctx.prisma.stage.create({
+      data: {
+        courseVersionId: version.id,
+        key: stage.key,
+        position: index + 1,
+        title: stage.title,
+        unlockDaysOffset: stage.unlockDaysOffset,
+        requiresPreviousStage: true,
+      },
+    });
+    for (const [lessonIndex, lessonKey] of (stage.lessons ?? ['lesson-1']).entries()) {
+      const video = await ctx.prisma.videoAsset.create({
+        data: {
+          provider: 'mock',
+          providerVideoId: `v-${stage.key}-${lessonKey}-${Math.random().toString(36).slice(2, 8)}`,
+          title: lessonKey,
+          status: 'ready',
+          durationSec: 600,
+        },
+      });
+      await ctx.prisma.lesson.create({
+        data: {
+          stageId: createdStage.id,
+          key: lessonKey,
+          position: lessonIndex + 1,
+          title: lessonKey,
+          isRequired: true,
+          videoAssetId: video.id,
+        },
+      });
+    }
+  }
+
+  // Черновик следующей версии, как это делает публикация в редакторе.
+  await ctx.prisma.courseVersion.create({
+    data: { courseId: course.id, versionNo: 2, status: 'draft' },
+  });
+
+  const cohort = await ctx.prisma.cohort.create({
+    data: {
+      courseId: course.id,
+      courseVersionId: version.id,
+      title: 'Поток 1',
+      unlockMode: options.unlockMode ?? 'interval',
+      startsAt: options.cohortStartsAt ?? new Date(),
+      stageDates: options.stageDates ?? undefined,
+    },
+  });
+
+  return {
+    courseId: course.id,
+    versionId: version.id,
+    cohortId: cohort.id,
+    stageKeys: stages.map((s) => s.key),
+  };
+}
+
+/** Зачисление ученика с действующим доступом к курсу. */
+export async function enrollStudent(
+  ctx: TestApp,
+  input: {
+    cohortId: string;
+    courseId: string;
+    userId: string;
+    grantedById: string;
+    startedAt?: Date;
+    grantValidUntil?: Date | null;
+  },
+): Promise<string> {
+  const grant = await ctx.prisma.accessGrant.create({
+    data: {
+      product: 'course',
+      subjectType: 'user',
+      userId: input.userId,
+      courseId: input.courseId,
+      status: 'active',
+      validFrom: new Date(Date.now() - 86_400_000),
+      validUntil: input.grantValidUntil ?? null,
+      grantedById: input.grantedById,
+    },
+  });
+  const enrollment = await ctx.prisma.enrollment.create({
+    data: {
+      cohortId: input.cohortId,
+      userId: input.userId,
+      accessGrantId: grant.id,
+      startedAt: input.startedAt ?? new Date(),
+      status: 'active',
+    },
+  });
+  return enrollment.id;
+}

@@ -27,6 +27,7 @@ import { NotificationsModule } from './modules/notifications/notifications.modul
 import { AuditModule } from './modules/audit/audit.module';
 import { AuditInterceptor } from './modules/audit/audit.interceptor';
 import { CatalogModule } from './modules/learning/catalog/catalog.module';
+import { LearningModule } from './modules/learning/learning.module';
 import { TelegramAppModule } from './modules/telegram/telegram-app.module';
 
 const REDACT_PATHS = [
@@ -71,6 +72,7 @@ const REDACT_PATHS = [
     NotificationsModule,
     AuditModule,
     CatalogModule,
+    LearningModule,
     HealthModule,
     MeModule,
     AdminModule,

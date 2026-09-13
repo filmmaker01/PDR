@@ -4,6 +4,7 @@ import { AccessService } from '@/modules/access/access.service';
 import { UsersService } from '@/modules/users/users.service';
 import { WorkspacesService } from '@/modules/workspaces/workspaces.service';
 import { NotificationsService } from '@/modules/notifications/notifications.service';
+import { CohortsService } from '@/modules/learning/cohorts/cohorts.service';
 import type { AuthContext } from '@/modules/auth/decorators/auth.decorators';
 
 /**
@@ -18,6 +19,7 @@ export class MeService {
     private readonly workspaces: WorkspacesService,
     private readonly access: AccessService,
     private readonly notifications: NotificationsService,
+    private readonly cohorts: CohortsService,
   ) {}
 
   async build(auth: AuthContext): Promise<MeResponse> {
@@ -49,6 +51,10 @@ export class MeService {
 
     const clubGrant = grants.find((g) => g.product === 'club');
     const prefs = await this.notifications.preferences(user.id);
+    const enrollmentRows = await this.cohorts.listEnrollmentsOfUser(user.id);
+    const courseGrants = new Map(
+      grants.filter((g) => g.product === 'course' && g.courseId).map((g) => [g.courseId!, g]),
+    );
 
     return {
       user: {
@@ -64,8 +70,20 @@ export class MeService {
       },
       platformRoles: auth.platformRoles,
       workspaces,
-      // Зачисления подключаются на этапе 6 вместе с модулем обучения.
-      enrollments: [],
+      enrollments: enrollmentRows.map((enrollment) => {
+        const grant = courseGrants.get(enrollment.cohort.courseId);
+        return {
+          id: enrollment.id,
+          courseId: enrollment.cohort.courseId,
+          courseTitle: enrollment.cohort.course.title,
+          cohortId: enrollment.cohortId,
+          cohortTitle: enrollment.cohort.title,
+          status: enrollment.status,
+          startedAt: enrollment.startedAt.toISOString(),
+          hasActiveAccess: grant !== undefined,
+          accessValidUntil: grant?.validUntil?.toISOString() ?? null,
+        };
+      }),
       products,
       club: {
         hasAccess: clubGrant !== undefined,

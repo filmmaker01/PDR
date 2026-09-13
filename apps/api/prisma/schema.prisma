@@ -85,6 +85,9 @@ model User {
   auditEntries         AuditLog[]
   publishedVersions    CourseVersion[]       @relation("CourseVersionPublishedBy")
   uploadedVideos       VideoAsset[]          @relation("VideoUploadedBy")
+  enrollments          Enrollment[]
+  curatedCohorts       CohortCurator[]
+  stageOverrides       StageOverride[]       @relation("StageOverrideCreatedBy")
 
   @@index([username])
   @@index([phone])
@@ -511,6 +514,7 @@ model Course {
   updatedAt   DateTime @updatedAt @map("updated_at") @db.Timestamptz(6)
 
   versions CourseVersion[]
+  cohorts  Cohort[]
 
   @@map("courses")
 }
@@ -530,6 +534,7 @@ model CourseVersion {
   course      Course    @relation(fields: [courseId], references: [id], onDelete: Cascade)
   publishedBy User?     @relation("CourseVersionPublishedBy", fields: [publishedById], references: [id], onDelete: SetNull)
   stages      Stage[]
+  cohorts     Cohort[]
 
   @@unique([courseId, versionNo])
   @@map("course_versions")
@@ -696,4 +701,139 @@ model QuestionOption {
 
   @@unique([questionId, position])
   @@map("question_options")
+}
+
+// ── Группы, зачисления, прогресс (этап 6) ────────────────────────────────────
+
+enum UnlockMode {
+  /// Дни от индивидуального старта ученика (режим по умолчанию).
+  interval
+  /// Даты группы: для потоков, когда все идут вместе.
+  dates
+
+  @@map("unlock_mode")
+}
+
+enum EnrollmentStatus {
+  active
+  completed
+  paused
+  withdrawn
+
+  @@map("enrollment_status")
+}
+
+enum OverrideAction {
+  unlock
+  lock
+
+  @@map("override_action")
+}
+
+model Cohort {
+  id              String     @id @default(uuid()) @db.Uuid
+  courseId        String     @map("course_id") @db.Uuid
+  /// Только опубликованная версия.
+  courseVersionId String     @map("course_version_id") @db.Uuid
+  title           String
+  unlockMode      UnlockMode @default(interval) @map("unlock_mode")
+  startsAt        DateTime   @map("starts_at") @db.Timestamptz(6)
+  /// Для режима dates: {"stage-2":"2026-12-01T00:00:00Z"}
+  stageDates      Json?      @map("stage_dates")
+  isActive        Boolean    @default(true) @map("is_active")
+  createdAt       DateTime   @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt       DateTime   @updatedAt @map("updated_at") @db.Timestamptz(6)
+
+  course        Course        @relation(fields: [courseId], references: [id], onDelete: Cascade)
+  courseVersion CourseVersion @relation(fields: [courseVersionId], references: [id], onDelete: Restrict)
+  curators      CohortCurator[]
+  enrollments   Enrollment[]
+
+  @@index([courseId])
+  @@map("cohorts")
+}
+
+model CohortCurator {
+  cohortId  String   @map("cohort_id") @db.Uuid
+  userId    String   @map("user_id") @db.Uuid
+  createdAt DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
+
+  cohort Cohort @relation(fields: [cohortId], references: [id], onDelete: Cascade)
+  user   User   @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@id([cohortId, userId])
+  @@index([userId])
+  @@map("cohort_curators")
+}
+
+model Enrollment {
+  id            String           @id @default(uuid()) @db.Uuid
+  cohortId      String           @map("cohort_id") @db.Uuid
+  userId        String           @map("user_id") @db.Uuid
+  accessGrantId String           @map("access_grant_id") @db.Uuid
+  /// Индивидуальный старт обучения: от него считаются сроки этапов.
+  startedAt     DateTime         @map("started_at") @db.Timestamptz(6)
+  status        EnrollmentStatus @default(active)
+  completedAt   DateTime?        @map("completed_at") @db.Timestamptz(6)
+  note          String?
+  createdAt     DateTime         @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt     DateTime         @updatedAt @map("updated_at") @db.Timestamptz(6)
+
+  cohort           Cohort            @relation(fields: [cohortId], references: [id], onDelete: Cascade)
+  user             User              @relation(fields: [userId], references: [id], onDelete: Cascade)
+  lessonProgress   LessonProgress[]
+  stageOverrides   StageOverride[]
+  stageCompletions StageCompletion[]
+
+  @@unique([cohortId, userId])
+  @@index([userId])
+  @@map("enrollments")
+}
+
+model LessonProgress {
+  id               String    @id @default(uuid()) @db.Uuid
+  enrollmentId     String    @map("enrollment_id") @db.Uuid
+  /// Ключ урока, а не идентификатор: прогресс переживает смену версии.
+  lessonKey        String    @map("lesson_key")
+  watchPositionSec Int       @default(0) @map("watch_position_sec")
+  /// Максимально достигнутый процент просмотра.
+  watchPercent     Int       @default(0) @map("watch_percent")
+  completedAt      DateTime? @map("completed_at") @db.Timestamptz(6)
+  firstOpenedAt    DateTime? @map("first_opened_at") @db.Timestamptz(6)
+  lastOpenedAt     DateTime? @map("last_opened_at") @db.Timestamptz(6)
+
+  enrollment Enrollment @relation(fields: [enrollmentId], references: [id], onDelete: Cascade)
+
+  @@unique([enrollmentId, lessonKey])
+  @@map("lesson_progress")
+}
+
+/// Ручное открытие или закрытие этапа администратором. Приоритет выше правил.
+model StageOverride {
+  id           String         @id @default(uuid()) @db.Uuid
+  enrollmentId String         @map("enrollment_id") @db.Uuid
+  stageKey     String         @map("stage_key")
+  action       OverrideAction
+  reason       String
+  createdById  String         @map("created_by") @db.Uuid
+  createdAt    DateTime       @default(now()) @map("created_at") @db.Timestamptz(6)
+  expiresAt    DateTime?      @map("expires_at") @db.Timestamptz(6)
+
+  enrollment Enrollment @relation(fields: [enrollmentId], references: [id], onDelete: Cascade)
+  createdBy  User       @relation("StageOverrideCreatedBy", fields: [createdById], references: [id], onDelete: Cascade)
+
+  @@index([enrollmentId, stageKey])
+  @@map("stage_overrides")
+}
+
+/// Материализованный факт завершения этапа: пересчитывается сервисом прогресса.
+model StageCompletion {
+  enrollmentId String   @map("enrollment_id") @db.Uuid
+  stageKey     String   @map("stage_key")
+  completedAt  DateTime @map("completed_at") @db.Timestamptz(6)
+
+  enrollment Enrollment @relation(fields: [enrollmentId], references: [id], onDelete: Cascade)
+
+  @@id([enrollmentId, stageKey])
+  @@map("stage_completions")
 }
