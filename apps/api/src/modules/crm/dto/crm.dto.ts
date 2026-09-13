@@ -7,6 +7,10 @@ import {
   ESTIMATE_ITEM_KINDS,
   MATERIALS,
   ORDER_STATUSES,
+  PAYMENT_KINDS,
+  PAYMENT_METHODS,
+  PAYMENT_PURPOSES,
+  PHOTO_CATEGORIES,
   PRICE_UNITS,
   nonEmptyString,
   optionalString,
@@ -249,3 +253,45 @@ export const estimateItemsSchema = z
   .strict();
 
 export const rejectEstimateSchema = z.object({ reason: optionalString(500) }).strict();
+
+// ── Оплаты и фото ────────────────────────────────────────────────────────────
+
+export const createPaymentSchema = z
+  .object({
+    kind: z.enum(PAYMENT_KINDS).default('payment'),
+    amountMinor: z.number().int().min(1).max(1_000_000_000),
+    method: z.enum(PAYMENT_METHODS).default('cash'),
+    purpose: z.enum(PAYMENT_PURPOSES).optional(),
+    occurredAt: z.coerce.date().optional(),
+    note: optionalString(500),
+    correctsEntryId: z.string().uuid().nullable().optional(),
+  })
+  .strict();
+
+export const paymentJournalQuerySchema = z.object({
+  from: z.coerce.date().optional(),
+  to: z.coerce.date().optional(),
+  method: z.enum(PAYMENT_METHODS).optional(),
+  createdById: z.string().uuid().optional(),
+  orderId: z.string().uuid().optional(),
+  limit: z.coerce.number().int().min(1).max(200).default(100),
+  cursor: z.string().optional(),
+});
+
+export const attachPhotoSchema = z
+  .object({
+    fileId: z.string().uuid(),
+    category: z.enum(PHOTO_CATEGORIES).default('before'),
+    estimateItemId: z.string().uuid().nullable().optional(),
+    caption: optionalString(200),
+  })
+  .strict();
+
+export const updatePhotoSchema = z
+  .object({
+    category: z.enum(PHOTO_CATEGORIES).optional(),
+    caption: optionalString(200),
+    position: z.number().int().min(0).max(10_000).optional(),
+    estimateItemId: z.string().uuid().nullable().optional(),
+  })
+  .strict();

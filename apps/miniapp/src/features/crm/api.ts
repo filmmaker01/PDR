@@ -5,6 +5,9 @@ import type {
   AvailabilityResponse,
   ClientCard,
   Estimate,
+  OrderPayments,
+  OrderPhoto,
+  PaymentJournalEntry,
   PdrDictionaries,
   PriceListItem,
   ClientListItem,
@@ -192,5 +195,37 @@ export function useDictionaries(workspaceId: string) {
     queryFn: () => api.get<PdrDictionaries>(`/workspaces/${workspaceId}/pdr-dictionaries`),
     // Справочники не меняются в пределах сессии.
     staleTime: Infinity,
+  });
+}
+
+export function useOrderPayments(workspaceId: string, orderId: string) {
+  return useQuery({
+    queryKey: ['crm', 'payments', workspaceId, orderId],
+    queryFn: () => api.get<OrderPayments>(`/workspaces/${workspaceId}/orders/${orderId}/payments`),
+  });
+}
+
+export function usePaymentJournal(
+  workspaceId: string,
+  range: { from: string; to: string; method?: string },
+) {
+  return useQuery({
+    queryKey: ['crm', 'payment-journal', workspaceId, range],
+    queryFn: () =>
+      api.get<{
+        items: PaymentJournalEntry[];
+        nextCursor: string | null;
+        totals: { kind: string; method: string; totalMinor: number }[];
+      }>(`/workspaces/${workspaceId}/payments`, { query: range }),
+  });
+}
+
+export function useOrderPhotos(workspaceId: string, orderId: string) {
+  return useQuery({
+    queryKey: ['crm', 'photos', workspaceId, orderId],
+    queryFn: () =>
+      api.get<{ categories: Record<string, string>; items: OrderPhoto[] }>(
+        `/workspaces/${workspaceId}/orders/${orderId}/photos`,
+      ),
   });
 }

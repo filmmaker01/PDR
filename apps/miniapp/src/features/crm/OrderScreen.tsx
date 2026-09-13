@@ -19,6 +19,8 @@ import { alertDialog, confirmDialog, haptic } from '@/shared/telegram';
 import { useMembers, useOrder, useWorkspace } from './api';
 import { AppointmentSheet } from './AppointmentSheet';
 import { EstimatesTab } from './EstimatesTab';
+import { PaymentsTab } from './PaymentsTab';
+import { PhotosTab } from './PhotosTab';
 import { APPOINTMENT_STATUS_TONES, PAYMENT_LABELS, STATUS_TONES, type OrderStatus } from './types';
 
 type Tab = 'work' | 'photos' | 'estimate' | 'payments';
@@ -288,14 +290,12 @@ export function OrderScreen() {
       ) : null}
 
       {tab === 'photos' ? (
-        <EmptyState title="Фотографии" description="Раздел появится на этапе 12." />
+        <PhotosTab workspaceId={workspaceId} orderId={orderId} canEdit={canEdit} />
       ) : null}
       {tab === 'estimate' ? (
         <EstimatesTab workspaceId={workspaceId} orderId={orderId} canEdit={canEdit} />
       ) : null}
-      {tab === 'payments' ? (
-        <EmptyState title="Оплаты" description="Раздел появится на этапе 12." />
-      ) : null}
+      {tab === 'payments' ? <PaymentsTab workspaceId={workspaceId} orderId={orderId} /> : null}
 
       <AppointmentSheet
         open={appointmentSheet}
@@ -319,9 +319,19 @@ export function OrderScreen() {
                     setPendingStatus(transitionTo.status);
                     return;
                   }
-                  if (await confirmDialog(`Перевести заказ в «${transitionTo.label}»?`)) {
+                  if (!(await confirmDialog(`Перевести заказ в «${transitionTo.label}»?`))) return;
+
+                  // При выдаче с остатком сразу предлагаем принять доплату:
+                  // деньги проще взять, пока клиент стоит рядом.
+                  if (transitionTo.status === 'delivered' && data.debtMinor > 0) {
+                    const takeNow = await confirmDialog(
+                      `Остаток ${formatMinor(data.debtMinor, data.currency)}. Принять оплату сейчас?`,
+                    );
                     transition.mutate({ to: transitionTo.status });
+                    if (takeNow) setTab('payments');
+                    return;
                   }
+                  transition.mutate({ to: transitionTo.status });
                 }}
               >
                 {transitionTo.label}

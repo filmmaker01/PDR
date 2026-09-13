@@ -304,3 +304,10 @@
 - `POST .../estimates` отвечает `409 conflict` с `details.estimateId`, если черновик уже есть; интерфейс открывает существующий черновик.
 - `GET /workspaces/:id/estimates/:estimateId/pdf` отдаёт `application/pdf`. Файл доступен только по токену, поэтому Mini App запрашивает его как blob, а не открывает ссылкой.
 - `DELETE /workspaces/:id/price-list/:itemId` возвращает `{ deleted: boolean }`: использованная в сметах позиция деактивируется, а не удаляется.
+
+## Реализация оплат и фотографий (этап 12)
+
+- `POST /workspaces/:id/orders/:orderId/payments` принимает `Idempotency-Key` и возвращает новое состояние заказа: `paidMinor`, `paymentStatus`, `remainingMinor`. Записи не редактируются и не удаляются — API для этого нет.
+- `GET /workspaces/:id/payments` (право `payments.read_all`) отдаёт журнал за период с `totals` по виду и способу оплаты.
+- `POST /workspaces/:id/orders/:orderId/photos` привязывает уже загруженный файл; сама загрузка идёт через `/files/presign-upload` с `scope: order_photo` и `workspaceId`.
+- `GET .../photos` возвращает подписанные ссылки на миниатюры одним запросом, `GET .../photos/:photoId/download` — ссылку на оригинал.

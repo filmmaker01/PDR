@@ -330,3 +330,69 @@ export const ESTIMATE_STATUS_TONES: Record<
   rejected: 'danger',
   superseded: 'muted',
 };
+
+export type PaymentKind = 'payment' | 'refund' | 'correction';
+export type PaymentMethod = 'cash' | 'card' | 'transfer' | 'sbp' | 'other';
+export type PaymentPurpose = 'prepayment' | 'payment' | 'final' | 'refund' | 'correction';
+export type PhotoCategory = 'before' | 'during' | 'after' | 'document';
+
+export interface PaymentEntry {
+  id: string;
+  kind: PaymentKind;
+  kindLabel: string;
+  amountMinor: number;
+  signedAmountMinor: number;
+  currency: string;
+  method: PaymentMethod;
+  methodLabel: string;
+  purpose: PaymentPurpose;
+  purposeLabel: string;
+  occurredAt: string;
+  note: string | null;
+  correctsEntryId: string | null;
+  createdAt: string;
+  createdBy: string | null;
+}
+
+export interface OrderPayments {
+  currency: string;
+  agreedTotalMinor: number | null;
+  paidMinor: number;
+  remainingMinor: number;
+  paymentStatus: PaymentStatus;
+  entries: PaymentEntry[];
+}
+
+export interface PaymentJournalEntry extends PaymentEntry {
+  order: { id: string; number: number; clientName: string };
+}
+
+export interface OrderPhoto {
+  id: string;
+  fileId: string;
+  category: PhotoCategory;
+  categoryLabel: string;
+  caption: string | null;
+  position: number;
+  estimateItemId: string | null;
+  status: string;
+  width: number | null;
+  height: number | null;
+  thumbUrl: string | null;
+  createdAt: string;
+}
+
+export const PHOTO_CATEGORY_OPTIONS: { value: PhotoCategory; label: string }[] = [
+  { value: 'before', label: 'До' },
+  { value: 'during', label: 'В процессе' },
+  { value: 'after', label: 'После' },
+  { value: 'document', label: 'Документы' },
+];
+
+export const PAYMENT_METHOD_OPTIONS: { value: PaymentMethod; label: string }[] = [
+  { value: 'cash', label: 'Наличные' },
+  { value: 'card', label: 'Карта' },
+  { value: 'transfer', label: 'Перевод' },
+  { value: 'sbp', label: 'СБП' },
+  { value: 'other', label: 'Другое' },
+];

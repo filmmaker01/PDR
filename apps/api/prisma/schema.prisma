@@ -97,6 +97,8 @@ model User {
   orderStatusChanges     OrderStatusHistory[]    @relation("OrderStatusChangedBy")
   createdAppointments    Appointment[]           @relation("AppointmentCreatedBy")
   createdEstimates       Estimate[]              @relation("EstimateCreatedBy")
+  createdPayments        PaymentEntry[]          @relation("PaymentCreatedBy")
+  createdOrderPhotos     OrderPhoto[]            @relation("OrderPhotoCreatedBy")
   agreedEstimates        Estimate[]              @relation("EstimateAgreedBy")
 
   @@index([username])
@@ -220,6 +222,8 @@ model Workspace {
   priceList     PriceListItem[]
   estimates     Estimate[]
   estimateItems EstimateItem[]
+  payments      PaymentEntry[]
+  orderPhotos   OrderPhoto[]
 
   @@map("workspaces")
 }
@@ -399,6 +403,7 @@ model StoredFile {
   questionImages  Question[]       @relation("QuestionImage")
   submissionFiles SubmissionFile[] @relation("SubmissionFiles")
   attemptFiles    AttemptFile[]    @relation("AttemptFiles")
+  orderPhotos     OrderPhoto[]     @relation("OrderPhotoFile")
 
   @@index([workspaceId, scope])
   @@index([ownerUserId, scope])
@@ -1158,6 +1163,8 @@ model Order {
   // NoAction, а не SetNull: составной ключ включает workspace_id, обнулить его нельзя.
   // Согласованная смета не удаляется — новая версия помечает старую superseded.
   agreedEstimate Estimate?            @relation("OrderAgreedEstimate", fields: [workspaceId, agreedEstimateId], references: [workspaceId, id], onDelete: NoAction, onUpdate: NoAction)
+  paymentEntries PaymentEntry[]
+  orderPhotos    OrderPhoto[]
 
   @@unique([workspaceId, number], name: "order_number_in_workspace")
   @@unique([workspaceId, id], name: "order_in_workspace")
@@ -1382,8 +1389,104 @@ model EstimateItem {
   // NoAction: использованная позиция прайса деактивируется, а не удаляется
   // (проверка в сервисе), обнулить составной ключ с workspace_id нельзя.
   priceListItem PriceListItem? @relation(fields: [workspaceId, priceListItemId], references: [workspaceId, id], onDelete: NoAction, onUpdate: NoAction)
+  photos        OrderPhoto[]
 
   @@unique([workspaceId, id], name: "estimate_item_in_workspace")
   @@index([estimateId, position])
   @@map("estimate_items")
+}
+
+// ── Оплаты и фото заказа (этап 12) ───────────────────────────────────────────
+
+enum PaymentKind {
+  payment
+  refund
+  correction
+
+  @@map("payment_kind")
+}
+
+enum PaymentMethod {
+  cash
+  card
+  transfer
+  sbp
+  other
+
+  @@map("payment_method")
+}
+
+enum PaymentPurpose {
+  prepayment
+  payment
+  final
+  refund
+  correction
+
+  @@map("payment_purpose")
+}
+
+enum PhotoCategory {
+  before
+  during
+  after
+  document
+
+  @@map("photo_category")
+}
+
+/// Записи оплат не изменяются и не удаляются: ошибка исправляется
+/// корректировкой или возвратом, чтобы история денег оставалась полной.
+model PaymentEntry {
+  id              String         @id @default(uuid()) @db.Uuid
+  workspaceId     String         @map("workspace_id") @db.Uuid
+  orderId         String         @map("order_id") @db.Uuid
+  kind            PaymentKind    @default(payment)
+  /// Всегда положительная: знак определяется видом записи.
+  amountMinor     BigInt         @map("amount_minor")
+  currency        String         @db.Char(3)
+  method          PaymentMethod  @default(cash)
+  purpose         PaymentPurpose @default(payment)
+  /// Когда деньги фактически получены или возвращены.
+  occurredAt      DateTime       @map("occurred_at") @db.Timestamptz(6)
+  note            String?
+  /// Какую запись исправляет корректировка или возврат.
+  correctsEntryId String?        @map("corrects_entry_id") @db.Uuid
+  createdById     String?        @map("created_by") @db.Uuid
+  createdAt       DateTime       @default(now()) @map("created_at") @db.Timestamptz(6)
+
+  workspace Workspace      @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  order     Order          @relation(fields: [workspaceId, orderId], references: [workspaceId, id], onDelete: Cascade)
+  corrects  PaymentEntry?  @relation("PaymentCorrection", fields: [workspaceId, correctsEntryId], references: [workspaceId, id], onDelete: NoAction, onUpdate: NoAction)
+  corrected PaymentEntry[] @relation("PaymentCorrection")
+  createdBy User?          @relation("PaymentCreatedBy", fields: [createdById], references: [id], onDelete: SetNull)
+
+  @@unique([workspaceId, id], name: "payment_in_workspace")
+  @@index([workspaceId, occurredAt])
+  @@index([orderId, occurredAt])
+  @@map("payment_entries")
+}
+
+model OrderPhoto {
+  id             String        @id @default(uuid()) @db.Uuid
+  workspaceId    String        @map("workspace_id") @db.Uuid
+  orderId        String        @map("order_id") @db.Uuid
+  fileId         String        @map("file_id") @db.Uuid
+  category       PhotoCategory @default(before)
+  /// Привязка снимка к конкретному повреждению в смете.
+  estimateItemId String?       @map("estimate_item_id") @db.Uuid
+  caption        String?
+  position       Int           @default(0)
+  createdById    String?       @map("created_by") @db.Uuid
+  createdAt      DateTime      @default(now()) @map("created_at") @db.Timestamptz(6)
+
+  workspace    Workspace     @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  order        Order         @relation(fields: [workspaceId, orderId], references: [workspaceId, id], onDelete: Cascade)
+  file         StoredFile    @relation("OrderPhotoFile", fields: [fileId], references: [id], onDelete: Cascade)
+  estimateItem EstimateItem? @relation(fields: [workspaceId, estimateItemId], references: [workspaceId, id], onDelete: NoAction, onUpdate: NoAction)
+  createdBy    User?         @relation("OrderPhotoCreatedBy", fields: [createdById], references: [id], onDelete: SetNull)
+
+  @@unique([orderId, fileId], name: "photo_file_in_order")
+  @@index([orderId, category, position])
+  @@map("order_photos")
 }

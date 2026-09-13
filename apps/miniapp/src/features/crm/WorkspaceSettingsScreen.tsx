@@ -170,6 +170,13 @@ export function WorkspaceSettingsScreen() {
             subtitle="Типовые работы и цены для сметы"
             onClick={() => navigate(`/workspace/${workspaceId}/price-list`)}
           />
+          {canManage ? (
+            <ListItem
+              title="Журнал оплат"
+              subtitle="Что получено за период и каким способом"
+              onClick={() => navigate(`/workspace/${workspaceId}/payments`)}
+            />
+          ) : null}
           {isOwner ? (
             <ListItem
               title="Сотрудники и приглашения"
