@@ -1,5 +1,6 @@
-import { createBrowserRouter, Navigate } from 'react-router-dom';
+import { createBrowserRouter } from 'react-router-dom';
 import { AdminLayout } from './AdminLayout';
+import { HomeRedirect } from './HomeRedirect';
 import { PlaceholderPage } from './PlaceholderPage';
 import { UsersPage } from '@/features/users/UsersPage';
 import { AccessPage } from '@/features/access/AccessPage';
@@ -13,13 +14,15 @@ import { CohortsPage } from '@/features/students/CohortsPage';
 import { CohortPage } from '@/features/students/CohortPage';
 import { StudentsPage } from '@/features/students/StudentsPage';
 import { StudentCardPage } from '@/features/students/StudentCardPage';
+import { ReviewQueuePage } from '@/features/reviews/ReviewQueuePage';
+import { ReviewPage } from '@/features/reviews/ReviewPage';
 
 export const router = createBrowserRouter([
   {
     path: '/',
     element: <AdminLayout />,
     children: [
-      { index: true, element: <Navigate to="/dashboard" replace /> },
+      { index: true, element: <HomeRedirect /> },
       { path: 'dashboard', element: <DashboardPage /> },
       { path: 'audit', element: <AuditPage /> },
       { path: 'courses', element: <CoursesPage /> },
@@ -27,6 +30,8 @@ export const router = createBrowserRouter([
       { path: 'videos', element: <VideosPage /> },
       { path: 'cohorts', element: <CohortsPage /> },
       { path: 'cohorts/:cohortId', element: <CohortPage /> },
+      { path: 'reviews', element: <ReviewQueuePage /> },
+      { path: 'reviews/:submissionId', element: <ReviewPage /> },
       { path: 'students', element: <StudentsPage /> },
       { path: 'students/:enrollmentId', element: <StudentCardPage /> },
       { path: 'users', element: <UsersPage /> },

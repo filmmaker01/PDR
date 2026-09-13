@@ -88,6 +88,9 @@ model User {
   enrollments          Enrollment[]
   curatedCohorts       CohortCurator[]
   stageOverrides       StageOverride[]       @relation("StageOverrideCreatedBy")
+  claimedSubmissions   Submission[]          @relation("SubmissionClaimedBy")
+  reviews              Review[]              @relation("ReviewAuthor")
+  reviewComments       ReviewComment[]       @relation("ReviewCommentAuthor")
 
   @@index([username])
   @@index([phone])
@@ -378,6 +381,7 @@ model StoredFile {
   stageCovers      Stage[]          @relation("StageCover")
   lessonMaterials  LessonMaterial[] @relation("LessonMaterialFile")
   questionImages   Question[]       @relation("QuestionImage")
+  submissionFiles  SubmissionFile[] @relation("SubmissionFiles")
 
   @@index([workspaceId, scope])
   @@index([ownerUserId, scope])
@@ -782,6 +786,7 @@ model Enrollment {
   cohort           Cohort            @relation(fields: [cohortId], references: [id], onDelete: Cascade)
   user             User              @relation(fields: [userId], references: [id], onDelete: Cascade)
   lessonProgress   LessonProgress[]
+  submissions      Submission[]
   stageOverrides   StageOverride[]
   stageCompletions StageCompletion[]
 
@@ -836,4 +841,95 @@ model StageCompletion {
 
   @@id([enrollmentId, stageKey])
   @@map("stage_completions")
+}
+
+// ── Практика: сдачи и проверки (этап 7) ──────────────────────────────────────
+
+enum SubmissionStatus {
+  draft
+  submitted
+  in_review
+  accepted
+  returned
+
+  @@map("submission_status")
+}
+
+enum ReviewDecision {
+  accepted
+  returned
+
+  @@map("review_decision")
+}
+
+model Submission {
+  id            String           @id @default(uuid()) @db.Uuid
+  enrollmentId  String           @map("enrollment_id") @db.Uuid
+  /// Ключ задания: переживает смену версии курса.
+  assignmentKey String           @map("assignment_key")
+  attemptNo     Int              @map("attempt_no")
+  status        SubmissionStatus @default(draft)
+  text          String?
+  submittedAt   DateTime?        @map("submitted_at") @db.Timestamptz(6)
+  reviewedAt    DateTime?        @map("reviewed_at") @db.Timestamptz(6)
+  /// Кто взял работу на проверку и когда: удержание снимается по таймауту.
+  claimedById   String?          @map("claimed_by") @db.Uuid
+  claimedAt     DateTime?        @map("claimed_at") @db.Timestamptz(6)
+  createdAt     DateTime         @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt     DateTime         @updatedAt @map("updated_at") @db.Timestamptz(6)
+
+  enrollment Enrollment       @relation(fields: [enrollmentId], references: [id], onDelete: Cascade)
+  claimedBy  User?            @relation("SubmissionClaimedBy", fields: [claimedById], references: [id], onDelete: SetNull)
+  files      SubmissionFile[]
+  reviews    Review[]
+  comments   ReviewComment[]
+
+  @@unique([enrollmentId, assignmentKey, attemptNo])
+  @@index([status, submittedAt])
+  @@index([enrollmentId, assignmentKey])
+  @@map("submissions")
+}
+
+model SubmissionFile {
+  submissionId String @map("submission_id") @db.Uuid
+  fileId       String @map("file_id") @db.Uuid
+  position     Int
+
+  submission Submission @relation(fields: [submissionId], references: [id], onDelete: Cascade)
+  file       StoredFile @relation("SubmissionFiles", fields: [fileId], references: [id], onDelete: Cascade)
+
+  @@id([submissionId, fileId])
+  @@map("submission_files")
+}
+
+model Review {
+  id           String         @id @default(uuid()) @db.Uuid
+  submissionId String         @map("submission_id") @db.Uuid
+  reviewerId   String         @map("reviewer_id") @db.Uuid
+  decision     ReviewDecision
+  comment      String
+  /// Необязательные критерии оценки: {"light":4,"tool":5}
+  rubric       Json?
+  createdAt    DateTime       @default(now()) @map("created_at") @db.Timestamptz(6)
+
+  submission Submission @relation(fields: [submissionId], references: [id], onDelete: Cascade)
+  reviewer   User       @relation("ReviewAuthor", fields: [reviewerId], references: [id], onDelete: Cascade)
+
+  @@index([submissionId])
+  @@map("reviews")
+}
+
+/// Переписка по работе: уточняющие вопросы куратора и ответы ученика.
+model ReviewComment {
+  id           String   @id @default(uuid()) @db.Uuid
+  submissionId String   @map("submission_id") @db.Uuid
+  authorId     String   @map("author_id") @db.Uuid
+  body         String
+  createdAt    DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
+
+  submission Submission @relation(fields: [submissionId], references: [id], onDelete: Cascade)
+  author     User       @relation("ReviewCommentAuthor", fields: [authorId], references: [id], onDelete: Cascade)
+
+  @@index([submissionId, createdAt])
+  @@map("review_comments")
 }

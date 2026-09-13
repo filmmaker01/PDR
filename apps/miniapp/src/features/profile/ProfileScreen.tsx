@@ -118,6 +118,13 @@ export function ProfileScreen() {
 
       <Card flat>
         <div className="pdr-list">
+          {me.platformRoles.includes('curator') || me.platformRoles.includes('admin') ? (
+            <ListItem
+              title="Проверка работ"
+              subtitle="Очередь работ учеников ваших групп"
+              onClick={() => navigate('/curator')}
+            />
+          ) : null}
           <ListItem
             title="Уведомления"
             subtitle="Какие сообщения присылать в Telegram"

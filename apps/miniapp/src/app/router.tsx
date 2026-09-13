@@ -10,6 +10,10 @@ import { StartActionRedirect } from './StartActionRedirect';
 import { CourseMapRoute, LearningEntryScreen } from '@/features/learning/CourseMapScreen';
 import { StageScreen } from '@/features/learning/StageScreen';
 import { LessonScreen } from '@/features/learning/LessonScreen';
+import { AssignmentScreen } from '@/features/learning/AssignmentScreen';
+import { SubmissionEditorScreen } from '@/features/learning/SubmissionEditorScreen';
+import { ReviewQueueScreen } from '@/features/curator/ReviewQueueScreen';
+import { ReviewScreen } from '@/features/curator/ReviewScreen';
 
 export const router = createBrowserRouter([
   {
@@ -23,8 +27,14 @@ export const router = createBrowserRouter([
       { path: 'learning/:enrollmentId/lessons/:lessonKey', element: <LessonScreen /> },
       {
         path: 'learning/:enrollmentId/assignments/:assignmentKey',
-        element: <PlaceholderScreen title="Задание" hint="Появится на этапе 7" />,
+        element: <AssignmentScreen />,
       },
+      {
+        path: 'learning/:enrollmentId/submissions/:submissionId/edit',
+        element: <SubmissionEditorScreen />,
+      },
+      { path: 'curator', element: <ReviewQueueScreen /> },
+      { path: 'curator/submissions/:submissionId', element: <ReviewScreen /> },
       {
         path: 'learning/:enrollmentId/exams/:examKey',
         element: <PlaceholderScreen title="Экзамен" hint="Появится на этапе 8" />,

@@ -166,6 +166,14 @@ export async function addEmployee(
   return member.id;
 }
 
+export interface AssignmentSpec {
+  key: string;
+  title: string;
+  minPhotos?: number;
+  minVideos?: number;
+  textRequired?: boolean;
+}
+
 export interface TestCourse {
   courseId: string;
   versionId: string;
@@ -181,7 +189,13 @@ export async function createPublishedCourse(
   ctx: TestApp,
   options: {
     adminId: string;
-    stages?: { key: string; title: string; unlockDaysOffset: number; lessons?: string[] }[];
+    stages?: {
+      key: string;
+      title: string;
+      unlockDaysOffset: number;
+      lessons?: string[];
+      assignments?: AssignmentSpec[];
+    }[];
     unlockMode?: 'interval' | 'dates';
     cohortStartsAt?: Date;
     stageDates?: Record<string, string>;
@@ -220,6 +234,24 @@ export async function createPublishedCourse(
         requiresPreviousStage: true,
       },
     });
+    for (const [assignmentIndex, assignment] of (stage.assignments ?? []).entries()) {
+      await ctx.prisma.assignment.create({
+        data: {
+          stageId: createdStage.id,
+          key: assignment.key,
+          position: assignmentIndex + 1,
+          title: assignment.title,
+          instructions: 'Выполните работу и приложите фотографии.',
+          isRequired: true,
+          requiredMedia: {
+            min_photos: assignment.minPhotos ?? 1,
+            min_videos: assignment.minVideos ?? 0,
+            text_required: assignment.textRequired ?? false,
+          },
+        },
+      });
+    }
+
     for (const [lessonIndex, lessonKey] of (stage.lessons ?? ['lesson-1']).entries()) {
       const video = await ctx.prisma.videoAsset.create({
         data: {
@@ -301,4 +333,25 @@ export async function enrollStudent(
     },
   });
   return enrollment.id;
+}
+
+/** Загруженный и обработанный файл работы ученика. */
+export async function createReadySubmissionFile(
+  ctx: TestApp,
+  ownerUserId: string,
+  mimeType = 'image/jpeg',
+): Promise<string> {
+  const file = await ctx.prisma.storedFile.create({
+    data: {
+      ownerUserId,
+      scope: 'submission',
+      storageKey: `submission/${ownerUserId}/${Math.random().toString(36).slice(2)}.jpg`,
+      bucket: 'test',
+      mimeType,
+      sizeBytes: BigInt(1024),
+      status: 'ready',
+      variants: { thumb: 'thumb-key' },
+    },
+  });
+  return file.id;
 }
