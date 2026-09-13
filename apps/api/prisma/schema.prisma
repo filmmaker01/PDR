@@ -79,6 +79,7 @@ model User {
   accessGrants         AccessGrant[]         @relation("GrantSubjectUser")
   grantedAccess        AccessGrant[]         @relation("GrantGrantedBy")
   revokedAccess        AccessGrant[]         @relation("GrantRevokedBy")
+  files                StoredFile[]          @relation("FileOwner")
 
   @@index([username])
   @@index([phone])
@@ -192,6 +193,7 @@ model Workspace {
   members     WorkspaceMember[]
   invitations WorkspaceInvitation[]
   grants      AccessGrant[]
+  files       StoredFile[]
 
   @@map("workspaces")
 }
@@ -308,4 +310,65 @@ model AccessGrant {
   /// Самый частый запрос guard'а: действующий доступ по продукту.
   @@index([product, status, validUntil])
   @@map("access_grants")
+}
+
+// ── Файлы (этап 3) ───────────────────────────────────────────────────────────
+
+enum FileScope {
+  order_photo
+  submission
+  exam_attempt
+  lesson_material
+  avatar
+  export
+  course_cover
+  question_image
+
+  @@map("file_scope")
+}
+
+enum FileStatus {
+  pending
+  uploaded
+  processing
+  ready
+  failed
+  deleted
+
+  @@map("file_status")
+}
+
+model StoredFile {
+  id           String     @id @default(uuid()) @db.Uuid
+  ownerUserId  String     @map("owner_user_id") @db.Uuid
+  /// Для файлов CRM: мастерская-владелец. Для учебных — null.
+  workspaceId  String?    @map("workspace_id") @db.Uuid
+  scope        FileScope
+  /// Ключ объекта в хранилище: <scope>/<владелец>/<год>/<месяц>/<id>.<ext>
+  storageKey   String     @unique @map("storage_key")
+  bucket       String
+  mimeType     String     @map("mime_type")
+  sizeBytes    BigInt     @map("size_bytes")
+  originalName String?    @map("original_name")
+  status       FileStatus @default(pending)
+  width        Int?
+  height       Int?
+  durationSec  Int?       @map("duration_sec")
+  /// Производные: {"thumb":"<key>","preview":"<key>"}
+  variants     Json       @default("{}")
+  checksumSha256 String?  @map("checksum_sha256")
+  /// Незавершённая многочастная загрузка.
+  uploadId     String?    @map("upload_id")
+  error        String?
+  createdAt    DateTime   @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt    DateTime   @updatedAt @map("updated_at") @db.Timestamptz(6)
+  deletedAt    DateTime?  @map("deleted_at") @db.Timestamptz(6)
+
+  owner     User       @relation("FileOwner", fields: [ownerUserId], references: [id], onDelete: Cascade)
+  workspace Workspace? @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+
+  @@index([workspaceId, scope])
+  @@index([ownerUserId, scope])
+  @@index([status, createdAt])
+  @@map("files")
 }

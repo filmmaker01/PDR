@@ -7,6 +7,7 @@ import { getEnv } from './config/config.service';
 import { PrismaModule } from './infra/prisma/prisma.module';
 import { JobsModule } from './infra/jobs/jobs.module';
 import { TelegramModule } from './infra/telegram/telegram.module';
+import { StorageModule } from './infra/storage/storage.module';
 import { RequestIdMiddleware } from './common/interceptors/request-id.middleware';
 import { IdempotencyInterceptor } from './common/interceptors/idempotency.interceptor';
 import { RateLimitGuard } from './common/guards/rate-limit.guard';
@@ -20,6 +21,7 @@ import { AccessModule } from './modules/access/access.module';
 import { WorkspacesModule } from './modules/workspaces/workspaces.module';
 import { WorkspaceGuard } from './modules/workspaces/guards/workspace.guard';
 import { AdminModule } from './modules/admin/admin.module';
+import { FilesModule } from './modules/files/files.module';
 import { TelegramAppModule } from './modules/telegram/telegram-app.module';
 
 const REDACT_PATHS = [
@@ -54,10 +56,12 @@ const REDACT_PATHS = [
     PrismaModule,
     JobsModule,
     TelegramModule,
+    StorageModule,
     UsersModule,
     AuthModule,
     AccessModule,
     WorkspacesModule,
+    FilesModule,
     HealthModule,
     MeModule,
     AdminModule,

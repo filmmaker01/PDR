@@ -147,9 +147,7 @@ export class WorkspacesService {
     return workspace;
   }
 
-  async listMembers(
-    workspaceId: string,
-  ): Promise<
+  async listMembers(workspaceId: string): Promise<
     (WorkspaceMember & {
       user: { firstName: string; lastName: string | null; username: string | null };
     })[]
