@@ -1,0 +1,238 @@
+# 04. Backend: модули и ключевые механики
+
+## Модули NestJS и их ответственность
+
+| Модуль | Таблицы (владелец) | Экспортирует другим модулям |
+|--------|--------------------|------------------------------|
+| `auth` | sessions, web_login_requests | `SessionGuard`, `CurrentUser` decorator, `AuthService.issueSession()` |
+| `users` | users, platform_roles | `UsersService.findByTelegramId()`, `upsertFromTelegram()`, `hasPlatformRole()` |
+| `access` | access_grants | `AccessService.hasActiveGrant(product, subject)`, `RequireProduct()` guard, события `grant.expired/revoked` |
+| `workspaces` | workspaces, workspace_members, workspace_invitations | `WorkspaceGuard`, `WorkspaceContext`, `MembershipService` |
+| `learning/catalog` | courses, course_versions, stages, lessons, lesson_materials, video_assets | чтение опубликованной структуры версии |
+| `learning/cohorts` | cohorts, cohort_curators, enrollments | `EnrollmentService`, `isCuratorOf(cohort)` |
+| `learning/progress` | lesson_progress, stage_overrides, stage_completions | `StageAccessService.getAccess(enrollment, stageKey)`, `ProgressService` |
+| `learning/assignments` | assignments (структура — в catalog), submissions, submission_files, reviews, review_comments | очередь проверок, события `submission.reviewed` |
+| `learning/exams` | exams, questions, question_options, exam_attempts, attempt_answers, attempt_files | попытки, автопроверка, ручная оценка |
+| `crm/clients`, `crm/vehicles` | clients, vehicles | поиск, анонимизация |
+| `crm/orders` | orders, order_status_history, order_photos | `OrderStateMachine`, назначение исполнителя |
+| `crm/appointments` | appointments | календарь, проверка пересечений, напоминания |
+| `crm/estimates` | estimates, estimate_items, price_list_items | расчёт итогов, согласование |
+| `crm/payments` | payment_entries | добавление записей, пересчёт `paid_minor` |
+| `crm/analytics` | — (чтение) | агрегаты за период |
+| `files` | files | presign upload/download, подтверждение загрузки, миниатюры, проверка доступа к файлу |
+| `club` | club_memberships, club_events | обработка join request, удаление, повторное вступление |
+| `notifications` | notifications, notification_preferences | `notify(userId, type, payload, dedupeKey?)` |
+| `audit` | audit_log | `AuditService.record()`, interceptor |
+| `export` | exports | постановка задач экспорта, выдача файла |
+| `admin` | — | агрегирующие эндпоинты для админки (дашборд, поиск пользователей) |
+| `infra/telegram` | — | grammY bot, webhook, `TelegramApi.send*` с обработкой 403/429 |
+| `infra/jobs` | pgboss.* | регистрация очередей, cron, `enqueue()` в транзакции |
+
+Правило зависимостей: `crm/*` не импортирует `learning/*` и наоборот; оба зависят от `auth`, `users`, `access`, `files`, `notifications`, `audit`. `workspaces` — только для CRM.
+
+---
+
+## Аутентификация и сессии
+
+### Вход из Mini App
+
+1. Клиент отправляет `POST /auth/telegram/miniapp` с `initData` (сырая строка из `window.Telegram.WebApp.initData`).
+2. Сервер проверяет подпись: из `initData` берётся `hash`, остальные пары `key=value` сортируются по ключу, соединяются `\n` → `data_check_string`; `secret_key = HMAC_SHA256(key="WebAppData", data=BOT_TOKEN)`; `HMAC_SHA256(key=secret_key, data=data_check_string)` в hex должен совпасть с `hash`. Сравнение константным временем.
+3. Проверяется `auth_date`: не старше `TELEGRAM_INITDATA_MAX_AGE_SEC` (300 с).
+4. Из `user` берётся `id`, имя, username, `allows_write_to_pm`; пользователь создаётся или обновляется (`upsertFromTelegram`). `initDataUnsafe` с клиента не используется никогда.
+5. Выдаётся пара: **access-токен** (JWT, 15 минут, содержит `sub`, `sid`, `kind`) и **refresh-токен** (opaque 256 бит, хранится хеш в `sessions`). Access-токен не содержит ролей и доступов — они читаются из БД на каждом запросе, поэтому отзыв действует немедленно.
+6. `start_param` из initData (`inv_<token>` для приглашения в мастерскую, `lesson_<key>` для deep-link) возвращается клиенту как `startAction`, чтобы он выполнил переход после входа.
+
+### Вход в веб-админку
+
+Основной способ — **Telegram Login Widget** на `admin.<domain>/login`: виджет возвращает `id, first_name, username, photo_url, auth_date, hash`; сервер проверяет `hash = HMAC_SHA256(key=SHA256(BOT_TOKEN), data=data_check_string)` и свежесть `auth_date`. Домен админки должен быть привязан к боту через `/setdomain` в BotFather.
+
+Резервный способ — **подтверждение в боте**: админка создаёт `web_login_requests` с кодом и показывает ссылку/QR `t.me/<bot>?start=login_<code>`; бот по `/start login_<code>` спрашивает подтверждение кнопкой и переводит запрос в `confirmed`; админка опрашивает `GET /auth/web/status/:code` и получает сессию. Оба способа выдают сессию с `kind='web'`.
+
+Вход в админку разрешён только пользователям с `platform_roles` (`admin` или `curator`). Владельцы мастерских в веб-админку не входят (их интерфейс — Mini App); при необходимости веб-версия CRM открывается тем же Mini App в браузере через Login Widget — это отдельная возможность, не обязательная для 1.0.
+
+### Обновление и отзыв
+
+- `POST /auth/refresh` ротирует refresh-токен (старый помечается использованным; повторное использование старого = компрометация → отзыв всех сессий пользователя).
+- `POST /auth/logout`, `POST /auth/logout-all`.
+- Администратор может отозвать все сессии пользователя (`is_banned` + revoke). Guard проверяет `sessions.revoked_at is null` и `users.is_banned = false` при каждом запросе (одна индексированная выборка; кешировать не более 5 секунд в памяти процесса).
+
+---
+
+## Модель прав
+
+Права описаны декларативно в `packages/shared/permissions.ts` и проверяются тремя слоями:
+
+1. **Guards на маршрутах** — `@Auth()` (нужна сессия), `@PlatformRole('admin' | 'curator')`, `@Workspace()` (маршрут содержит `:workspaceId`, пользователь должен быть активным участником; контекст `WorkspaceContext { workspaceId, member, role }` кладётся в request), `@RequireProduct('crm' | 'course' | 'club')`.
+2. **Политики в сервисах** — функции вида `assertCanUpdateOrder(ctx, order)`; проверяют владение объектом (например, сотрудник редактирует только назначенные ему заказы) и статусы.
+3. **Репозиторный слой CRM** — все методы принимают `workspaceId` первым аргументом и добавляют его в `where`. Прямой доступ к Prisma-моделям CRM вне репозиториев запрещён lint-правилом (`no-restricted-imports` для `prisma.order` и т.п. вне `crm/**/repositories`).
+
+Отсутствие доступа к чужому объекту возвращает **404**, а не 403, чтобы не раскрывать существование ID в другой мастерской.
+
+Подробная матрица — в `06-roles-permissions.md`.
+
+---
+
+## Продуктовые доступы
+
+`AccessService.hasActiveGrant({ product, userId | workspaceId, courseId? })` — единственная точка проверки. Используется:
+
+- guard `@RequireProduct('crm')` для всех `/workspaces/:id/**` (проверяет грант мастерской);
+- `StageAccessService` (грант курса на зачисление) при выдаче видео, материалов, старте попытки, отправке сдачи;
+- `ClubService` при выдаче ссылки и при обработке join request;
+- фронтенд получает `GET /me` со списком действующих продуктов и сроками — только для отрисовки, не как источник истины.
+
+Просроченные гранты: cron-задача `access.expire` (каждый час) переводит в `expired` и публикует доменное событие; на `club` это запускает `club.remove`; на `crm` — участники видят экран «Доступ к CRM истёк» с данными только на чтение? **Решение 1.0:** при истечении CRM-доступа данные не удаляются и доступны **только на чтение и экспорт** (владелец может выгрузить свою базу), запись/изменение блокируются. Это соответствует принципу «окончание не лишает мастера клиентской базы».
+
+---
+
+## Открытие этапов (StageAccessService)
+
+Вход: зачисление, версия курса, ключ этапа. Выход:
+
+```ts
+type StageAccess =
+  | { status: 'open' }
+  | { status: 'locked'; reasons: LockReason[]; opensAt?: Date }
+  | { status: 'completed'; completedAt: Date }
+type LockReason =
+  | { code: 'no_course_access' }                       // грант курса неактивен
+  | { code: 'date'; opensAt: Date }                    // «Откроется 15 ноября»
+  | { code: 'previous_stage'; stageKey; missing: ('lessons'|'assignments'|'exams')[] } // «Практика ещё не принята»
+  | { code: 'manual_lock'; reason: string }            // заблокировано администратором
+```
+
+Порядок вычисления:
+
+1. Если есть действующий `stage_overrides` с `action='lock'` → `locked(manual_lock)`.
+2. Если есть действующий `unlock` → `open` (пропуская даты и предыдущий этап).
+3. Дата: режим `interval` — `enrollment.started_at + stage.unlock_days_offset дней`; режим `dates` — `cohort.stage_dates[stage.key]` (для первого этапа — `cohort.starts_at`). Если в будущем → `locked(date)`.
+4. Если `requires_previous_stage` и предыдущий этап не в `stage_completions` → `locked(previous_stage, missing)`, где `missing` вычисляется по `completion_rule`: все обязательные уроки отмечены (и, если `min_watch_percent>0`, достигнут процент), все обязательные задания имеют `accepted` сдачу, все обязательные экзамены имеют `passed=true` попытку.
+5. Иначе `open`; если сам этап выполнен → `completed`.
+
+Причины возвращаются **все**, чтобы ученик видел полную картину («Откроется 15 ноября» и «Практика ещё не принята»).
+
+`ProgressService.recalculate(enrollmentId)` вызывается после: отметки урока, решения по сдаче, оценки попытки, изменения override. Он обновляет `stage_completions` и, если этап только что стал доступен (переход `locked → open`), ставит уведомление `stage_unlocked`. Для открытия по дате cron `learning.unlock-by-date` (раз в час) вычисляет, у кого сегодня открылся этап, и шлёт уведомление один раз (`dedupe_key = stage_unlocked:<enrollment>:<stage>`).
+
+Проверка доступа выполняется в **каждом** из эндпоинтов: получение урока и playback-токена видео, скачивание материалов, создание сдачи, старт попытки экзамена. Интерфейс лишь отражает результат.
+
+---
+
+## Версии курса и перенос групп
+
+- Админ редактирует только версию со `status='draft'`. Если черновика нет, он создаётся копией последней опубликованной.
+- «Опубликовать» → черновик становится `published` (immutable), автоматически создаётся следующий черновик. Валидация перед публикацией: у каждого этапа есть хотя бы один урок, обязательные уроки имеют видео в статусе `ready`, у тестов есть вопросы с правильными ответами, `passing_score` в диапазоне, ключи уникальны.
+- Новые группы создаются на последней опубликованной версии. Существующая группа переносится действием «Перевести на версию N»: сервис сравнивает ключи; прогресс, сдачи и попытки по совпадающим ключам сохраняются; для новых обязательных элементов ученик просто получает их невыполненными; для удалённых — записи остаются в БД, но не влияют на завершение. Результат переноса показывается админу до подтверждения (сколько учеников затронуто, какие этапы могут «закрыться» обратно). Откат — обратный перенос на прежнюю версию.
+
+---
+
+## Задания и проверки
+
+- Сдача создаётся как `draft` (чтобы загрузить файлы), затем `submit` → `submitted`. `attempt_no` = предыдущее + 1. Нельзя сдать, пока предыдущая сдача `submitted/in_review`.
+- Куратор, открыв сдачу, переводит её в `in_review` (чтобы двое не проверяли одновременно; удерживается 30 минут, затем возвращается в очередь). Решение создаёт `reviews` и переводит сдачу в `accepted`/`returned`, ставит уведомление `review_result`, вызывает `ProgressService.recalculate`.
+- Очередь проверок: `submitted` и `in_review` сдачи по группам куратора (для админа — все), сортировка по `submitted_at`, фильтры по группе, этапу, заданию, ученику.
+- `review_comments` — уточняющие вопросы; не меняют статус.
+
+## Экзамены
+
+- Старт попытки: проверка доступа этапа, `max_attempts`, `cooldown_hours`, отсутствия активной попытки. Для `test` фиксируется `question_order` (выборка и перемешивание) и `deadline_at`. Правильные ответы клиенту не отдаются.
+- Ответы сохраняются по одному (`PUT /attempts/:id/answers/:questionId`), чтобы обрыв связи не терял прогресс. Отправка — `POST /attempts/:id/submit`; после `deadline_at` cron `exams.expire-attempts` переводит в `expired` с автопроверкой того, что есть.
+- Автопроверка: `single/boolean` — совпадение; `multiple` — полное совпадение множества (частичные баллы не даём в 1.0, это настраивается позже); `short_text` — нормализованное совпадение с одним из `accepted_answers`. `percent = round(score/max_score*100)`, `passed = percent >= passing_score`.
+- `practical`: ученик прикладывает файлы и текст, отправляет; куратор/админ ставит `score` (0–100) и комментарий, `passed = score >= passing_score`.
+- Идемпотентность старта попытки — заголовок `Idempotency-Key` + частичный уникальный индекс.
+
+---
+
+## CRM: заказ и state machine
+
+Разрешённые переходы (сервер отклоняет остальные с `409 invalid_transition`):
+
+```
+new → pending_approval | scheduled | in_progress | cancelled
+pending_approval → scheduled | in_progress | new | cancelled
+scheduled → in_progress | pending_approval | cancelled
+in_progress → ready | scheduled | cancelled
+ready → delivered | in_progress
+delivered → (терминальный; повторное открытие — только владелец: delivered → ready с комментарием)
+cancelled → new (только владелец, с комментарием)
+```
+
+Побочные эффекты переходов: `in_progress` ставит `started_at`; `ready` — `ready_at`; `delivered` — `delivered_at` и, если долг > 0, отмечает заказ в списке «задолженность»; `cancelled` — отменяет будущие записи заказа. Все переходы пишут `order_status_history` и `audit_log`.
+
+Статус оплаты независим: `unpaid` (paid=0), `partial` (0 < paid < agreed_total), `paid` (paid = agreed_total), `overpaid` (paid > agreed_total). Если согласованной сметы нет, статус вычисляется относительно `null` → `unpaid`/`partial` (предоплата до сметы допустима).
+
+Права на заказ: владелец — всё; сотрудник — просматривает и меняет статус/фото/заметки только у заказов, где он `assignee`, и создаёт новые заказы (становясь исполнителем по умолчанию); согласование сметы и оплаты — по настройке мастерской `settings.employees_can_take_payments` (по умолчанию `true`, чтобы сотрудник мог принять оплату при выдаче), `settings.employees_can_edit_estimates` (по умолчанию `true`). Аналитика и сотрудники — только владелец.
+
+## CRM: смета
+
+- Итоги считаются на сервере: `line_total = quantity * unit_price` (или введённая фиксированная сумма), `subtotal = Σ line_total`, `discount = percent ? round_half_up(subtotal * value / 100) : min(value, subtotal)`, `total = subtotal - discount`.
+- Согласование (`POST /estimates/:id/agree`): в транзакции старая `agreed` → `superseded`, новая → `agreed`, `orders.agreed_estimate_id/agreed_total_minor` обновляются, `payment_status` пересчитывается, заказ при статусе `new/pending_approval` переводится в `scheduled`, если есть запись, иначе остаётся; записывается аудит.
+- Редактирование `agreed` сметы запрещено: клиент вызывает `POST /estimates/:id/new-version`, получает копию в `draft`.
+
+## CRM: календарь
+
+- Запись хранит `starts_at/ends_at` в UTC; клиент передаёт локальное время мастерской, сервер конвертирует по `workspaces.timezone`. «Сегодня» — по часовому поясу мастерской.
+- Проверка пересечений в сервисе (для внятного ответа `409 overlap` со списком конфликтующих записей) + exclusion constraint как последняя линия защиты. Владелец может создать запись с `allow_overlap=true` (с указанием причины в `note`).
+- Перенос — `PATCH` с новыми временем/исполнителем; отмена — статус `cancelled`; напоминания планируются worker'ом (`appointments.schedule-reminders`, каждые 15 минут, за `reminder_lead_minutes` до начала, `dedupe_key = reminder:<id>:<lead>`), при переносе старое уведомление помечается `skipped`.
+
+## CRM: аналитика
+
+Все показатели считаются SQL-запросами по периоду `[from, to)` в часовом поясе мастерской и, опционально, по исполнителю:
+
+| Показатель | Определение |
+|-----------|-------------|
+| Завершённые заказы | count(orders) where delivered_at in period |
+| Согласованная стоимость завершённых | Σ agreed_total_minor тех же заказов |
+| Поступления | Σ payment − Σ refund − Σ correction where occurred_at in period |
+| Задолженность (на конец периода) | Σ (agreed_total − paid) по заказам delivered и не cancelled с положительным остатком |
+| Средний чек | согласованная стоимость завершённых / количество завершённых |
+| Новые клиенты | count(clients) where created_at in period |
+| Загрузка календаря | Σ длительности записей done/confirmed по исполнителям |
+
+Прибыль не показывается (нет учёта затрат).
+
+---
+
+## Идемпотентность
+
+Все создающие `POST` в CRM (`orders`, `appointments`, `payment_entries`, `estimates/:id/agree`), в обучении (`submissions/:id/submit`, `attempts`) и `access_grants` принимают заголовок `Idempotency-Key` (UUID, генерируется клиентом при создании формы). Interceptor: если ключ уже есть для этого пользователя и `request_hash` совпадает — возвращается сохранённый ответ; если хеш отличается — `422 idempotency_mismatch`. Ключи живут 24 часа. Клиент повторяет запросы при сетевых ошибках с тем же ключом.
+
+## Фоновые задачи (pg-boss)
+
+| Очередь | Триггер | Что делает | Повторы |
+|---------|---------|-----------|---------|
+| `notifications.send` | `notify()` | отправляет сообщение через Bot API; 403 → `users.is_bot_blocked=true`, статус `skipped`; 429 → retry после `retry_after` | 5 попыток, backoff |
+| `club.approve` | webhook join request | проверка гранта → approve/decline | 3 |
+| `club.remove` | revoke/expire гранта, cron `club.audit` | banChatMember + unbanChatMember (кик с возможностью вернуться), статус `removed` | 5, ошибка → админу в дашборд |
+| `club.audit` | cron ежедневно | сверяет активные членства с грантами, ставит `club.remove` для расхождений | — |
+| `access.expire` | cron ежечасно | переводит просроченные гранты в `expired`, шлёт `access_expiring` за 7 и 1 день (`dedupe_key`) | — |
+| `learning.unlock-by-date` | cron ежечасно | уведомления об открывшихся по дате этапах | — |
+| `exams.expire-attempts` | cron каждые 5 минут | закрывает просроченные попытки | — |
+| `appointments.schedule-reminders` | cron каждые 15 минут | ставит напоминания | — |
+| `files.process` | подтверждение загрузки | проверка mime/размера по факту (magic bytes), миниатюры для изображений, извлечение размеров/длительности, статус `ready` | 3 |
+| `files.cleanup` | cron ежедневно | удаляет `pending` файлы старше 24 ч и осиротевшие объекты | — |
+| `export.run` | запрос экспорта | генерирует CSV/ZIP, кладёт в S3, `exports.status=done`, уведомление | 2 |
+| `idempotency.cleanup`, `sessions.cleanup` | cron | чистка | — |
+| `backup.verify` | cron еженедельно | проверяет наличие свежего дампа в S3, иначе алерт | — |
+
+Постановка задачи выполняется **в той же транзакции**, что и бизнес-изменение (pg-boss поддерживает передачу клиента/транзакции), чтобы не было «оплата записана, уведомление потеряно» и наоборот.
+
+## Аудит
+
+`AuditInterceptor` пишет запись для всех мутирующих запросов (`POST/PATCH/PUT/DELETE`) с `entity_type/entity_id` из метаданных маршрута (`@Audited('order')`), `before/after` — из сервиса через `AuditContext` (сервис кладёт снимок до и после). Чувствительные поля (телефоны клиентов) в `before/after` сохраняются как есть — журнал доступен только владельцу мастерской (для CRM-записей) и администратору платформы (для платформенных). Администратор платформы **не видит** CRM-аудит с данными клиентов, только факт действий без `before/after` (маскирование на выдаче).
+
+## Экспорт
+
+- Владелец: `crm_full` (ZIP: clients.csv, vehicles.csv, orders.csv, estimates.csv, estimate_items.csv, payments.csv, appointments.csv + опционально фото в папках по номеру заказа), а также отдельные CSV.
+- Администратор: `learning_students`, `learning_progress` (по группе), `audit` (платформенный).
+- Файл экспорта — `files` со `scope='export'`, ссылка на скачивание подписанная и живёт 24 часа; сам файл удаляется через 7 дней.
+
+## Обработка ошибок
+
+Единый формат ответа об ошибке:
+
+```json
+{ "error": { "code": "invalid_transition", "message": "Заказ нельзя перевести из «Выдан» в «Новый»", "details": {...}, "requestId": "..." } }
+```
+
+Коды — enum в `packages/shared/errors.ts`; фронтенд показывает `message` как есть (сервер локализует на русский), `details` используется для подсветки полей форм (`422 validation_failed`).
