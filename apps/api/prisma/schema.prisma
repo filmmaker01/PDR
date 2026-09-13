@@ -83,6 +83,8 @@ model User {
   notifications        Notification[]
   notificationPreference NotificationPreference?
   auditEntries         AuditLog[]
+  publishedVersions    CourseVersion[]       @relation("CourseVersionPublishedBy")
+  uploadedVideos       VideoAsset[]          @relation("VideoUploadedBy")
 
   @@index([username])
   @@index([phone])
@@ -370,6 +372,9 @@ model StoredFile {
 
   owner     User       @relation("FileOwner", fields: [ownerUserId], references: [id], onDelete: Cascade)
   workspace Workspace? @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  stageCovers      Stage[]          @relation("StageCover")
+  lessonMaterials  LessonMaterial[] @relation("LessonMaterialFile")
+  questionImages   Question[]       @relation("QuestionImage")
 
   @@index([workspaceId, scope])
   @@index([ownerUserId, scope])
@@ -451,4 +456,244 @@ model AuditLog {
   @@index([actorUserId, createdAt])
   @@index([createdAt])
   @@map("audit_log")
+}
+
+// ── Курс: структура и версии (этап 5) ────────────────────────────────────────
+
+enum CourseVersionStatus {
+  draft
+  published
+  archived
+
+  @@map("course_version_status")
+}
+
+enum MaterialKind {
+  file
+  link
+  text
+
+  @@map("material_kind")
+}
+
+enum VideoStatus {
+  uploading
+  processing
+  ready
+  failed
+
+  @@map("video_status")
+}
+
+enum ExamKind {
+  test
+  practical
+
+  @@map("exam_kind")
+}
+
+enum QuestionKind {
+  single
+  multiple
+  boolean
+  short_text
+
+  @@map("question_kind")
+}
+
+model Course {
+  id          String   @id @default(uuid()) @db.Uuid
+  slug        String   @unique
+  title       String
+  description String?
+  isActive    Boolean  @default(true) @map("is_active")
+  createdAt   DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt   DateTime @updatedAt @map("updated_at") @db.Timestamptz(6)
+
+  versions CourseVersion[]
+
+  @@map("courses")
+}
+
+/// Опубликованная версия неизменяема: правка курса не ломает прогресс групп.
+model CourseVersion {
+  id            String              @id @default(uuid()) @db.Uuid
+  courseId      String              @map("course_id") @db.Uuid
+  versionNo     Int                 @map("version_no")
+  status        CourseVersionStatus @default(draft)
+  changelog     String?
+  publishedAt   DateTime?           @map("published_at") @db.Timestamptz(6)
+  publishedById String?             @map("published_by") @db.Uuid
+  createdAt     DateTime            @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt     DateTime            @updatedAt @map("updated_at") @db.Timestamptz(6)
+
+  course      Course    @relation(fields: [courseId], references: [id], onDelete: Cascade)
+  publishedBy User?     @relation("CourseVersionPublishedBy", fields: [publishedById], references: [id], onDelete: SetNull)
+  stages      Stage[]
+
+  @@unique([courseId, versionNo])
+  @@map("course_versions")
+}
+
+model Stage {
+  id              String  @id @default(uuid()) @db.Uuid
+  courseVersionId String  @map("course_version_id") @db.Uuid
+  /// Стабильный ключ между версиями: по нему переносится прогресс.
+  key             String
+  position        Int
+  title           String
+  description     String?
+  coverFileId     String? @map("cover_file_id") @db.Uuid
+  /// Дней от старта обучения ученика (режим interval).
+  unlockDaysOffset Int    @default(0) @map("unlock_days_offset")
+  requiresPreviousStage Boolean @default(true) @map("requires_previous_stage")
+
+  courseVersion CourseVersion @relation(fields: [courseVersionId], references: [id], onDelete: Cascade)
+  coverFile     StoredFile?   @relation("StageCover", fields: [coverFileId], references: [id], onDelete: SetNull)
+  lessons       Lesson[]
+  assignments   Assignment[]
+  exams         Exam[]
+
+  @@unique([courseVersionId, key])
+  @@unique([courseVersionId, position])
+  @@map("stages")
+}
+
+model Lesson {
+  id              String  @id @default(uuid()) @db.Uuid
+  stageId         String  @map("stage_id") @db.Uuid
+  key             String
+  position        Int
+  title           String
+  description     String?
+  isRequired      Boolean @default(true) @map("is_required")
+  videoAssetId    String? @map("video_asset_id") @db.Uuid
+  /// Вспомогательный порог просмотра. 0 — не учитывается.
+  minWatchPercent Int     @default(0) @map("min_watch_percent")
+  estimatedMinutes Int?   @map("estimated_minutes")
+
+  stage      Stage            @relation(fields: [stageId], references: [id], onDelete: Cascade)
+  videoAsset VideoAsset?      @relation(fields: [videoAssetId], references: [id], onDelete: SetNull)
+  materials  LessonMaterial[]
+  assignments Assignment[]
+
+  @@unique([stageId, key])
+  @@unique([stageId, position])
+  @@map("lessons")
+}
+
+model LessonMaterial {
+  id       String       @id @default(uuid()) @db.Uuid
+  lessonId String       @map("lesson_id") @db.Uuid
+  position Int
+  kind     MaterialKind
+  title    String
+  fileId   String?      @map("file_id") @db.Uuid
+  url      String?
+  body     String?
+
+  lesson Lesson      @relation(fields: [lessonId], references: [id], onDelete: Cascade)
+  file   StoredFile? @relation("LessonMaterialFile", fields: [fileId], references: [id], onDelete: SetNull)
+
+  @@unique([lessonId, position])
+  @@map("lesson_materials")
+}
+
+/// Ссылка на видео во внешней платформе (Kinescope).
+model VideoAsset {
+  id              String      @id @default(uuid()) @db.Uuid
+  provider        String
+  providerVideoId String      @map("provider_video_id")
+  title           String
+  durationSec     Int?        @map("duration_sec")
+  status          VideoStatus @default(uploading)
+  uploadedById    String?     @map("uploaded_by") @db.Uuid
+  error           String?
+  createdAt       DateTime    @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt       DateTime    @updatedAt @map("updated_at") @db.Timestamptz(6)
+
+  uploadedBy User?    @relation("VideoUploadedBy", fields: [uploadedById], references: [id], onDelete: SetNull)
+  lessons    Lesson[]
+
+  @@unique([provider, providerVideoId])
+  @@map("video_assets")
+}
+
+model Assignment {
+  id           String  @id @default(uuid()) @db.Uuid
+  stageId      String  @map("stage_id") @db.Uuid
+  /// Задание к уроку или к этапу в целом.
+  lessonId     String? @map("lesson_id") @db.Uuid
+  key          String
+  position     Int
+  title        String
+  instructions String
+  isRequired   Boolean @default(true) @map("is_required")
+  /// {"min_photos":1,"min_videos":0,"text_required":false}
+  requiredMedia Json   @default("{\"min_photos\":1,\"min_videos\":0,\"text_required\":false}") @map("required_media")
+  maxVideoSec  Int?    @map("max_video_sec")
+
+  stage  Stage   @relation(fields: [stageId], references: [id], onDelete: Cascade)
+  lesson Lesson? @relation(fields: [lessonId], references: [id], onDelete: SetNull)
+
+  @@unique([stageId, key])
+  @@map("assignments")
+}
+
+model Exam {
+  id                  String   @id @default(uuid()) @db.Uuid
+  stageId             String   @map("stage_id") @db.Uuid
+  key                 String
+  position            Int
+  title               String
+  kind                ExamKind
+  description         String?
+  /// Проценты для теста; порог оценки куратора для практики.
+  passingScore        Int      @map("passing_score")
+  maxAttempts         Int?     @map("max_attempts")
+  timeLimitSec        Int?     @map("time_limit_sec")
+  cooldownHours       Int      @default(0) @map("cooldown_hours")
+  shuffleQuestions    Boolean  @default(true) @map("shuffle_questions")
+  questionsPerAttempt Int?     @map("questions_per_attempt")
+  showExplanations    Boolean  @default(true) @map("show_explanations")
+  isRequired          Boolean  @default(true) @map("is_required")
+
+  stage     Stage      @relation(fields: [stageId], references: [id], onDelete: Cascade)
+  questions Question[]
+
+  @@unique([stageId, key])
+  @@map("exams")
+}
+
+model Question {
+  id           String       @id @default(uuid()) @db.Uuid
+  examId       String       @map("exam_id") @db.Uuid
+  position     Int
+  kind         QuestionKind
+  body         String
+  imageFileId  String?      @map("image_file_id") @db.Uuid
+  explanation  String?
+  points       Int          @default(1)
+  /// Принимаемые ответы для короткого текста.
+  acceptedAnswers Json?     @map("accepted_answers")
+
+  exam      Exam             @relation(fields: [examId], references: [id], onDelete: Cascade)
+  imageFile StoredFile?      @relation("QuestionImage", fields: [imageFileId], references: [id], onDelete: SetNull)
+  options   QuestionOption[]
+
+  @@unique([examId, position])
+  @@map("questions")
+}
+
+model QuestionOption {
+  id         String  @id @default(uuid()) @db.Uuid
+  questionId String  @map("question_id") @db.Uuid
+  position   Int
+  body       String
+  isCorrect  Boolean @map("is_correct")
+
+  question Question @relation(fields: [questionId], references: [id], onDelete: Cascade)
+
+  @@unique([questionId, position])
+  @@map("question_options")
 }

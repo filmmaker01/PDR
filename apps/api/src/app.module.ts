@@ -8,6 +8,7 @@ import { PrismaModule } from './infra/prisma/prisma.module';
 import { JobsModule } from './infra/jobs/jobs.module';
 import { TelegramModule } from './infra/telegram/telegram.module';
 import { StorageModule } from './infra/storage/storage.module';
+import { VideoModule } from './infra/video/video.module';
 import { RequestIdMiddleware } from './common/interceptors/request-id.middleware';
 import { IdempotencyInterceptor } from './common/interceptors/idempotency.interceptor';
 import { RateLimitGuard } from './common/guards/rate-limit.guard';
@@ -25,6 +26,7 @@ import { FilesModule } from './modules/files/files.module';
 import { NotificationsModule } from './modules/notifications/notifications.module';
 import { AuditModule } from './modules/audit/audit.module';
 import { AuditInterceptor } from './modules/audit/audit.interceptor';
+import { CatalogModule } from './modules/learning/catalog/catalog.module';
 import { TelegramAppModule } from './modules/telegram/telegram-app.module';
 
 const REDACT_PATHS = [
@@ -60,6 +62,7 @@ const REDACT_PATHS = [
     JobsModule,
     TelegramModule,
     StorageModule,
+    VideoModule,
     UsersModule,
     AuthModule,
     AccessModule,
@@ -67,6 +70,7 @@ const REDACT_PATHS = [
     FilesModule,
     NotificationsModule,
     AuditModule,
+    CatalogModule,
     HealthModule,
     MeModule,
     AdminModule,
