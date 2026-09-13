@@ -16,6 +16,9 @@ import { DebtsScreen } from '@/features/crm/DebtsScreen';
 import { WorkspaceSettingsScreen } from '@/features/crm/WorkspaceSettingsScreen';
 import { PriceListScreen } from '@/features/crm/PriceListScreen';
 import { PaymentJournalScreen } from '@/features/crm/PaymentJournalScreen';
+import { AnalyticsScreen } from '@/features/crm/AnalyticsScreen';
+import { EmployeesScreen } from '@/features/crm/EmployeesScreen';
+import { WorkspaceAuditScreen } from '@/features/crm/WorkspaceAuditScreen';
 import { EstimateEditorScreen } from '@/features/crm/EstimateEditorScreen';
 import { StartActionRedirect } from './StartActionRedirect';
 import { CourseMapRoute, LearningEntryScreen } from '@/features/learning/CourseMapScreen';
@@ -75,6 +78,9 @@ export const router = createBrowserRouter([
       { path: 'workspace/:workspaceId/debts', element: <DebtsScreen /> },
       { path: 'workspace/:workspaceId/price-list', element: <PriceListScreen /> },
       { path: 'workspace/:workspaceId/payments', element: <PaymentJournalScreen /> },
+      { path: 'workspace/:workspaceId/analytics', element: <AnalyticsScreen /> },
+      { path: 'workspace/:workspaceId/members', element: <EmployeesScreen /> },
+      { path: 'workspace/:workspaceId/audit', element: <WorkspaceAuditScreen /> },
       { path: 'workspace/:workspaceId/estimates/:estimateId', element: <EstimateEditorScreen /> },
       { path: 'profile', element: <ProfileScreen /> },
       { path: 'profile/notifications', element: <NotificationsScreen /> },

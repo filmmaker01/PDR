@@ -177,12 +177,24 @@ export function WorkspaceSettingsScreen() {
               onClick={() => navigate(`/workspace/${workspaceId}/payments`)}
             />
           ) : null}
+          <ListItem
+            title="Сотрудники и приглашения"
+            subtitle="Имя в календаре, цвет, доступ, передача владения"
+            onClick={() => navigate(`/workspace/${workspaceId}/members`)}
+          />
           {isOwner ? (
-            <ListItem
-              title="Сотрудники и приглашения"
-              subtitle="Появится на этапе 13"
-              onClick={() => undefined}
-            />
+            <>
+              <ListItem
+                title="Аналитика"
+                subtitle="Поступления, завершённые заказы, исполнители"
+                onClick={() => navigate(`/workspace/${workspaceId}/analytics`)}
+              />
+              <ListItem
+                title="Журнал действий"
+                subtitle="Кто и что менял в мастерской"
+                onClick={() => navigate(`/workspace/${workspaceId}/audit`)}
+              />
+            </>
           ) : null}
         </div>
       </Card>

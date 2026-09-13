@@ -396,3 +396,55 @@ export const PAYMENT_METHOD_OPTIONS: { value: PaymentMethod; label: string }[] =
   { value: 'sbp', label: 'СБП' },
   { value: 'other', label: 'Другое' },
 ];
+
+export interface AnalyticsSummary {
+  from: string;
+  to: string;
+  currency: string;
+  completedOrders: number;
+  completedTotalMinor: number;
+  receivedMinor: number;
+  outstandingDebtMinor: number;
+  averageCheckMinor: number;
+  newClients: number;
+  appointmentMinutes: number;
+}
+
+export interface AnalyticsSeriesPoint {
+  bucket: string;
+  completedOrders: number;
+  completedTotalMinor: number;
+  receivedMinor: number;
+}
+
+export interface AnalyticsEmployeeRow {
+  memberId: string | null;
+  name: string;
+  color: string | null;
+  isActive: boolean;
+  completedOrders: number;
+  completedTotalMinor: number;
+  receivedMinor: number;
+  appointmentMinutes: number;
+}
+
+export interface AuditEntry {
+  id: string;
+  createdAt: string;
+  actorUserId: string | null;
+  actorRoleContext: string | null;
+  entityType: string;
+  entityId: string | null;
+  action: string;
+  before: unknown;
+  after: unknown;
+}
+
+export interface InvitationInfo {
+  id: string;
+  role: 'employee';
+  invitedPhone: string | null;
+  note: string | null;
+  expiresAt: string;
+  createdAt: string;
+}

@@ -1,8 +1,13 @@
 import { useQuery } from '@tanstack/react-query';
 import { api } from '@/shared/api';
 import type {
+  AnalyticsEmployeeRow,
+  AnalyticsSeriesPoint,
+  AnalyticsSummary,
   Appointment,
+  AuditEntry,
   AvailabilityResponse,
+  InvitationInfo,
   ClientCard,
   Estimate,
   OrderPayments,
@@ -227,5 +232,59 @@ export function useOrderPhotos(workspaceId: string, orderId: string) {
       api.get<{ categories: Record<string, string>; items: OrderPhoto[] }>(
         `/workspaces/${workspaceId}/orders/${orderId}/photos`,
       ),
+  });
+}
+
+export function useAnalyticsSummary(
+  workspaceId: string,
+  period: { from?: string; to?: string; assigneeMemberId?: string },
+) {
+  return useQuery({
+    queryKey: ['crm', 'analytics', 'summary', workspaceId, period],
+    queryFn: () =>
+      api.get<AnalyticsSummary>(`/workspaces/${workspaceId}/analytics/summary`, { query: period }),
+  });
+}
+
+export function useAnalyticsSeries(
+  workspaceId: string,
+  period: { from?: string; to?: string; assigneeMemberId?: string; granularity?: 'day' | 'week' },
+) {
+  return useQuery({
+    queryKey: ['crm', 'analytics', 'series', workspaceId, period],
+    queryFn: () =>
+      api.get<{ granularity: 'day' | 'week'; points: AnalyticsSeriesPoint[] }>(
+        `/workspaces/${workspaceId}/analytics/series`,
+        { query: period },
+      ),
+  });
+}
+
+export function useAnalyticsEmployees(workspaceId: string, period: { from?: string; to?: string }) {
+  return useQuery({
+    queryKey: ['crm', 'analytics', 'employees', workspaceId, period],
+    queryFn: () =>
+      api.get<{ rows: AnalyticsEmployeeRow[] }>(`/workspaces/${workspaceId}/analytics/employees`, {
+        query: period,
+      }),
+  });
+}
+
+export function useWorkspaceAudit(workspaceId: string) {
+  return useQuery({
+    queryKey: ['crm', 'audit', workspaceId],
+    queryFn: () =>
+      api.get<{ items: AuditEntry[]; nextCursor: string | null }>(
+        `/workspaces/${workspaceId}/audit`,
+        { query: { limit: 100 } },
+      ),
+  });
+}
+
+export function useInvitations(workspaceId: string, enabled: boolean) {
+  return useQuery({
+    queryKey: ['crm', 'invitations', workspaceId],
+    enabled,
+    queryFn: () => api.get<InvitationInfo[]>(`/workspaces/${workspaceId}/invitations`),
   });
 }

@@ -2,7 +2,7 @@ import { useState } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
 import { Badge, Button, Card, Chips, EmptyState, Input, ListItem, SkeletonList } from '@pdr/ui';
 import { formatMinor } from '@/shared/format';
-import { useOrders } from './api';
+import { useMembers, useOrders } from './api';
 import { STATUS_TONES, type OrderStatus } from './types';
 
 const STATUS_FILTERS: { value: OrderStatus; label: string }[] = [
@@ -19,11 +19,14 @@ export function OrdersScreen() {
   const { workspaceId = '' } = useParams();
   const navigate = useNavigate();
   const [status, setStatus] = useState<OrderStatus | null>(null);
+  const [assigneeMemberId, setAssigneeMemberId] = useState<string | null>(null);
   const [search, setSearch] = useState('');
   const [query, setQuery] = useState('');
 
+  const members = useMembers(workspaceId);
   const orders = useOrders(workspaceId, {
     status: status ? [status] : undefined,
+    assigneeMemberId: assigneeMemberId ?? undefined,
     q: query || undefined,
   });
 
@@ -47,6 +50,32 @@ export function OrdersScreen() {
       </Card>
 
       <Chips options={STATUS_FILTERS} value={status} onChange={setStatus} />
+
+      {(members.data?.length ?? 0) > 1 ? (
+        <div className="pdr-chips">
+          <button
+            type="button"
+            className={`pdr-chip${assigneeMemberId === null ? ' pdr-chip--active' : ''}`}
+            onClick={() => setAssigneeMemberId(null)}
+          >
+            Все исполнители
+          </button>
+          {members
+            .data!.filter((member) => member.isActive)
+            .map((member) => (
+              <button
+                key={member.id}
+                type="button"
+                className={`pdr-chip${assigneeMemberId === member.id ? ' pdr-chip--active' : ''}`}
+                onClick={() =>
+                  setAssigneeMemberId(assigneeMemberId === member.id ? null : member.id)
+                }
+              >
+                {member.name}
+              </button>
+            ))}
+        </div>
+      ) : null}
 
       <Button block onClick={() => navigate(`/workspace/${workspaceId}/orders/new`)}>
         + Новый заказ
