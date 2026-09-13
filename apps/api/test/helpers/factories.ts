@@ -104,3 +104,64 @@ export async function countRows(prisma: PrismaClient, table: string): Promise<nu
   );
   return Number(rows[0]?.count ?? 0);
 }
+
+export interface TestWorkspace {
+  id: string;
+  ownerMemberId: string;
+  grantId: string | null;
+}
+
+/** Мастерская с владельцем и, по умолчанию, действующим доступом к CRM. */
+export async function createWorkspace(
+  ctx: TestApp,
+  options: {
+    ownerUserId: string;
+    name?: string;
+    timezone?: string;
+    withAccess?: boolean;
+    validUntil?: Date | null;
+    settings?: Record<string, unknown>;
+  },
+): Promise<TestWorkspace> {
+  const workspace = await ctx.prisma.workspace.create({
+    data: {
+      name: options.name ?? 'Мастерская',
+      timezone: options.timezone ?? 'Europe/Moscow',
+      currency: 'RUB',
+      createdById: options.ownerUserId,
+      settings: (options.settings ?? {}) as object,
+    },
+  });
+  const member = await ctx.prisma.workspaceMember.create({
+    data: { workspaceId: workspace.id, userId: options.ownerUserId, role: 'owner' },
+  });
+
+  let grantId: string | null = null;
+  if (options.withAccess !== false) {
+    const grant = await ctx.prisma.accessGrant.create({
+      data: {
+        product: 'crm',
+        subjectType: 'workspace',
+        workspaceId: workspace.id,
+        status: 'active',
+        validFrom: new Date(Date.now() - 86_400_000),
+        validUntil: options.validUntil ?? null,
+        grantedById: options.ownerUserId,
+      },
+    });
+    grantId = grant.id;
+  }
+
+  return { id: workspace.id, ownerMemberId: member.id, grantId };
+}
+
+export async function addEmployee(
+  ctx: TestApp,
+  workspaceId: string,
+  userId: string,
+): Promise<string> {
+  const member = await ctx.prisma.workspaceMember.create({
+    data: { workspaceId, userId, role: 'employee' },
+  });
+  return member.id;
+}

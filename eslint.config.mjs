@@ -41,6 +41,24 @@ export default tseslint.config(
     },
   },
   {
+    // Данные CRM читаются только через репозитории с обязательным workspaceId.
+    // Прямое обращение к Prisma-моделям CRM из сервисов и контроллеров
+    // слишком легко оставить без фильтра по мастерской.
+    files: ['apps/api/src/modules/crm/**/*.ts'],
+    ignores: ['apps/api/src/modules/crm/**/repositories/**'],
+    rules: {
+      'no-restricted-syntax': [
+        'error',
+        {
+          selector:
+            "MemberExpression[object.property.name='prisma'][property.name=/^(client|vehicle|order|appointment|estimate|estimateItem|paymentEntry|orderPhoto|priceListItem|orderStatusHistory)$/]",
+          message:
+            'Данные CRM доступны только через репозитории (WorkspaceScopedRepository) с обязательным workspaceId.',
+        },
+      ],
+    },
+  },
+  {
     // NestJS резолвит зависимости по метаданным конструктора: `import type`
     // стирает их и ломает DI, поэтому правило здесь выключено.
     files: ['apps/api/**/*.ts'],

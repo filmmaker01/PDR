@@ -16,6 +16,10 @@ import { AuthModule } from './modules/auth/auth.module';
 import { SessionGuard } from './modules/auth/guards/session.guard';
 import { PlatformRoleGuard } from './modules/auth/guards/platform-role.guard';
 import { MeModule } from './modules/me/me.module';
+import { AccessModule } from './modules/access/access.module';
+import { WorkspacesModule } from './modules/workspaces/workspaces.module';
+import { WorkspaceGuard } from './modules/workspaces/guards/workspace.guard';
+import { AdminModule } from './modules/admin/admin.module';
 import { TelegramAppModule } from './modules/telegram/telegram-app.module';
 
 const REDACT_PATHS = [
@@ -52,14 +56,18 @@ const REDACT_PATHS = [
     TelegramModule,
     UsersModule,
     AuthModule,
+    AccessModule,
+    WorkspacesModule,
     HealthModule,
     MeModule,
+    AdminModule,
     TelegramAppModule,
   ],
   providers: [
     // Порядок важен: сессия → роль платформы → ограничение частоты.
     { provide: APP_GUARD, useClass: SessionGuard },
     { provide: APP_GUARD, useClass: PlatformRoleGuard },
+    { provide: APP_GUARD, useClass: WorkspaceGuard },
     { provide: APP_GUARD, useClass: RateLimitGuard },
     { provide: APP_INTERCEPTOR, useClass: IdempotencyInterceptor },
   ],

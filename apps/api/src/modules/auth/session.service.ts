@@ -98,14 +98,16 @@ export class SessionService {
     if (!session || session.userId !== payload.sub) {
       throw new AppError('unauthorized', 'Сессия недействительна, войдите заново');
     }
+    // Блокировка проверяется первой: пользователь должен узнать настоящую
+    // причину, а не «сессия завершена» после отзыва сессий при бане.
+    if (session.user.isBanned) {
+      throw new AppError('user_banned', 'Доступ к платформе заблокирован');
+    }
     if (session.revokedAt) {
       throw new AppError('session_revoked', 'Сессия завершена, войдите заново');
     }
     if (session.expiresAt.getTime() <= Date.now()) {
       throw new AppError('unauthorized', 'Срок сессии истёк, войдите заново');
-    }
-    if (session.user.isBanned) {
-      throw new AppError('user_banned', 'Доступ к платформе заблокирован');
     }
 
     const { user, ...rest } = session;

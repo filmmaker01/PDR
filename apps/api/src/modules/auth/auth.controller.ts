@@ -136,9 +136,7 @@ export class AuthController {
 
   @Get('sessions')
   @ApiOperation({ summary: 'Активные сессии пользователя' })
-  async listSessions(
-    @CurrentAuth() auth: AuthContext,
-  ): Promise<
+  async listSessions(@CurrentAuth() auth: AuthContext): Promise<
     {
       id: string;
       kind: string;

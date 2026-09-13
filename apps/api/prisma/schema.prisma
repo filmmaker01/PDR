@@ -72,6 +72,13 @@ model User {
   grantedRoles      PlatformRole[]  @relation("PlatformRoleGrantedBy")
   webLoginRequests  WebLoginRequest[]
   idempotencyKeys   IdempotencyKey[]
+  workspaceMemberships WorkspaceMember[]
+  createdWorkspaces    Workspace[]           @relation("WorkspaceCreatedBy")
+  createdInvitations   WorkspaceInvitation[] @relation("InvitationCreatedBy")
+  acceptedInvitations  WorkspaceInvitation[] @relation("InvitationAcceptedBy")
+  accessGrants         AccessGrant[]         @relation("GrantSubjectUser")
+  grantedAccess        AccessGrant[]         @relation("GrantGrantedBy")
+  revokedAccess        AccessGrant[]         @relation("GrantRevokedBy")
 
   @@index([username])
   @@index([phone])
@@ -153,4 +160,152 @@ model TelegramUpdate {
 
   @@index([createdAt])
   @@map("telegram_updates")
+}
+
+// ── Мастерские и участники (этап 2) ──────────────────────────────────────────
+
+enum WorkspaceRole {
+  owner
+  employee
+
+  @@map("workspace_role")
+}
+
+model Workspace {
+  id         String    @id @default(uuid()) @db.Uuid
+  name       String
+  /// Часовой пояс IANA: определяет «сегодня» и отображение календаря.
+  timezone   String    @default("Europe/Moscow")
+  currency   String    @default("RUB") @db.Char(3)
+  phone      String?
+  address    String?
+  /// Рабочие часы, длительность записи по умолчанию, права сотрудников.
+  settings   Json      @default("{}")
+  /// Счётчик номеров заказов внутри мастерской.
+  orderSeq   Int       @default(0) @map("order_seq")
+  createdById String?  @map("created_by") @db.Uuid
+  archivedAt DateTime? @map("archived_at") @db.Timestamptz(6)
+  createdAt  DateTime  @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt  DateTime  @updatedAt @map("updated_at") @db.Timestamptz(6)
+
+  createdBy   User?                  @relation("WorkspaceCreatedBy", fields: [createdById], references: [id], onDelete: SetNull)
+  members     WorkspaceMember[]
+  invitations WorkspaceInvitation[]
+  grants      AccessGrant[]
+
+  @@map("workspaces")
+}
+
+model WorkspaceMember {
+  id          String        @id @default(uuid()) @db.Uuid
+  workspaceId String        @map("workspace_id") @db.Uuid
+  userId      String        @map("user_id") @db.Uuid
+  role        WorkspaceRole
+  displayName String?       @map("display_name")
+  /// Цвет исполнителя в календаре.
+  color       String?
+  isActive    Boolean       @default(true) @map("is_active")
+  joinedAt    DateTime      @default(now()) @map("joined_at") @db.Timestamptz(6)
+  leftAt      DateTime?     @map("left_at") @db.Timestamptz(6)
+
+  workspace Workspace @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  user      User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([workspaceId, userId])
+  @@unique([workspaceId, id], name: "member_in_workspace")
+  @@index([userId])
+  @@map("workspace_members")
+}
+
+model WorkspaceInvitation {
+  id           String        @id @default(uuid()) @db.Uuid
+  workspaceId  String        @map("workspace_id") @db.Uuid
+  role         WorkspaceRole
+  /// sha256 от токена приглашения: сам токен есть только в ссылке.
+  tokenHash    String        @unique @map("token_hash")
+  /// Необязательное ограничение: принять может только этот номер.
+  invitedPhone String?       @map("invited_phone")
+  note         String?
+  createdById  String        @map("created_by") @db.Uuid
+  expiresAt    DateTime      @map("expires_at") @db.Timestamptz(6)
+  acceptedById String?       @map("accepted_by") @db.Uuid
+  acceptedAt   DateTime?     @map("accepted_at") @db.Timestamptz(6)
+  revokedAt    DateTime?     @map("revoked_at") @db.Timestamptz(6)
+  createdAt    DateTime      @default(now()) @map("created_at") @db.Timestamptz(6)
+
+  workspace  Workspace @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  createdBy  User      @relation("InvitationCreatedBy", fields: [createdById], references: [id], onDelete: Cascade)
+  acceptedBy User?     @relation("InvitationAcceptedBy", fields: [acceptedById], references: [id], onDelete: SetNull)
+
+  @@index([workspaceId])
+  @@map("workspace_invitations")
+}
+
+// ── Продуктовые доступы (этап 2) ─────────────────────────────────────────────
+
+enum Product {
+  course
+  crm
+  club
+
+  @@map("product")
+}
+
+enum GrantSubject {
+  user
+  workspace
+
+  @@map("grant_subject")
+}
+
+enum GrantStatus {
+  active
+  expired
+  revoked
+  suspended
+
+  @@map("grant_status")
+}
+
+enum GrantSource {
+  manual
+  promo
+  migration
+  payment
+
+  @@map("grant_source")
+}
+
+model AccessGrant {
+  id          String       @id @default(uuid()) @db.Uuid
+  product     Product
+  subjectType GrantSubject @map("subject_type")
+  userId      String?      @map("user_id") @db.Uuid
+  workspaceId String?      @map("workspace_id") @db.Uuid
+  /// Для product=course: к какому курсу относится доступ.
+  courseId    String?      @map("course_id") @db.Uuid
+  status      GrantStatus  @default(active)
+  validFrom   DateTime     @default(now()) @map("valid_from") @db.Timestamptz(6)
+  /// null = бессрочный доступ.
+  validUntil  DateTime?    @map("valid_until") @db.Timestamptz(6)
+  source      GrantSource  @default(manual)
+  externalRef String?      @map("external_ref")
+  reason      String?
+  grantedById String?      @map("granted_by") @db.Uuid
+  revokedById String?      @map("revoked_by") @db.Uuid
+  revokedAt   DateTime?    @map("revoked_at") @db.Timestamptz(6)
+  createdAt   DateTime     @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt   DateTime     @updatedAt @map("updated_at") @db.Timestamptz(6)
+
+  user      User?      @relation("GrantSubjectUser", fields: [userId], references: [id], onDelete: Cascade)
+  workspace Workspace? @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  grantedBy User?      @relation("GrantGrantedBy", fields: [grantedById], references: [id], onDelete: SetNull)
+  revokedBy User?      @relation("GrantRevokedBy", fields: [revokedById], references: [id], onDelete: SetNull)
+
+  @@index([userId, product, status])
+  @@index([workspaceId, product, status])
+  @@index([validUntil])
+  /// Самый частый запрос guard'а: действующий доступ по продукту.
+  @@index([product, status, validUntil])
+  @@map("access_grants")
 }

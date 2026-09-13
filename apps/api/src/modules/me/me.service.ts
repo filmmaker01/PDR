@@ -1,25 +1,51 @@
 import { Injectable } from '@nestjs/common';
-import type { MeResponse } from '@pdr/shared';
-import { PrismaService } from '@/infra/prisma/prisma.service';
+import type { MeResponse, MeProductAccess, MeWorkspace } from '@pdr/shared';
+import { AccessService } from '@/modules/access/access.service';
 import { UsersService } from '@/modules/users/users.service';
+import { WorkspacesService } from '@/modules/workspaces/workspaces.service';
 import type { AuthContext } from '@/modules/auth/decorators/auth.decorators';
 
 /**
- * Сборка полного контекста пользователя для клиента.
- * Разделы (мастерские, зачисления, доступы, клуб, уведомления) подключаются
- * по мере появления соответствующих модулей; клиент использует их только
- * для отрисовки — источником истины остаются проверки на сервере.
+ * Полный контекст пользователя для клиента.
+ * Ответ используется интерфейсом только для отрисовки: источником истины
+ * остаются проверки на сервере при каждом обращении.
  */
 @Injectable()
 export class MeService {
   constructor(
-    private readonly prisma: PrismaService,
     private readonly users: UsersService,
+    private readonly workspaces: WorkspacesService,
+    private readonly access: AccessService,
   ) {}
 
   async build(auth: AuthContext): Promise<MeResponse> {
     const user = auth.user;
-    void this.prisma;
+    const memberships = await this.workspaces.listMembershipsOf(user.id);
+    const grants = await this.access.listActiveForUser(
+      user.id,
+      memberships.map((m) => m.workspace.id),
+    );
+
+    const workspaces: MeWorkspace[] = memberships.map((m) => ({
+      id: m.workspace.id,
+      name: m.workspace.name,
+      role: m.member.role,
+      memberId: m.member.id,
+      timezone: m.workspace.timezone,
+      currency: m.workspace.currency,
+      hasActiveAccess: m.hasActiveAccess,
+      accessValidUntil: m.accessValidUntil?.toISOString() ?? null,
+    }));
+
+    const products: MeProductAccess[] = grants.map((g) => ({
+      product: g.product,
+      courseId: g.courseId,
+      workspaceId: g.workspaceId,
+      validUntil: g.validUntil?.toISOString() ?? null,
+      status: g.status,
+    }));
+
+    const clubGrant = grants.find((g) => g.product === 'club');
 
     return {
       user: {
@@ -34,10 +60,15 @@ export class MeService {
         languageCode: user.languageCode,
       },
       platformRoles: auth.platformRoles,
-      workspaces: [],
+      workspaces,
+      // Зачисления подключаются на этапе 6 вместе с модулем обучения.
       enrollments: [],
-      products: [],
-      club: { hasAccess: false, validUntil: null, status: 'none' },
+      products,
+      club: {
+        hasAccess: clubGrant !== undefined,
+        validUntil: clubGrant?.validUntil?.toISOString() ?? null,
+        status: 'none',
+      },
       notifications: {},
     };
   }
