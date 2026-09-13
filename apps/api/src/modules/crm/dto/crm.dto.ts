@@ -44,6 +44,8 @@ export const createClientSchema = z
 
 export const updateClientSchema = createClientSchema.partial().strict();
 
+export const mergeClientsSchema = z.object({ sourceClientId: z.string().uuid() }).strict();
+
 export const createVehicleSchema = z
   .object({
     make: nonEmptyString(60),

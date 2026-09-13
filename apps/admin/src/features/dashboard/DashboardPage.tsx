@@ -9,6 +9,14 @@ interface Dashboard {
   notifications: Record<string, number>;
   worker: { alive: boolean; lastBeatAt: string | null; instances: number };
   queue: { enabled: boolean };
+  backups: {
+    last: { label: string; objectKey: string; sizeBytes: number; createdAt: string } | null;
+    ageHours: number | null;
+    stale: boolean;
+    lastWeekCount: number;
+  };
+  learning: { activeEnrollments: number; submissionsWaiting: number; attemptsWaiting: number };
+  crm: { ordersActive: number; appointmentsToday: number };
 }
 
 function Stat({ label, value, hint }: { label: string; value: number | string; hint?: string }) {
@@ -52,6 +60,14 @@ export function DashboardPage() {
         </Alert>
       ) : null}
 
+      {data.backups.stale ? (
+        <Alert color="red" title="Нет свежей резервной копии">
+          {data.backups.last
+            ? `Последняя копия сделана ${formatDateTime(data.backups.last.createdAt)} (${data.backups.ageHours} ч назад).`
+            : 'Отметок о резервных копиях нет вообще. Проверьте контейнер backup и переменные BACKUP_S3_BUCKET и DATABASE_URL.'}
+        </Alert>
+      ) : null}
+
       {data.grants.expiringInWeek > 0 ? (
         <Alert color="yellow" title="Истекают доступы">
           В ближайшую неделю заканчивается {data.grants.expiringInWeek} доступ(ов).
@@ -77,6 +93,31 @@ export function DashboardPage() {
             label="Уведомления за неделю"
             value={data.notifications.sent ?? 0}
             hint={`пропущено: ${data.notifications.skipped ?? 0}, ошибок: ${data.notifications.failed ?? 0}`}
+          />
+        </Grid.Col>
+        <Grid.Col span={{ base: 12, sm: 6, md: 3 }}>
+          <Stat
+            label="Ученики в обучении"
+            value={data.learning.activeEnrollments}
+            hint={`на проверке: ${data.learning.submissionsWaiting}, экзаменов: ${data.learning.attemptsWaiting}`}
+          />
+        </Grid.Col>
+        <Grid.Col span={{ base: 12, sm: 6, md: 3 }}>
+          <Stat
+            label="Активные заказы"
+            value={data.crm.ordersActive}
+            hint={`записей на сутки: ${data.crm.appointmentsToday}`}
+          />
+        </Grid.Col>
+        <Grid.Col span={{ base: 12, sm: 6, md: 3 }}>
+          <Stat
+            label="Резервные копии за неделю"
+            value={data.backups.lastWeekCount}
+            hint={
+              data.backups.last
+                ? `последняя: ${formatDateTime(data.backups.last.createdAt)}`
+                : 'отметок нет'
+            }
           />
         </Grid.Col>
       </Grid>

@@ -15,7 +15,7 @@ import {
 } from '@pdr/ui';
 import { api } from '@/shared/api';
 import { formatMinor, formatPhoneRu } from '@/shared/format';
-import { alertDialog } from '@/shared/telegram';
+import { alertDialog, confirmDialog, haptic } from '@/shared/telegram';
 import { useClient, useClients, useVehicle, useWorkspace } from './api';
 import { STATUS_TONES } from './types';
 
@@ -139,7 +139,21 @@ export function ClientsScreen() {
 export function ClientScreen() {
   const { workspaceId = '', clientId = '' } = useParams();
   const navigate = useNavigate();
+  const queryClient = useQueryClient();
   const client = useClient(workspaceId, clientId);
+  const workspace = useWorkspace(workspaceId);
+
+  const canManage = workspace.data?.permissions.includes('clients.manage') ?? false;
+
+  const anonymize = useMutation({
+    mutationFn: () => api.post(`/workspaces/${workspaceId}/clients/${clientId}/anonymize`),
+    onSuccess: async () => {
+      haptic('success');
+      await queryClient.invalidateQueries({ queryKey: ['crm'] });
+    },
+    onError: async (e) =>
+      alertDialog(e instanceof ApiError ? e.message : 'Не удалось удалить данные клиента'),
+  });
 
   if (client.isLoading) return <SkeletonList rows={4} />;
   if (client.isError) {
@@ -231,6 +245,29 @@ export function ClientScreen() {
       >
         Новый заказ этому клиенту
       </Button>
+
+      {canManage && !data.anonymizedAt ? (
+        <Button
+          variant="danger"
+          block
+          loading={anonymize.isPending}
+          onClick={async () => {
+            const confirmed = await confirmDialog(
+              'Удалить персональные данные клиента? Имя, телефон, номер автомобиля и заметки будут стёрты. Заказы и оплаты останутся.',
+            );
+            if (confirmed) anonymize.mutate();
+          }}
+        >
+          Удалить персональные данные
+        </Button>
+      ) : null}
+
+      {data.anonymizedAt ? (
+        <div className="pdr-hint">
+          Персональные данные этого клиента удалены по запросу. История заказов сохранена как
+          финансовая запись.
+        </div>
+      ) : null}
     </div>
   );
 }

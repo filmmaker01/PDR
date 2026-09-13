@@ -100,6 +100,7 @@ model User {
   createdPayments        PaymentEntry[]          @relation("PaymentCreatedBy")
   createdOrderPhotos     OrderPhoto[]            @relation("OrderPhotoCreatedBy")
   clubMembership         ClubMembership?
+  exports                Export[]                @relation("ExportRequestedBy")
   clubEvents             ClubEvent[]
   agreedEstimates        Estimate[]              @relation("EstimateAgreedBy")
 
@@ -226,6 +227,7 @@ model Workspace {
   estimateItems EstimateItem[]
   payments      PaymentEntry[]
   orderPhotos   OrderPhoto[]
+  exports       Export[]
 
   @@map("workspaces")
 }
@@ -407,6 +409,7 @@ model StoredFile {
   submissionFiles SubmissionFile[] @relation("SubmissionFiles")
   attemptFiles    AttemptFile[]    @relation("AttemptFiles")
   orderPhotos     OrderPhoto[]     @relation("OrderPhotoFile")
+  exports         Export[]         @relation("ExportFile")
 
   @@index([workspaceId, scope])
   @@index([ownerUserId, scope])
@@ -1546,4 +1549,65 @@ model ClubEvent {
   @@index([userId, createdAt])
   @@index([event, createdAt])
   @@map("club_events")
+}
+
+// ── Экспорт и резервные копии (этап 15) ──────────────────────────────────────
+
+enum ExportKind {
+  crm_full
+  crm_clients
+  crm_orders
+  crm_payments
+  learning_students
+  learning_progress
+  audit
+
+  @@map("export_kind")
+}
+
+enum ExportStatus {
+  queued
+  running
+  done
+  failed
+
+  @@map("export_status")
+}
+
+model Export {
+  id            String       @id @default(uuid()) @db.Uuid
+  requestedById String       @map("requested_by") @db.Uuid
+  workspaceId   String?      @map("workspace_id") @db.Uuid
+  kind          ExportKind
+  status        ExportStatus @default(queued)
+  params        Json         @default("{}")
+  fileId        String?      @map("file_id") @db.Uuid
+  /// Сколько строк выгружено: видно заказчику без открытия файла.
+  rowCount      Int?         @map("row_count")
+  error         String?
+  createdAt     DateTime     @default(now()) @map("created_at") @db.Timestamptz(6)
+  finishedAt    DateTime?    @map("finished_at") @db.Timestamptz(6)
+
+  requestedBy User        @relation("ExportRequestedBy", fields: [requestedById], references: [id], onDelete: Cascade)
+  workspace   Workspace?  @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  file        StoredFile? @relation("ExportFile", fields: [fileId], references: [id], onDelete: SetNull)
+
+  @@index([requestedById, createdAt])
+  @@index([workspaceId, createdAt])
+  @@index([status, createdAt])
+  @@map("exports")
+}
+
+/// Отметка об успешной резервной копии. Пишет скрипт `infra/backup/backup.sh`,
+/// читает задача `backup.verify` и дашборд администратора.
+model BackupRun {
+  id        String   @id @default(uuid()) @db.Uuid
+  label     String
+  /// Ключ объекта в хранилище резервных копий.
+  objectKey String   @map("object_key")
+  sizeBytes BigInt   @map("size_bytes")
+  createdAt DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
+
+  @@index([createdAt])
+  @@map("backup_runs")
 }

@@ -122,6 +122,8 @@ export class FilesService {
     }
 
     const fileId = randomUUID();
+    await this.assertWithinQuota(input);
+
     const storageKey = this.buildKey({ ...input, mimeType }, fileId);
     const ttl = this.config.env.S3_PRESIGN_UPLOAD_TTL_SEC;
 
@@ -159,6 +161,25 @@ export class FilesService {
     };
   }
 
+  /**
+   * Квота хранилища мастерской. Проверяется до выдачи ссылки: отказ после
+   * загрузки файла пользователь воспринимает как потерю работы.
+   */
+  private async assertWithinQuota(input: PresignInput): Promise<void> {
+    const quotaMb = this.config.env.STORAGE_WORKSPACE_QUOTA_MB;
+    if (quotaMb === 0 || !input.workspaceId) return;
+
+    const used = await this.workspaceUsageBytes(input.workspaceId);
+    const quotaBytes = quotaMb * 1024 * 1024;
+    if (used + input.sizeBytes > quotaBytes) {
+      throw new AppError(
+        'file_too_large',
+        'Хранилище мастерской заполнено. Удалите ненужные фотографии или обратитесь к администратору.',
+        { usedBytes: used, quotaBytes },
+      );
+    }
+  }
+
   private async createRecord(
     fileId: string,
     storageKey: string,
@@ -179,6 +200,49 @@ export class FilesService {
         originalName: input.originalName ?? null,
         status: 'pending',
         uploadId,
+      },
+    });
+  }
+
+  /**
+   * Файл, созданный сервером (выгрузка, печатная форма): тело уже готово,
+   * поэтому presign не нужен — кладём объект и сразу помечаем готовым.
+   */
+  async storeGenerated(input: {
+    ownerUserId: string;
+    workspaceId?: string | null;
+    scope: FileScope;
+    body: Buffer;
+    mimeType: string;
+    originalName: string;
+  }): Promise<StoredFile> {
+    const fileId = randomUUID();
+    const mimeType = input.mimeType.toLowerCase().split(';')[0]?.trim() ?? '';
+    const storageKey = this.buildKey(
+      {
+        ownerUserId: input.ownerUserId,
+        workspaceId: input.workspaceId ?? null,
+        scope: input.scope,
+        mimeType,
+        sizeBytes: input.body.length,
+      },
+      fileId,
+    );
+
+    await this.storage.put(storageKey, input.body, mimeType);
+
+    return this.prisma.storedFile.create({
+      data: {
+        id: fileId,
+        ownerUserId: input.ownerUserId,
+        workspaceId: input.workspaceId ?? null,
+        scope: input.scope,
+        storageKey,
+        bucket: this.storage.bucket,
+        mimeType,
+        sizeBytes: BigInt(input.body.length),
+        originalName: input.originalName,
+        status: 'ready',
       },
     });
   }

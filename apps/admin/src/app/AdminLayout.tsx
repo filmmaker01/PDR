@@ -42,6 +42,7 @@ function AdminShell() {
     { to: '/access', label: 'Доступы', roles: ['admin'] },
     { to: '/workspaces', label: 'Мастерские', roles: ['admin'] },
     { to: '/club', label: 'Клуб', roles: ['admin'] },
+    { to: '/exports', label: 'Выгрузки', roles: ['admin'] },
     { to: '/audit', label: 'Журнал действий', roles: ['admin'] },
   ];
   const visible = items.filter(

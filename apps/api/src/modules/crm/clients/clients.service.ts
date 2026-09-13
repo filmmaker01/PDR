@@ -2,6 +2,7 @@ import { Injectable } from '@nestjs/common';
 import type { Client, Vehicle } from '@prisma/client';
 import { isValidVin, normalizePhone, normalizePlate, normalizeVin } from '@pdr/shared';
 import { AppError } from '@/common/errors/app.error';
+import { PrismaService } from '@/infra/prisma/prisma.service';
 import { ClientsRepository } from '../repositories/clients.repository';
 import { VehiclesRepository } from '../repositories/vehicles.repository';
 import { OrdersRepository } from '../repositories/orders.repository';
@@ -31,6 +32,7 @@ export interface CreateVehicleInput {
 @Injectable()
 export class ClientsService {
   constructor(
+    private readonly prisma: PrismaService,
     private readonly clients: ClientsRepository,
     private readonly vehicles: VehiclesRepository,
     private readonly orders: OrdersRepository,
@@ -107,6 +109,97 @@ export class ClientsService {
   }
 
   // ── Автомобили ─────────────────────────────────────────────────────────────
+
+  /**
+   * Обезличивание клиента: персональные данные стираются, а заказы, сметы
+   * и оплаты остаются — это финансовые записи, и удалять их нельзя.
+   */
+  async anonymize(workspaceId: string, clientId: string): Promise<Client> {
+    const client = await this.getById(workspaceId, clientId);
+    if (client.anonymizedAt) return client;
+
+    return this.prisma.transaction(async (tx) => {
+      const updated = await tx.client.update({
+        where: { id: clientId },
+        data: {
+          name: `Клиент №${client.id.slice(0, 8)}`,
+          phone: null,
+          phoneExtra: null,
+          telegramUsername: null,
+          telegramUserId: null,
+          notes: null,
+          source: null,
+          tags: [],
+          anonymizedAt: new Date(),
+          archivedAt: client.archivedAt ?? new Date(),
+        },
+      });
+
+      // Номера и VIN — тоже персональные данные: по ним находят владельца.
+      await tx.vehicle.updateMany({
+        where: { workspaceId, clientId },
+        data: { plate: null, vin: null, notes: null },
+      });
+
+      return updated;
+    });
+  }
+
+  /**
+   * Объединение дублей: всё переносится на основного клиента,
+   * второй архивируется. Сливаем только внутри одной мастерской.
+   */
+  async merge(
+    workspaceId: string,
+    targetId: string,
+    sourceId: string,
+  ): Promise<{ movedVehicles: number; movedOrders: number; movedAppointments: number }> {
+    if (targetId === sourceId) throw AppError.validation('Выберите двух разных клиентов');
+
+    const [target, source] = await Promise.all([
+      this.getById(workspaceId, targetId),
+      this.getById(workspaceId, sourceId),
+    ]);
+
+    return this.prisma.transaction(async (tx) => {
+      const movedVehicles = await tx.vehicle.updateMany({
+        where: { workspaceId, clientId: source.id },
+        data: { clientId: target.id },
+      });
+      const movedOrders = await tx.order.updateMany({
+        where: { workspaceId, clientId: source.id },
+        data: { clientId: target.id },
+      });
+      const movedAppointments = await tx.appointment.updateMany({
+        where: { workspaceId, clientId: source.id },
+        data: { clientId: target.id },
+      });
+
+      await tx.client.update({
+        where: { id: target.id },
+        data: {
+          // Недостающие контакты берём из дубля: объединение не должно терять данные.
+          phone: target.phone ?? source.phone,
+          phoneExtra: target.phoneExtra ?? source.phone ?? source.phoneExtra,
+          telegramUsername: target.telegramUsername ?? source.telegramUsername,
+          source: target.source ?? source.source,
+          notes: [target.notes, source.notes].filter(Boolean).join('\n') || null,
+          tags: [...new Set([...target.tags, ...source.tags])],
+        },
+      });
+
+      await tx.client.update({
+        where: { id: source.id },
+        data: { archivedAt: new Date(), notes: `Объединён с клиентом ${target.id}` },
+      });
+
+      return {
+        movedVehicles: movedVehicles.count,
+        movedOrders: movedOrders.count,
+        movedAppointments: movedAppointments.count,
+      };
+    });
+  }
 
   async createVehicle(workspaceId: string, input: CreateVehicleInput): Promise<Vehicle> {
     await this.getById(workspaceId, input.clientId);

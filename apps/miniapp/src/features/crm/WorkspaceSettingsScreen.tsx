@@ -194,6 +194,11 @@ export function WorkspaceSettingsScreen() {
                 subtitle="Кто и что менял в мастерской"
                 onClick={() => navigate(`/workspace/${workspaceId}/audit`)}
               />
+              <ListItem
+                title="Выгрузка данных"
+                subtitle="Забрать клиентов, заказы и оплаты файлом"
+                onClick={() => navigate(`/workspace/${workspaceId}/export`)}
+              />
             </>
           ) : null}
         </div>

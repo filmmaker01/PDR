@@ -29,6 +29,8 @@ export const envSchema = z
     TELEGRAM_INITDATA_MAX_AGE_SEC: z.coerce.number().int().positive().default(300),
     TELEGRAM_LOGIN_MAX_AGE_SEC: z.coerce.number().int().positive().default(300),
 
+    /// Квота хранилища на мастерскую, мегабайты. 0 — без ограничения.
+    STORAGE_WORKSPACE_QUOTA_MB: z.coerce.number().int().min(0).default(20_480),
     STORAGE_DRIVER: z.enum(['s3', 'local']).default('local'),
     STORAGE_LOCAL_DIR: z.string().default('./storage-local'),
     S3_ENDPOINT: z.string().default(''),

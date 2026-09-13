@@ -12,6 +12,7 @@ import {
   createClientSchema,
   createVehicleSchema,
   updateClientSchema,
+  mergeClientsSchema,
   updateVehicleSchema,
 } from '../dto/crm.dto';
 
@@ -204,5 +205,26 @@ export class ClientsController {
   ) {
     const vehicle = await this.clients.updateVehicle(ws.workspaceId, vehicleId, body as never);
     return { id: vehicle.id, plate: vehicle.plate };
+  }
+
+  @Post('clients/:clientId/anonymize')
+  @Can('clients.manage')
+  @Audited({ entityType: 'client', action: 'anonymize', idFrom: { param: 'clientId' } })
+  @ApiOperation({ summary: 'Удаление персональных данных клиента' })
+  async anonymize(@Ws() ws: WorkspaceContext, @Param('clientId') clientId: string) {
+    const client = await this.clients.anonymize(ws.workspaceId, clientId);
+    return { id: client.id, name: client.name, anonymizedAt: client.anonymizedAt?.toISOString() };
+  }
+
+  @Post('clients/:clientId/merge')
+  @Can('clients.manage')
+  @Audited({ entityType: 'client', action: 'merge', idFrom: { param: 'clientId' } })
+  @ApiOperation({ summary: 'Объединение дублей клиента' })
+  async merge(
+    @Ws() ws: WorkspaceContext,
+    @Param('clientId') clientId: string,
+    @Body(zodBody(mergeClientsSchema)) body: { sourceClientId: string },
+  ) {
+    return this.clients.merge(ws.workspaceId, clientId, body.sourceClientId);
   }
 }

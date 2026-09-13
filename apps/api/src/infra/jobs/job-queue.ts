@@ -11,6 +11,7 @@ export const JOB = {
   filesProcess: 'files.process',
   filesCleanup: 'files.cleanup',
   exportRun: 'export.run',
+  exportCleanup: 'export.cleanup',
   idempotencyCleanup: 'idempotency.cleanup',
   sessionsCleanup: 'sessions.cleanup',
   backupVerify: 'backup.verify',
@@ -32,6 +33,7 @@ export interface JobPayloads {
   [JOB.filesProcess]: { fileId: string };
   [JOB.filesCleanup]: Record<string, never>;
   [JOB.exportRun]: { exportId: string };
+  [JOB.exportCleanup]: Record<string, never>;
   [JOB.idempotencyCleanup]: Record<string, never>;
   [JOB.sessionsCleanup]: Record<string, never>;
   [JOB.backupVerify]: Record<string, never>;

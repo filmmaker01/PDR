@@ -33,6 +33,8 @@ import { ExamsModule } from './modules/learning/exams/exams.module';
 import { CrmModule } from './modules/crm/crm.module';
 import { TelegramAppModule } from './modules/telegram/telegram-app.module';
 import { ClubModule } from './modules/club/club.module';
+import { ExportModule } from './modules/export/export.module';
+import { BackupModule } from './modules/backup/backup.module';
 
 const REDACT_PATHS = [
   'req.headers.authorization',
@@ -81,6 +83,8 @@ const REDACT_PATHS = [
     ExamsModule,
     CrmModule,
     ClubModule,
+    ExportModule,
+    BackupModule,
     HealthModule,
     MeModule,
     AdminModule,

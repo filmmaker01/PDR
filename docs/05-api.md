@@ -324,3 +324,11 @@
 - `GET /club/status` отдаёт состояние членства, срок доступа и ссылку-заявку. Ссылка приходит только при действующем доступе: показывать её тем, кого всё равно отклонят, бессмысленно.
 - `GET /admin/club/memberships` (фильтр `withErrors`) и `GET /admin/club/events` показывают состояние и историю; `POST /admin/club/memberships/:userId/approve` и `.../remove` — ручные действия, `POST /admin/club/audit` запускает сверку немедленно.
 - Заявки и выходы приходят вебхуком бота (`chat_join_request`, `chat_member`) и обрабатываются очередью, а не в обработчике запроса.
+
+## Реализация выгрузок (этап 15)
+
+- `POST /workspaces/:id/exports` (право `export.run`, работает и при истёкшем доступе) ставит выгрузку в очередь; `GET .../exports/:exportId` показывает статус, `GET .../exports/:exportId/download` отдаёт подписанную ссылку.
+- `POST /admin/exports` заказывает выгрузки обучения и журнала действий; попытка заказать через него выгрузку CRM отвергается.
+- `POST /workspaces/:id/clients/:clientId/anonymize` стирает персональные данные клиента, `POST .../merge` объединяет дубли (оба — право `clients.manage`).
+- `GET /workspaces/:id` дополнительно отдаёт `storage` с занятым местом, квотой и признаком предупреждения.
+- `GET /admin/dashboard` дополнительно отдаёт `backups` (состояние копий), `learning` и `crm` — сводные счётчики.

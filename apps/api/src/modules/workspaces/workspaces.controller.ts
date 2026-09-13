@@ -15,6 +15,8 @@ import { zodBody } from '@/common/pipes/zod-validation.pipe';
 import { AppError } from '@/common/errors/app.error';
 import { CurrentAuth, type AuthContext } from '@/modules/auth/decorators/auth.decorators';
 import { TelegramService } from '@/infra/telegram/telegram.service';
+import { FilesService } from '@/modules/files/files.service';
+import { AppConfigService } from '@/config/config.service';
 import { Audited } from '@/modules/audit/audit.interceptor';
 import { AuditService } from '@/modules/audit/audit.service';
 import { z } from 'zod';
@@ -48,11 +50,16 @@ export class WorkspacesController {
     private readonly invitations: InvitationsService,
     private readonly telegram: TelegramService,
     private readonly audit: AuditService,
+    private readonly files: FilesService,
+    private readonly config: AppConfigService,
   ) {}
 
   @Get()
   @ApiOperation({ summary: 'Мастерская: настройки, роль, состояние доступа' })
   async get(@Ws() ws: WorkspaceContext) {
+    const usedBytes = await this.files.workspaceUsageBytes(ws.workspaceId);
+    const quotaBytes = this.config.env.STORAGE_WORKSPACE_QUOTA_MB * 1024 * 1024;
+
     return {
       id: ws.workspace.id,
       name: ws.workspace.name,
@@ -67,6 +74,12 @@ export class WorkspacesController {
       access: {
         active: ws.hasActiveAccess,
         validUntil: ws.accessValidUntil?.toISOString() ?? null,
+      },
+      storage: {
+        usedBytes,
+        quotaBytes,
+        // Предупреждение показывается заранее, а не в момент отказа загрузки.
+        warn: quotaBytes > 0 && usedBytes > quotaBytes * 0.8,
       },
     };
   }

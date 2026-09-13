@@ -32,4 +32,15 @@ aws s3 ls "s3://${BACKUP_S3_BUCKET}/db/" --recursive \
       [ -n "${old}" ] && aws s3 rm "s3://${BACKUP_S3_BUCKET}/${old}" --only-show-errors
     done
 
+# Отметка в базе: по ней приложение показывает состояние копий и задача
+# backup.verify замечает пропавший бэкап.
+if command -v psql >/dev/null 2>&1; then
+  psql "${DATABASE_URL}" -v ON_ERROR_STOP=1 -c \
+    "INSERT INTO backup_runs (id, label, object_key, size_bytes) \
+     VALUES (gen_random_uuid(), '${LABEL}', '${KEY}', ${SIZE})" >/dev/null \
+    || echo "[backup] не удалось записать отметку в базу" >&2
+else
+  echo "[backup] psql недоступен, отметка в базе пропущена" >&2
+fi
+
 echo "[backup] готово"

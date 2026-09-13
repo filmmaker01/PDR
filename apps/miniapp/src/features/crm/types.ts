@@ -136,6 +136,7 @@ export interface WorkspaceInfo {
   memberId: string;
   permissions: string[];
   access: { active: boolean; validUntil: string | null };
+  storage?: { usedBytes: number; quotaBytes: number; warn: boolean };
 }
 
 export interface MemberInfo {

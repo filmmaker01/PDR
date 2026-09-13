@@ -20,6 +20,7 @@ import { PaymentJournalScreen } from '@/features/crm/PaymentJournalScreen';
 import { AnalyticsScreen } from '@/features/crm/AnalyticsScreen';
 import { EmployeesScreen } from '@/features/crm/EmployeesScreen';
 import { WorkspaceAuditScreen } from '@/features/crm/WorkspaceAuditScreen';
+import { ExportScreen } from '@/features/crm/ExportScreen';
 import { EstimateEditorScreen } from '@/features/crm/EstimateEditorScreen';
 import { StartActionRedirect } from './StartActionRedirect';
 import { CourseMapRoute, LearningEntryScreen } from '@/features/learning/CourseMapScreen';
@@ -82,6 +83,7 @@ export const router = createBrowserRouter([
       { path: 'workspace/:workspaceId/analytics', element: <AnalyticsScreen /> },
       { path: 'workspace/:workspaceId/members', element: <EmployeesScreen /> },
       { path: 'workspace/:workspaceId/audit', element: <WorkspaceAuditScreen /> },
+      { path: 'workspace/:workspaceId/export', element: <ExportScreen /> },
       { path: 'workspace/:workspaceId/estimates/:estimateId', element: <EstimateEditorScreen /> },
       { path: 'club', element: <ClubScreen /> },
       { path: 'profile', element: <ProfileScreen /> },
