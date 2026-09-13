@@ -2,6 +2,7 @@ import { createBrowserRouter } from 'react-router-dom';
 import { RootLayout } from './RootLayout';
 import { PlaceholderScreen } from './PlaceholderScreen';
 import { ProfileScreen } from '@/features/profile/ProfileScreen';
+import { NotificationsScreen } from '@/features/profile/NotificationsScreen';
 import { InviteScreen } from '@/features/invite/InviteScreen';
 import { WorkspacePicker } from '@/features/workspace/WorkspacePicker';
 import { WorkspaceScreen } from '@/features/workspace/WorkspaceScreen';
@@ -20,6 +21,7 @@ export const router = createBrowserRouter([
       { path: 'workspace', element: <WorkspacePicker /> },
       { path: 'workspace/:workspaceId', element: <WorkspaceScreen /> },
       { path: 'profile', element: <ProfileScreen /> },
+      { path: 'profile/notifications', element: <NotificationsScreen /> },
       { path: 'invite/:token', element: <InviteScreen /> },
       { path: '*', element: <PlaceholderScreen title="Страница не найдена" /> },
     ],

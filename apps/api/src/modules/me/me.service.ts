@@ -3,6 +3,7 @@ import type { MeResponse, MeProductAccess, MeWorkspace } from '@pdr/shared';
 import { AccessService } from '@/modules/access/access.service';
 import { UsersService } from '@/modules/users/users.service';
 import { WorkspacesService } from '@/modules/workspaces/workspaces.service';
+import { NotificationsService } from '@/modules/notifications/notifications.service';
 import type { AuthContext } from '@/modules/auth/decorators/auth.decorators';
 
 /**
@@ -16,6 +17,7 @@ export class MeService {
     private readonly users: UsersService,
     private readonly workspaces: WorkspacesService,
     private readonly access: AccessService,
+    private readonly notifications: NotificationsService,
   ) {}
 
   async build(auth: AuthContext): Promise<MeResponse> {
@@ -46,6 +48,7 @@ export class MeService {
     }));
 
     const clubGrant = grants.find((g) => g.product === 'club');
+    const prefs = await this.notifications.preferences(user.id);
 
     return {
       user: {
@@ -69,7 +72,15 @@ export class MeService {
         validUntil: clubGrant?.validUntil?.toISOString() ?? null,
         status: 'none',
       },
-      notifications: {},
+      notifications: {
+        reviewResults: prefs.reviewResults,
+        stageUnlocked: prefs.stageUnlocked,
+        appointmentReminders: prefs.appointmentReminders,
+        orderAssigned: prefs.orderAssigned,
+        accessExpiring: prefs.accessExpiring,
+        reviewQueueDigest: prefs.reviewQueueDigest,
+        reminderLeadMinutes: prefs.reminderLeadMinutes,
+      },
     };
   }
 

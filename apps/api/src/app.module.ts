@@ -22,6 +22,9 @@ import { WorkspacesModule } from './modules/workspaces/workspaces.module';
 import { WorkspaceGuard } from './modules/workspaces/guards/workspace.guard';
 import { AdminModule } from './modules/admin/admin.module';
 import { FilesModule } from './modules/files/files.module';
+import { NotificationsModule } from './modules/notifications/notifications.module';
+import { AuditModule } from './modules/audit/audit.module';
+import { AuditInterceptor } from './modules/audit/audit.interceptor';
 import { TelegramAppModule } from './modules/telegram/telegram-app.module';
 
 const REDACT_PATHS = [
@@ -62,6 +65,8 @@ const REDACT_PATHS = [
     AccessModule,
     WorkspacesModule,
     FilesModule,
+    NotificationsModule,
+    AuditModule,
     HealthModule,
     MeModule,
     AdminModule,
@@ -74,6 +79,7 @@ const REDACT_PATHS = [
     { provide: APP_GUARD, useClass: WorkspaceGuard },
     { provide: APP_GUARD, useClass: RateLimitGuard },
     { provide: APP_INTERCEPTOR, useClass: IdempotencyInterceptor },
+    { provide: APP_INTERCEPTOR, useClass: AuditInterceptor },
   ],
 })
 export class AppModule implements NestModule {

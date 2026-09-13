@@ -8,12 +8,16 @@ import {
   Param,
   Patch,
   Post,
+  Query,
 } from '@nestjs/common';
 import { ApiOperation, ApiTags } from '@nestjs/swagger';
 import { zodBody } from '@/common/pipes/zod-validation.pipe';
 import { AppError } from '@/common/errors/app.error';
 import { CurrentAuth, type AuthContext } from '@/modules/auth/decorators/auth.decorators';
 import { TelegramService } from '@/infra/telegram/telegram.service';
+import { Audited } from '@/modules/audit/audit.interceptor';
+import { AuditService } from '@/modules/audit/audit.service';
+import { z } from 'zod';
 import { WorkspacesService } from './workspaces.service';
 import { InvitationsService } from './invitations.service';
 import { AllowExpiredAccess, Can, Workspace } from './guards/workspace.guard';
@@ -26,6 +30,15 @@ import {
   updateWorkspaceSchema,
 } from './dto/workspaces.dto';
 
+const auditQuerySchema = z.object({
+  entityType: z.string().max(60).optional(),
+  entityId: z.string().max(60).optional(),
+  from: z.coerce.date().optional(),
+  to: z.coerce.date().optional(),
+  limit: z.coerce.number().int().min(1).max(200).default(100),
+  cursor: z.string().optional(),
+});
+
 @ApiTags('workspaces')
 @Controller('workspaces/:workspaceId')
 @Workspace()
@@ -34,6 +47,7 @@ export class WorkspacesController {
     private readonly workspaces: WorkspacesService,
     private readonly invitations: InvitationsService,
     private readonly telegram: TelegramService,
+    private readonly audit: AuditService,
   ) {}
 
   @Get()
@@ -59,6 +73,7 @@ export class WorkspacesController {
 
   @Patch()
   @Can('workspace.manage')
+  @Audited({ entityType: 'workspace', idFrom: { param: 'workspaceId' } })
   @ApiOperation({ summary: 'Изменение настроек мастерской' })
   async update(
     @Ws() ws: WorkspaceContext,
@@ -66,6 +81,29 @@ export class WorkspacesController {
   ) {
     const updated = await this.workspaces.update(ws.workspaceId, body);
     return { id: updated.id, name: updated.name, timezone: updated.timezone };
+  }
+
+  @Get('audit')
+  @Can('audit.read')
+  @AllowExpiredAccess()
+  @ApiOperation({ summary: 'Журнал действий мастерской' })
+  async auditLog(@Ws() ws: WorkspaceContext, @Query() query: Record<string, string>) {
+    const parsed = auditQuerySchema.parse(query);
+    const result = await this.audit.listWorkspace(ws.workspaceId, parsed);
+    return {
+      items: result.items.map((row) => ({
+        id: row.id.toString(),
+        createdAt: row.createdAt.toISOString(),
+        actorUserId: row.actorUserId,
+        actorRoleContext: row.actorRoleContext,
+        entityType: row.entityType,
+        entityId: row.entityId,
+        action: row.action,
+        before: row.before,
+        after: row.after,
+      })),
+      nextCursor: result.nextCursor,
+    };
   }
 
   @Get('members')
@@ -88,6 +126,7 @@ export class WorkspacesController {
 
   @Patch('members/:memberId')
   @Can('members.manage')
+  @Audited({ entityType: 'workspace_member', idFrom: { param: 'memberId' } })
   @ApiOperation({ summary: 'Изменение сотрудника' })
   async updateMember(
     @Ws() ws: WorkspaceContext,
@@ -100,6 +139,11 @@ export class WorkspacesController {
 
   @Post('members/transfer-ownership')
   @Can('members.manage')
+  @Audited({
+    entityType: 'workspace',
+    action: 'transfer_ownership',
+    idFrom: { param: 'workspaceId' },
+  })
   @HttpCode(HttpStatus.NO_CONTENT)
   @ApiOperation({ summary: 'Передача владения мастерской' })
   async transferOwnership(
@@ -126,6 +170,7 @@ export class WorkspacesController {
 
   @Post('invitations')
   @Can('members.manage')
+  @Audited({ entityType: 'invitation', action: 'create', idFrom: { responseField: 'id' } })
   @ApiOperation({ summary: 'Создание приглашения сотрудника' })
   async createInvitation(
     @Ws() ws: WorkspaceContext,
@@ -152,6 +197,7 @@ export class WorkspacesController {
 
   @Delete('invitations/:invitationId')
   @Can('members.manage')
+  @Audited({ entityType: 'invitation', action: 'revoke', idFrom: { param: 'invitationId' } })
   @HttpCode(HttpStatus.NO_CONTENT)
   @ApiOperation({ summary: 'Отзыв приглашения' })
   async revokeInvitation(

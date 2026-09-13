@@ -1,5 +1,6 @@
 import { useState } from 'react';
-import { Badge, Button, Card, Field, Input } from '@pdr/ui';
+import { useNavigate } from 'react-router-dom';
+import { Badge, Button, Card, Field, Input, ListItem } from '@pdr/ui';
 import { useMutation, useQueryClient } from '@tanstack/react-query';
 import { ApiError } from '@pdr/api-client';
 import { api } from '@/shared/api';
@@ -11,6 +12,7 @@ export function ProfileScreen() {
   const me = useMe();
   const { reload, logout } = useAuth();
   const queryClient = useQueryClient();
+  const navigate = useNavigate();
   const [phone, setPhone] = useState(me.user.phone ?? '');
   const [phoneError, setPhoneError] = useState<string | null>(null);
 
@@ -111,6 +113,16 @@ export function ProfileScreen() {
           >
             Сохранить
           </Button>
+        </div>
+      </Card>
+
+      <Card flat>
+        <div className="pdr-list">
+          <ListItem
+            title="Уведомления"
+            subtitle="Какие сообщения присылать в Telegram"
+            onClick={() => navigate('/profile/notifications')}
+          />
         </div>
       </Card>
 

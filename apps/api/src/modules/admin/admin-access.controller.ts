@@ -9,12 +9,20 @@ import {
   type AuthContext,
 } from '@/modules/auth/decorators/auth.decorators';
 import { AccessService } from '@/modules/access/access.service';
+import { Audited } from '@/modules/audit/audit.interceptor';
+import { NotificationsService } from '@/modules/notifications/notifications.service';
 import {
   createGrantSchema,
   extendGrantSchema,
   listGrantsQuerySchema,
   revokeGrantSchema,
 } from './dto/admin.dto';
+
+const PRODUCT_LABELS: Record<string, string> = {
+  course: 'Доступ к курсу',
+  crm: 'Доступ к CRM мастерской',
+  club: 'Доступ к закрытому клубу',
+};
 
 function serialize(grant: AccessGrant): Record<string, unknown> {
   return {
@@ -38,7 +46,10 @@ function serialize(grant: AccessGrant): Record<string, unknown> {
 @Controller('admin/access-grants')
 @PlatformRoles('admin')
 export class AdminAccessController {
-  constructor(private readonly access: AccessService) {}
+  constructor(
+    private readonly access: AccessService,
+    private readonly notifications: NotificationsService,
+  ) {}
 
   @Get()
   @ApiOperation({ summary: 'Список доступов с фильтрами' })
@@ -59,6 +70,7 @@ export class AdminAccessController {
   }
 
   @Post()
+  @Audited({ entityType: 'access_grant', action: 'grant', idFrom: { responseField: 'id' } })
   @ApiOperation({ summary: 'Выдача доступа' })
   async create(
     @CurrentAuth() auth: AuthContext,
@@ -80,6 +92,7 @@ export class AdminAccessController {
   }
 
   @Post(':grantId/extend')
+  @Audited({ entityType: 'access_grant', action: 'extend', idFrom: { param: 'grantId' } })
   @ApiOperation({ summary: 'Продление доступа' })
   async extend(
     @Param('grantId') grantId: string,
@@ -90,6 +103,7 @@ export class AdminAccessController {
   }
 
   @Post(':grantId/revoke')
+  @Audited({ entityType: 'access_grant', action: 'revoke', idFrom: { param: 'grantId' } })
   @ApiOperation({ summary: 'Отзыв доступа' })
   async revoke(
     @CurrentAuth() auth: AuthContext,
@@ -97,10 +111,22 @@ export class AdminAccessController {
     @Body(zodBody(revokeGrantSchema)) body: { reason: string },
   ) {
     assertUuid(grantId);
-    return serialize(await this.access.revoke(grantId, auth.user.id, body.reason));
+    const grant = await this.access.revoke(grantId, auth.user.id, body.reason);
+
+    // Пользователь должен узнать об отзыве, не обнаружив его в интерфейсе.
+    if (grant.userId) {
+      await this.notifications.notify({
+        userId: grant.userId,
+        type: 'access_revoked',
+        payload: { productLabel: PRODUCT_LABELS[grant.product], reason: body.reason },
+        dedupeKey: `access_revoked:${grant.id}`,
+      });
+    }
+    return serialize(grant);
   }
 
   @Post(':grantId/suspend')
+  @Audited({ entityType: 'access_grant', action: 'suspend', idFrom: { param: 'grantId' } })
   @ApiOperation({ summary: 'Приостановка доступа' })
   async suspend(
     @Param('grantId') grantId: string,
@@ -111,6 +137,7 @@ export class AdminAccessController {
   }
 
   @Post(':grantId/resume')
+  @Audited({ entityType: 'access_grant', action: 'resume', idFrom: { param: 'grantId' } })
   @ApiOperation({ summary: 'Возобновление доступа' })
   async resume(
     @Param('grantId') grantId: string,

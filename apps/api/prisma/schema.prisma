@@ -80,6 +80,9 @@ model User {
   grantedAccess        AccessGrant[]         @relation("GrantGrantedBy")
   revokedAccess        AccessGrant[]         @relation("GrantRevokedBy")
   files                StoredFile[]          @relation("FileOwner")
+  notifications        Notification[]
+  notificationPreference NotificationPreference?
+  auditEntries         AuditLog[]
 
   @@index([username])
   @@index([phone])
@@ -194,6 +197,7 @@ model Workspace {
   invitations WorkspaceInvitation[]
   grants      AccessGrant[]
   files       StoredFile[]
+  auditEntries AuditLog[]
 
   @@map("workspaces")
 }
@@ -371,4 +375,80 @@ model StoredFile {
   @@index([ownerUserId, scope])
   @@index([status, createdAt])
   @@map("files")
+}
+
+// ── Уведомления и аудит (этап 4) ─────────────────────────────────────────────
+
+enum NotificationStatus {
+  queued
+  sent
+  failed
+  skipped
+
+  @@map("notification_status")
+}
+
+model NotificationPreference {
+  userId               String   @id @map("user_id") @db.Uuid
+  reviewResults        Boolean  @default(true) @map("review_results")
+  stageUnlocked        Boolean  @default(true) @map("stage_unlocked")
+  appointmentReminders Boolean  @default(true) @map("appointment_reminders")
+  orderAssigned        Boolean  @default(true) @map("order_assigned")
+  accessExpiring       Boolean  @default(true) @map("access_expiring")
+  reviewQueueDigest    Boolean  @default(true) @map("review_queue_digest")
+  /// За сколько минут напоминать о записи.
+  reminderLeadMinutes  Int      @default(60) @map("reminder_lead_minutes")
+  updatedAt            DateTime @updatedAt @map("updated_at") @db.Timestamptz(6)
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@map("notification_preferences")
+}
+
+model Notification {
+  id                String             @id @default(uuid()) @db.Uuid
+  userId            String             @map("user_id") @db.Uuid
+  type              String
+  payload           Json               @default("{}")
+  /// Защита от повторной отправки одного и того же события.
+  dedupeKey         String?            @unique @map("dedupe_key")
+  status            NotificationStatus @default(queued)
+  telegramMessageId BigInt?            @map("telegram_message_id")
+  error             String?
+  attempts          Int                @default(0)
+  scheduledAt       DateTime           @default(now()) @map("scheduled_at") @db.Timestamptz(6)
+  sentAt            DateTime?          @map("sent_at") @db.Timestamptz(6)
+  createdAt         DateTime           @default(now()) @map("created_at") @db.Timestamptz(6)
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId, createdAt])
+  @@index([status, scheduledAt])
+  @@map("notifications")
+}
+
+model AuditLog {
+  id              BigInt   @id @default(autoincrement())
+  requestId       String?  @map("request_id")
+  /// null — действие выполнено системой или фоновой задачей.
+  actorUserId     String?  @map("actor_user_id") @db.Uuid
+  actorRoleContext String? @map("actor_role_context")
+  workspaceId     String?  @map("workspace_id") @db.Uuid
+  entityType      String   @map("entity_type")
+  entityId        String?  @map("entity_id")
+  action          String
+  before          Json?
+  after           Json?
+  ip              String?
+  userAgent       String?  @map("user_agent")
+  createdAt       DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
+
+  actor     User?      @relation(fields: [actorUserId], references: [id], onDelete: SetNull)
+  workspace Workspace? @relation(fields: [workspaceId], references: [id], onDelete: SetNull)
+
+  @@index([workspaceId, createdAt])
+  @@index([entityType, entityId])
+  @@index([actorUserId, createdAt])
+  @@index([createdAt])
+  @@map("audit_log")
 }

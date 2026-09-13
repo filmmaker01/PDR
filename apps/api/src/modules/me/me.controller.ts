@@ -4,6 +4,8 @@ import { updateMeSchema, type MeResponse } from '@pdr/shared';
 import { zodBody } from '@/common/pipes/zod-validation.pipe';
 import { UsersService } from '@/modules/users/users.service';
 import { CurrentAuth, type AuthContext } from '@/modules/auth/decorators/auth.decorators';
+import { NotificationsService } from '@/modules/notifications/notifications.service';
+import { notificationPreferencesSchema } from '@/modules/notifications/dto/notifications.dto';
 import { MeService } from './me.service';
 
 @ApiTags('me')
@@ -12,6 +14,7 @@ export class MeController {
   constructor(
     private readonly me: MeService,
     private readonly users: UsersService,
+    private readonly notifications: NotificationsService,
   ) {}
 
   @Get()
@@ -30,6 +33,24 @@ export class MeController {
     await this.me.updateProfile(auth.user.id, body);
     const user = await this.users.getById(auth.user.id);
     return this.me.build({ ...auth, user });
+  }
+
+  @Patch('notifications')
+  @ApiOperation({ summary: 'Настройки уведомлений' })
+  async updateNotifications(
+    @CurrentAuth() auth: AuthContext,
+    @Body(zodBody(notificationPreferencesSchema)) body: Record<string, boolean | number>,
+  ): Promise<Record<string, boolean | number>> {
+    const prefs = await this.notifications.updatePreferences(auth.user.id, body);
+    return {
+      reviewResults: prefs.reviewResults,
+      stageUnlocked: prefs.stageUnlocked,
+      appointmentReminders: prefs.appointmentReminders,
+      orderAssigned: prefs.orderAssigned,
+      accessExpiring: prefs.accessExpiring,
+      reviewQueueDigest: prefs.reviewQueueDigest,
+      reminderLeadMinutes: prefs.reminderLeadMinutes,
+    };
   }
 
   @Post('bot-write-allowed')

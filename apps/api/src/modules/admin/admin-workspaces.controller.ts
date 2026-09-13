@@ -11,6 +11,7 @@ import {
 } from '@/modules/auth/decorators/auth.decorators';
 import { WorkspacesService } from '@/modules/workspaces/workspaces.service';
 import { AccessService } from '@/modules/access/access.service';
+import { Audited } from '@/modules/audit/audit.interceptor';
 import { createWorkspaceSchema } from './dto/admin.dto';
 
 const listQuery = z.object({
@@ -84,6 +85,7 @@ export class AdminWorkspacesController {
   }
 
   @Post()
+  @Audited({ entityType: 'workspace', action: 'create', idFrom: { responseField: 'id' } })
   @ApiOperation({ summary: 'Создание мастерской с владельцем' })
   async create(
     @CurrentAuth() auth: AuthContext,
@@ -135,6 +137,7 @@ export class AdminWorkspacesController {
   }
 
   @Patch(':workspaceId')
+  @Audited({ entityType: 'workspace', idFrom: { param: 'workspaceId' } })
   @ApiOperation({ summary: 'Переименование или архивирование мастерской' })
   async patch(
     @Param('workspaceId') workspaceId: string,

@@ -23,6 +23,7 @@ import {
 import { UsersService } from '@/modules/users/users.service';
 import { SessionService } from '@/modules/auth/session.service';
 import { AccessService } from '@/modules/access/access.service';
+import { Audited } from '@/modules/audit/audit.interceptor';
 import { banUserSchema, platformRoleSchema, userSearchQuerySchema } from './dto/admin.dto';
 
 @ApiTags('admin')
@@ -125,6 +126,7 @@ export class AdminUsersController {
   }
 
   @Post(':userId/platform-roles')
+  @Audited({ entityType: 'user', action: 'grant_role', idFrom: { param: 'userId' } })
   @HttpCode(HttpStatus.NO_CONTENT)
   @ApiOperation({ summary: 'Назначение роли платформы' })
   async grantRole(
@@ -137,6 +139,7 @@ export class AdminUsersController {
   }
 
   @Delete(':userId/platform-roles/:role')
+  @Audited({ entityType: 'user', action: 'revoke_role', idFrom: { param: 'userId' } })
   @HttpCode(HttpStatus.NO_CONTENT)
   @ApiOperation({ summary: 'Снятие роли платформы' })
   async revokeRole(
@@ -153,6 +156,7 @@ export class AdminUsersController {
   }
 
   @Post(':userId/ban')
+  @Audited({ entityType: 'user', action: 'ban', idFrom: { param: 'userId' } })
   @HttpCode(HttpStatus.NO_CONTENT)
   @ApiOperation({ summary: 'Блокировка пользователя с отзывом сессий' })
   async ban(
@@ -167,6 +171,7 @@ export class AdminUsersController {
   }
 
   @Post(':userId/unban')
+  @Audited({ entityType: 'user', action: 'unban', idFrom: { param: 'userId' } })
   @HttpCode(HttpStatus.NO_CONTENT)
   @ApiOperation({ summary: 'Снятие блокировки' })
   async unban(@Param('userId') userId: string): Promise<void> {
@@ -175,6 +180,7 @@ export class AdminUsersController {
   }
 
   @Post(':userId/revoke-sessions')
+  @Audited({ entityType: 'user', action: 'revoke_sessions', idFrom: { param: 'userId' } })
   @ApiOperation({ summary: 'Отзыв всех сессий пользователя' })
   async revokeSessions(@Param('userId') userId: string): Promise<{ revoked: number }> {
     await this.users.getById(userId);
