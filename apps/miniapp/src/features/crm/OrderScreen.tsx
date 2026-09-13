@@ -1,0 +1,345 @@
+import { useState } from 'react';
+import { useNavigate, useParams } from 'react-router-dom';
+import { useMutation, useQueryClient } from '@tanstack/react-query';
+import { ApiError } from '@pdr/api-client';
+import {
+  Badge,
+  Button,
+  Card,
+  EmptyState,
+  Field,
+  Sheet,
+  SkeletonList,
+  Tabs,
+  Textarea,
+} from '@pdr/ui';
+import { api } from '@/shared/api';
+import { formatDateTime, formatMinor, formatPhoneRu } from '@/shared/format';
+import { alertDialog, confirmDialog, haptic } from '@/shared/telegram';
+import { useMembers, useOrder, useWorkspace } from './api';
+import { PAYMENT_LABELS, STATUS_TONES, type OrderStatus } from './types';
+
+type Tab = 'work' | 'photos' | 'estimate' | 'payments';
+
+export function OrderScreen() {
+  const { workspaceId = '', orderId = '' } = useParams();
+  const navigate = useNavigate();
+  const queryClient = useQueryClient();
+  const [tab, setTab] = useState<Tab>('work');
+  const [statusSheet, setStatusSheet] = useState(false);
+  const [pendingStatus, setPendingStatus] = useState<OrderStatus | null>(null);
+  const [comment, setComment] = useState('');
+
+  const order = useOrder(workspaceId, orderId);
+  const workspace = useWorkspace(workspaceId);
+  const members = useMembers(workspaceId);
+
+  const invalidate = async (): Promise<void> => {
+    await queryClient.invalidateQueries({ queryKey: ['crm'] });
+  };
+
+  const transition = useMutation({
+    mutationFn: (input: { to: OrderStatus; comment?: string }) =>
+      api.post(`/workspaces/${workspaceId}/orders/${orderId}/transition`, input),
+    onSuccess: async () => {
+      haptic('success');
+      setStatusSheet(false);
+      setPendingStatus(null);
+      setComment('');
+      await invalidate();
+    },
+    onError: async (e) => {
+      haptic('error');
+      await alertDialog(e instanceof ApiError ? e.message : 'Не удалось изменить статус');
+    },
+  });
+
+  const assign = useMutation({
+    mutationFn: (assigneeMemberId: string) =>
+      api.patch(`/workspaces/${workspaceId}/orders/${orderId}`, { assigneeMemberId }),
+    onSuccess: invalidate,
+    onError: async (e) =>
+      alertDialog(e instanceof ApiError ? e.message : 'Не удалось назначить исполнителя'),
+  });
+
+  if (order.isLoading) return <SkeletonList rows={4} />;
+  if (order.isError) {
+    return (
+      <div className="pdr-stack">
+        <EmptyState
+          title="Заказ недоступен"
+          description={
+            order.error instanceof ApiError
+              ? order.error.message
+              : 'Возможно, он в другой мастерской'
+          }
+        />
+        <Button
+          variant="secondary"
+          block
+          onClick={() => navigate(`/workspace/${workspaceId}/orders`)}
+        >
+          К списку заказов
+        </Button>
+      </div>
+    );
+  }
+
+  const data = order.data!;
+  const canEdit = workspace.data?.access.active ?? false;
+  const canAssign = workspace.data?.permissions.includes('orders.assign') ?? false;
+
+  return (
+    <div className="pdr-stack">
+      <Card>
+        <div className="pdr-row" style={{ marginBottom: 8 }}>
+          <span className="pdr-grow">
+            <span style={{ display: 'block', fontSize: 18, fontWeight: 700 }}>
+              Заказ №{data.number}
+            </span>
+            <span className="pdr-hint">{data.title ?? 'Без описания'}</span>
+          </span>
+          <Badge tone={STATUS_TONES[data.status]}>{data.statusLabel}</Badge>
+        </div>
+
+        <div className="pdr-row" style={{ flexWrap: 'wrap', gap: 6 }}>
+          <Badge tone={data.paymentStatus === 'paid' ? 'success' : 'muted'}>
+            {PAYMENT_LABELS[data.paymentStatus]}
+          </Badge>
+          {data.agreedTotalMinor !== null ? (
+            <Badge tone="muted">
+              {formatMinor(data.paidMinor, data.currency)} из{' '}
+              {formatMinor(data.agreedTotalMinor, data.currency)}
+            </Badge>
+          ) : (
+            <Badge tone="muted">Смета не согласована</Badge>
+          )}
+          {data.debtMinor > 0 ? (
+            <Badge tone="danger">Долг {formatMinor(data.debtMinor, data.currency)}</Badge>
+          ) : null}
+        </div>
+
+        {canEdit && data.allowedTransitions.length > 0 ? (
+          <Button block style={{ marginTop: 12 }} onClick={() => setStatusSheet(true)}>
+            Изменить статус
+          </Button>
+        ) : null}
+      </Card>
+
+      <Tabs
+        tabs={[
+          { value: 'work', label: 'Работа' },
+          { value: 'photos', label: 'Фото' },
+          { value: 'estimate', label: 'Расчёт' },
+          { value: 'payments', label: 'Оплаты' },
+        ]}
+        value={tab}
+        onChange={(v) => setTab(v as Tab)}
+      />
+
+      {tab === 'work' ? (
+        <>
+          <Card>
+            <div className="pdr-stack" style={{ gap: 10 }}>
+              <div>
+                <div className="pdr-hint">Клиент</div>
+                <button
+                  type="button"
+                  style={{ all: 'unset', cursor: 'pointer', fontWeight: 600 }}
+                  onClick={() => navigate(`/workspace/${workspaceId}/clients/${data.client.id}`)}
+                >
+                  {data.client.name}
+                </button>
+                {data.client.phone ? (
+                  <div>
+                    <a href={`tel:${data.client.phone}`} style={{ color: 'var(--pdr-link)' }}>
+                      {formatPhoneRu(data.client.phone)}
+                    </a>
+                  </div>
+                ) : null}
+              </div>
+
+              {data.vehicle ? (
+                <div>
+                  <div className="pdr-hint">Автомобиль</div>
+                  <button
+                    type="button"
+                    style={{ all: 'unset', cursor: 'pointer', fontWeight: 600 }}
+                    onClick={() =>
+                      navigate(`/workspace/${workspaceId}/vehicles/${data.vehicle!.id}`)
+                    }
+                  >
+                    {data.vehicle.make} {data.vehicle.model}
+                    {data.vehicle.plate ? ` · ${data.vehicle.plate}` : ''}
+                  </button>
+                </div>
+              ) : null}
+
+              <div>
+                <div className="pdr-hint">Исполнитель</div>
+                {canAssign && canEdit ? (
+                  <select
+                    className="pdr-select"
+                    value={data.assignee?.id ?? ''}
+                    onChange={(e) => assign.mutate(e.target.value)}
+                  >
+                    <option value="" disabled>
+                      Не назначен
+                    </option>
+                    {(members.data ?? [])
+                      .filter((m) => m.isActive)
+                      .map((member) => (
+                        <option key={member.id} value={member.id}>
+                          {member.name}
+                        </option>
+                      ))}
+                  </select>
+                ) : (
+                  <div style={{ fontWeight: 600 }}>{data.assignee?.name ?? 'Не назначен'}</div>
+                )}
+              </div>
+            </div>
+          </Card>
+
+          {data.damageSummary ? (
+            <Card>
+              <div className="pdr-hint">Повреждения</div>
+              <div style={{ whiteSpace: 'pre-wrap' }}>{data.damageSummary}</div>
+            </Card>
+          ) : null}
+
+          {data.cancelReason ? (
+            <Card>
+              <div className="pdr-hint">Причина отмены</div>
+              <div>{data.cancelReason}</div>
+            </Card>
+          ) : null}
+
+          <NotesEditor
+            workspaceId={workspaceId}
+            orderId={orderId}
+            initial={data.internalNotes ?? ''}
+            disabled={!canEdit}
+            onSaved={invalidate}
+          />
+
+          <h2 className="pdr-subtitle">История</h2>
+          <Card flat>
+            <div className="pdr-list">
+              {data.history.map((entry) => (
+                <div key={entry.id} className="pdr-list__item pdr-list__item--static">
+                  <span className="pdr-grow">
+                    <span style={{ display: 'block' }}>
+                      {entry.fromStatus ? `${entry.fromStatus} → ` : ''}
+                      {entry.toStatus}
+                    </span>
+                    <span className="pdr-hint">
+                      {entry.changedBy}, {formatDateTime(entry.createdAt)}
+                      {entry.comment ? ` · ${entry.comment}` : ''}
+                    </span>
+                  </span>
+                </div>
+              ))}
+            </div>
+          </Card>
+        </>
+      ) : null}
+
+      {tab === 'photos' ? (
+        <EmptyState title="Фотографии" description="Раздел появится на этапе 12." />
+      ) : null}
+      {tab === 'estimate' ? (
+        <EmptyState title="Расчёт" description="Раздел появится на этапе 11." />
+      ) : null}
+      {tab === 'payments' ? (
+        <EmptyState title="Оплаты" description="Раздел появится на этапе 12." />
+      ) : null}
+
+      <Sheet open={statusSheet} onClose={() => setStatusSheet(false)} title="Новый статус">
+        <div className="pdr-stack">
+          {pendingStatus === null ? (
+            data.allowedTransitions.map((transitionTo) => (
+              <Button
+                key={transitionTo.status}
+                variant={transitionTo.status === 'cancelled' ? 'danger' : 'secondary'}
+                block
+                onClick={async () => {
+                  if (transitionTo.status === 'cancelled') {
+                    setPendingStatus(transitionTo.status);
+                    return;
+                  }
+                  if (await confirmDialog(`Перевести заказ в «${transitionTo.label}»?`)) {
+                    transition.mutate({ to: transitionTo.status });
+                  }
+                }}
+              >
+                {transitionTo.label}
+              </Button>
+            ))
+          ) : (
+            <>
+              <Field label="Причина отмены" hint="Обязательно: причина сохранится в истории">
+                <Textarea
+                  value={comment}
+                  onChange={(e) => setComment(e.target.value)}
+                  rows={3}
+                  placeholder="Клиент отказался от ремонта"
+                />
+              </Field>
+              <Button
+                variant="danger"
+                block
+                disabled={comment.trim().length === 0}
+                loading={transition.isPending}
+                onClick={() => transition.mutate({ to: pendingStatus, comment })}
+              >
+                Отменить заказ
+              </Button>
+              <Button variant="secondary" block onClick={() => setPendingStatus(null)}>
+                Назад
+              </Button>
+            </>
+          )}
+        </div>
+      </Sheet>
+    </div>
+  );
+}
+
+function NotesEditor({
+  workspaceId,
+  orderId,
+  initial,
+  disabled,
+  onSaved,
+}: {
+  workspaceId: string;
+  orderId: string;
+  initial: string;
+  disabled: boolean;
+  onSaved: () => Promise<void>;
+}) {
+  const [notes, setNotes] = useState(initial);
+  const save = useMutation({
+    mutationFn: () =>
+      api.patch(`/workspaces/${workspaceId}/orders/${orderId}`, { internalNotes: notes || null }),
+    onSuccess: onSaved,
+  });
+
+  return (
+    <Card>
+      <Field label="Заметки" hint="Видны только сотрудникам мастерской">
+        <Textarea
+          value={notes}
+          onChange={(e) => setNotes(e.target.value)}
+          onBlur={() => {
+            if (!disabled && notes !== initial) save.mutate();
+          }}
+          rows={3}
+          disabled={disabled}
+          placeholder="Что важно помнить по этому заказу"
+        />
+      </Field>
+    </Card>
+  );
+}

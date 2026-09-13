@@ -92,6 +92,9 @@ model User {
   reviews              Review[]              @relation("ReviewAuthor")
   reviewComments       ReviewComment[]       @relation("ReviewCommentAuthor")
   gradedAttempts       ExamAttempt[]         @relation("AttemptGrader")
+  createdClients       Client[]              @relation("ClientCreatedBy")
+  createdOrders        Order[]               @relation("OrderCreatedBy")
+  orderStatusChanges   OrderStatusHistory[]  @relation("OrderStatusChangedBy")
 
   @@index([username])
   @@index([phone])
@@ -207,6 +210,9 @@ model Workspace {
   grants      AccessGrant[]
   files       StoredFile[]
   auditEntries AuditLog[]
+  clients     Client[]
+  vehicles    Vehicle[]
+  orders      Order[]
 
   @@map("workspaces")
 }
@@ -225,6 +231,7 @@ model WorkspaceMember {
 
   workspace Workspace @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
   user      User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  orders    Order[]
 
   @@unique([workspaceId, userId])
   @@unique([workspaceId, id], name: "member_in_workspace")
@@ -1015,4 +1022,151 @@ model AttemptFile {
 
   @@id([attemptId, fileId])
   @@map("attempt_files")
+}
+
+// ── CRM: клиенты, автомобили, заказы (этап 9) ────────────────────────────────
+
+enum OrderStatus {
+  new
+  pending_approval
+  scheduled
+  in_progress
+  ready
+  delivered
+  cancelled
+
+  @@map("order_status")
+}
+
+enum PaymentStatus {
+  unpaid
+  partial
+  paid
+  overpaid
+
+  @@map("payment_status")
+}
+
+model Client {
+  id               String    @id @default(uuid()) @db.Uuid
+  workspaceId      String    @map("workspace_id") @db.Uuid
+  name             String
+  /// E.164 после нормализации.
+  phone            String?
+  phoneExtra       String?   @map("phone_extra")
+  telegramUsername String?   @map("telegram_username")
+  /// На будущее: онлайн-запись клиента.
+  telegramUserId   BigInt?   @map("telegram_user_id")
+  source           String?
+  notes            String?
+  tags             String[]  @default([])
+  archivedAt       DateTime? @map("archived_at") @db.Timestamptz(6)
+  /// Заполняется процедурой удаления персональных данных.
+  anonymizedAt     DateTime? @map("anonymized_at") @db.Timestamptz(6)
+  createdById      String?   @map("created_by") @db.Uuid
+  createdAt        DateTime  @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt        DateTime  @updatedAt @map("updated_at") @db.Timestamptz(6)
+
+  workspace Workspace @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  createdBy User?     @relation("ClientCreatedBy", fields: [createdById], references: [id], onDelete: SetNull)
+  vehicles  Vehicle[]
+  orders    Order[]
+
+  /// Нужен для составных внешних ключей: связь не может пересечь мастерскую.
+  @@unique([workspaceId, id], name: "client_in_workspace")
+  @@index([workspaceId, phone])
+  @@index([workspaceId, archivedAt])
+  @@map("clients")
+}
+
+model Vehicle {
+  id          String    @id @default(uuid()) @db.Uuid
+  workspaceId String    @map("workspace_id") @db.Uuid
+  clientId    String    @map("client_id") @db.Uuid
+  make        String
+  model       String
+  year        Int?
+  color       String?
+  /// Нормализованный госномер.
+  plate       String?
+  vin         String?
+  bodyType    String?   @map("body_type")
+  notes       String?
+  archivedAt  DateTime? @map("archived_at") @db.Timestamptz(6)
+  createdAt   DateTime  @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt   DateTime  @updatedAt @map("updated_at") @db.Timestamptz(6)
+
+  workspace Workspace @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  client    Client    @relation(fields: [workspaceId, clientId], references: [workspaceId, id], onDelete: Cascade)
+  orders    Order[]
+
+  @@unique([workspaceId, id], name: "vehicle_in_workspace")
+  @@index([workspaceId, plate])
+  @@index([workspaceId, clientId])
+  @@map("vehicles")
+}
+
+model Order {
+  id                String        @id @default(uuid()) @db.Uuid
+  workspaceId       String        @map("workspace_id") @db.Uuid
+  /// Порядковый номер внутри мастерской.
+  number            Int
+  clientId          String        @map("client_id") @db.Uuid
+  vehicleId         String?       @map("vehicle_id") @db.Uuid
+  assigneeMemberId  String?       @map("assignee_member_id") @db.Uuid
+  status            OrderStatus   @default(new)
+  /// Денормализовано: пересчитывается в транзакции с оплатой.
+  paymentStatus     PaymentStatus @default(unpaid) @map("payment_status")
+  agreedEstimateId  String?       @map("agreed_estimate_id") @db.Uuid
+  agreedTotalMinor  BigInt?       @map("agreed_total_minor")
+  paidMinor         BigInt        @default(0) @map("paid_minor")
+  currency          String        @db.Char(3)
+  title             String?
+  damageSummary     String?       @map("damage_summary")
+  internalNotes     String?       @map("internal_notes")
+  clientNotes       String?       @map("client_notes")
+  scheduledStartAt  DateTime?     @map("scheduled_start_at") @db.Timestamptz(6)
+  startedAt         DateTime?     @map("started_at") @db.Timestamptz(6)
+  readyAt           DateTime?     @map("ready_at") @db.Timestamptz(6)
+  deliveredAt       DateTime?     @map("delivered_at") @db.Timestamptz(6)
+  cancelledAt       DateTime?     @map("cancelled_at") @db.Timestamptz(6)
+  cancelReason      String?       @map("cancel_reason")
+  archivedAt        DateTime?     @map("archived_at") @db.Timestamptz(6)
+  createdById       String?       @map("created_by") @db.Uuid
+  createdAt         DateTime      @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt         DateTime      @updatedAt @map("updated_at") @db.Timestamptz(6)
+
+  workspace     Workspace           @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  client        Client              @relation(fields: [workspaceId, clientId], references: [workspaceId, id], onDelete: Restrict)
+  // Restrict, а не SetNull: workspace_id обязателен, да и автомобили с заказами
+  // не удаляются — они архивируются.
+  vehicle       Vehicle?            @relation(fields: [workspaceId, vehicleId], references: [workspaceId, id], onDelete: Restrict)
+  assignee      WorkspaceMember?    @relation(fields: [workspaceId, assigneeMemberId], references: [workspaceId, id], onDelete: Restrict)
+  createdBy     User?               @relation("OrderCreatedBy", fields: [createdById], references: [id], onDelete: SetNull)
+  statusHistory OrderStatusHistory[]
+
+  @@unique([workspaceId, number], name: "order_number_in_workspace")
+  @@unique([workspaceId, id], name: "order_in_workspace")
+  @@index([workspaceId, status])
+  @@index([workspaceId, assigneeMemberId, status])
+  @@index([workspaceId, clientId])
+  @@index([workspaceId, vehicleId])
+  @@map("orders")
+}
+
+model OrderStatusHistory {
+  id          String       @id @default(uuid()) @db.Uuid
+  workspaceId String       @map("workspace_id") @db.Uuid
+  orderId     String       @map("order_id") @db.Uuid
+  fromStatus  OrderStatus? @map("from_status")
+  toStatus    OrderStatus  @map("to_status")
+  changedById String?      @map("changed_by") @db.Uuid
+  comment     String?
+  createdAt   DateTime     @default(now()) @map("created_at") @db.Timestamptz(6)
+
+  order     Order @relation(fields: [workspaceId, orderId], references: [workspaceId, id], onDelete: Cascade)
+  changedBy User? @relation("OrderStatusChangedBy", fields: [changedById], references: [id], onDelete: SetNull)
+
+  @@index([orderId, createdAt])
+  @@map("order_status_history")
 }

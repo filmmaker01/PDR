@@ -5,7 +5,14 @@ import { ProfileScreen } from '@/features/profile/ProfileScreen';
 import { NotificationsScreen } from '@/features/profile/NotificationsScreen';
 import { InviteScreen } from '@/features/invite/InviteScreen';
 import { WorkspacePicker } from '@/features/workspace/WorkspacePicker';
-import { WorkspaceScreen } from '@/features/workspace/WorkspaceScreen';
+import { WorkspaceLayout } from '@/features/crm/WorkspaceLayout';
+import { TodayScreen } from '@/features/crm/TodayScreen';
+import { OrdersScreen } from '@/features/crm/OrdersScreen';
+import { OrderScreen } from '@/features/crm/OrderScreen';
+import { NewOrderScreen } from '@/features/crm/NewOrderScreen';
+import { ClientScreen, ClientsScreen, VehicleScreen } from '@/features/crm/ClientsScreen';
+import { DebtsScreen } from '@/features/crm/DebtsScreen';
+import { WorkspaceSettingsScreen } from '@/features/crm/WorkspaceSettingsScreen';
 import { StartActionRedirect } from './StartActionRedirect';
 import { CourseMapRoute, LearningEntryScreen } from '@/features/learning/CourseMapScreen';
 import { StageScreen } from '@/features/learning/StageScreen';
@@ -45,7 +52,22 @@ export const router = createBrowserRouter([
         element: <AttemptResultScreen />,
       },
       { path: 'workspace', element: <WorkspacePicker /> },
-      { path: 'workspace/:workspaceId', element: <WorkspaceScreen /> },
+      {
+        path: 'workspace/:workspaceId',
+        element: <WorkspaceLayout />,
+        children: [
+          { index: true, element: <TodayScreen /> },
+          { path: 'today', element: <TodayScreen /> },
+          { path: 'orders', element: <OrdersScreen /> },
+          { path: 'clients', element: <ClientsScreen /> },
+          { path: 'settings', element: <WorkspaceSettingsScreen /> },
+        ],
+      },
+      { path: 'workspace/:workspaceId/orders/new', element: <NewOrderScreen /> },
+      { path: 'workspace/:workspaceId/orders/:orderId', element: <OrderScreen /> },
+      { path: 'workspace/:workspaceId/clients/:clientId', element: <ClientScreen /> },
+      { path: 'workspace/:workspaceId/vehicles/:vehicleId', element: <VehicleScreen /> },
+      { path: 'workspace/:workspaceId/debts', element: <DebtsScreen /> },
       { path: 'profile', element: <ProfileScreen /> },
       { path: 'profile/notifications', element: <NotificationsScreen /> },
       { path: 'invite/:token', element: <InviteScreen /> },

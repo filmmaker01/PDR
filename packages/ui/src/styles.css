@@ -476,3 +476,13 @@ select {
   border: none;
   display: block;
 }
+
+.pdr-select {
+  width: 100%;
+  min-height: 44px;
+  padding: 10px 12px;
+  border: 1px solid var(--pdr-separator);
+  border-radius: var(--pdr-radius-sm);
+  background: var(--pdr-section-bg);
+  outline: none;
+}
