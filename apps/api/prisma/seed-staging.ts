@@ -1310,6 +1310,14 @@ async function main(): Promise<void> {
     throw new Error('Демо-данные нельзя заливать в production');
   }
 
+  // Автоматический деплой запускает сидер при каждом старте контейнера.
+  // Пересев там означал бы потерю всего, что ввели руками на staging,
+  // поэтому в этом режиме сидер работает только по пустой базе.
+  if (process.env.SEED_ONLY_IF_EMPTY === 'true' && (await prisma.user.count()) > 0) {
+    console.log('База не пуста — демо-данные не трогаю.');
+    return;
+  }
+
   console.log('Очистка базы…');
   await wipe();
 

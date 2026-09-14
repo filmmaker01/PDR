@@ -20,6 +20,8 @@
 | 10 | [docs/10-telegram.md](docs/10-telegram.md) | Telegram-интеграция: initData, вход в админку, бот, уведомления, клуб |
 | 11 | [docs/11-testing-quality.md](docs/11-testing-quality.md) | Стратегия тестирования, безопасность, чеклист перед пилотом |
 | 12 | [docs/12-roadmap.md](docs/12-roadmap.md) | Порядок реализации по этапам с проверяемым результатом каждого |
+| 13 | [docs/13-staging.md](docs/13-staging.md) | Локальное staging-окружение, демо-вход, демо-данные, прогоны QA |
+| 14 | [docs/14-deploy-staging.md](docs/14-deploy-staging.md) | Публичный staging: схема хостинга, `render.yaml`, порядок запуска |
 
 Руководства пользователей:
 

@@ -1,0 +1,207 @@
+# yaml-language-server: $schema=https://render.com/schema/render.yaml.json
+#
+# ═══════════════════════════════════════════════════════════════════════════
+#  Публичный staging PDR Platform одним Blueprint'ом.
+#
+#  Создаёт: PostgreSQL 16, API (вместе с фоновыми задачами), Mini App и
+#  админку как статические сайты. Миграции и демо-данные накатываются при
+#  старте контейнера, сервер настраивать не нужно.
+#
+#  ПЕРЕД ПЕРВЫМ ЗАПУСКОМ замените три адреса в блоке ниже. Как их узнать и
+#  что нажимать — docs/14-deploy-staging.md.
+# ═══════════════════════════════════════════════════════════════════════════
+
+# ── ЗАМЕНИТЬ ЗДЕСЬ ─────────────────────────────────────────────────────────
+# Если своего домена пока нет, оставьте адреса вида *.onrender.com: они
+# получаются из имён сервисов ниже. Если домен есть — укажите свой.
+#
+#   API      https://pdr-api.onrender.com      →  api.example.com
+#   Mini App https://pdr-app.onrender.com      →  app.example.com
+#   Админка  https://pdr-admin.onrender.com    →  admin.example.com
+#
+# Адреса встречаются в файле несколько раз — меняйте все вхождения.
+# ───────────────────────────────────────────────────────────────────────────
+
+databases:
+  - name: pdr-staging-db
+    databaseName: pdr
+    user: pdr
+    region: frankfurt
+    postgresMajorVersion: '16'
+    # free — 1 ГБ и срок жизни 30 дней; basic-256mb — постоянная база.
+    plan: free
+    # Пустой список = база доступна только сервисам внутри Render.
+    # Чтобы подключаться psql снаружи, добавьте свой IP или 0.0.0.0/0.
+    ipAllowList: []
+
+services:
+  # ── API + фоновые задачи ─────────────────────────────────────────────────
+  # Worker живёт в этом же процессе (WORKER_ROLE=true). Причина: файлы на
+  # staging лежат на диске, а диск монтируется ровно к одному сервису —
+  # отдельный worker не увидел бы загруженные снимки. Как только подключим
+  # S3, worker выносится в отдельный сервис (блок в конце файла).
+  - type: web
+    name: pdr-api
+    runtime: docker
+    region: frankfurt
+    plan: free
+    dockerfilePath: ./infra/docker/Dockerfile.api
+    dockerContext: .
+    healthCheckPath: /health
+    autoDeploy: true
+
+    # Постоянный диск для загруженных файлов. Доступен только на платных
+    # планах: на free блок должен остаться закомментированным, тогда файлы
+    # живут до перезапуска контейнера, а демо-данные создаются заново.
+    # disk:
+    #   name: pdr-storage
+    #   mountPath: /var/data
+    #   sizeGB: 1
+
+    envVars:
+      - key: NODE_ENV
+        value: production
+      - key: APP_ENV
+        value: staging
+
+      # PORT не задаём: Render подставляет свой, приложение слушает 0.0.0.0.
+
+      # ЗАМЕНИТЬ: собственный публичный адрес API.
+      - key: PUBLIC_API_URL
+        value: https://pdr-api.onrender.com
+      # ЗАМЕНИТЬ: адреса фронтендов — из них собирается список CORS.
+      - key: MINIAPP_URL
+        value: https://pdr-app.onrender.com
+      - key: ADMIN_URL
+        value: https://pdr-admin.onrender.com
+      # Пока переезжаете на свой домен, оба адреса должны работать
+      # одновременно. Раскомментируйте и перечислите запасные через запятую:
+      # - key: CORS_EXTRA_ORIGINS
+      #   value: https://pdr-app.onrender.com,https://pdr-admin.onrender.com
+
+      - key: DATABASE_URL
+        fromDatabase:
+          name: pdr-staging-db
+          property: connectionString
+
+      # Render генерирует значения сам; посмотреть их можно в Environment.
+      - key: SESSION_JWT_SECRET
+        generateValue: true
+      - key: DEMO_LOGIN_SECRET
+        generateValue: true
+
+      # Вход демо-аккаунтами вместо Telegram. В production запрещён проверкой
+      # конфигурации, здесь включён намеренно и закрыт секретом выше.
+      - key: DEMO_LOGIN_ENABLED
+        value: 'true'
+
+      # Миграции и демо-данные при старте. Сидер срабатывает только на пустой
+      # базе, поэтому повторный деплой ничего не стирает.
+      - key: RUN_MIGRATIONS_ON_BOOT
+        value: 'true'
+      - key: SEED_DEMO_ON_EMPTY
+        value: 'true'
+
+      # Фоновые задачи в этом же процессе.
+      - key: WORKER_ROLE
+        value: 'true'
+
+      # Внешние сервисы подключим следующим этапом.
+      - key: TELEGRAM_ENABLED
+        value: 'false'
+      - key: VIDEO_PROVIDER
+        value: mock
+      - key: STORAGE_DRIVER
+        value: local
+      - key: STORAGE_LOCAL_DIR
+        value: /var/data/storage
+
+      - key: LOG_LEVEL
+        value: info
+
+  # ── Mini App ─────────────────────────────────────────────────────────────
+  - type: web
+    name: pdr-app
+    runtime: static
+    autoDeploy: true
+    buildCommand: >-
+      corepack enable && corepack prepare pnpm@10.33.0 --activate &&
+      pnpm install --frozen-lockfile --filter @pdr/miniapp... &&
+      pnpm --filter @pdr/shared build &&
+      pnpm --filter @pdr/miniapp build
+    staticPublishPath: apps/miniapp/dist
+    envVars:
+      - key: NODE_VERSION
+        value: '22'
+      # ЗАМЕНИТЬ: адрес API. Подставляется в сборку, поэтому после смены
+      # адреса фронтенд нужно пересобрать (это делает push в ветку).
+      - key: VITE_API_URL
+        value: https://pdr-api.onrender.com
+    routes:
+      # Любой адрес отдаёт index.html: маршрутизация внутри приложения.
+      - type: rewrite
+        source: /*
+        destination: /index.html
+    headers:
+      - path: /*
+        name: X-Content-Type-Options
+        value: nosniff
+      - path: /*
+        name: Referrer-Policy
+        value: strict-origin-when-cross-origin
+      # X-Frame-Options не ставится: Mini App открывается внутри WebView
+      # Telegram, встраивание разрешает frame-ancestors.
+      - path: /*
+        name: Content-Security-Policy
+        value: "default-src 'self'; frame-ancestors https://web.telegram.org https://*.telegram.org tg:; script-src 'self' https://telegram.org; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob: https:; media-src 'self' blob: https:; connect-src 'self' https: wss:; frame-src https://kinescope.io https://*.kinescope.io"
+
+  # ── Админка ──────────────────────────────────────────────────────────────
+  - type: web
+    name: pdr-admin
+    runtime: static
+    autoDeploy: true
+    buildCommand: >-
+      corepack enable && corepack prepare pnpm@10.33.0 --activate &&
+      pnpm install --frozen-lockfile --filter @pdr/admin... &&
+      pnpm --filter @pdr/shared build &&
+      pnpm --filter @pdr/admin build
+    staticPublishPath: apps/admin/dist
+    envVars:
+      - key: NODE_VERSION
+        value: '22'
+      # ЗАМЕНИТЬ: адрес API.
+      - key: VITE_API_URL
+        value: https://pdr-api.onrender.com
+    routes:
+      - type: rewrite
+        source: /*
+        destination: /index.html
+    headers:
+      - path: /*
+        name: X-Content-Type-Options
+        value: nosniff
+      - path: /*
+        name: Referrer-Policy
+        value: strict-origin-when-cross-origin
+      - path: /*
+        name: X-Frame-Options
+        value: SAMEORIGIN
+
+# ═══════════════════════════════════════════════════════════════════════════
+#  Отдельный worker — следующим этапом, вместе с S3.
+#
+#  Тогда на pdr-api ставится WORKER_ROLE=false, STORAGE_DRIVER=s3, и сюда
+#  добавляется:
+#
+#  - type: worker
+#    name: pdr-worker
+#    runtime: docker
+#    region: frankfurt
+#    plan: starter
+#    dockerfilePath: ./infra/docker/Dockerfile.api
+#    dockerContext: .
+#    envVars:
+#      - key: PROCESS_ROLE
+#        value: worker
+#      - fromGroup: pdr-staging-env
+# ═══════════════════════════════════════════════════════════════════════════

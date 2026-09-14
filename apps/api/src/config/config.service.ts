@@ -40,6 +40,9 @@ export class AppConfigService {
   }
 
   get corsOrigins(): string[] {
-    return [this.env.MINIAPP_URL, this.env.ADMIN_URL].filter(Boolean);
+    const extra = this.env.CORS_EXTRA_ORIGINS.split(',')
+      .map((origin) => origin.trim().replace(/\/$/, ''))
+      .filter(Boolean);
+    return [...new Set([this.env.MINIAPP_URL, this.env.ADMIN_URL, ...extra])].filter(Boolean);
   }
 }

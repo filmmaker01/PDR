@@ -12,6 +12,12 @@ export const envSchema = z
     PUBLIC_API_URL: z.string().url(),
     MINIAPP_URL: z.string().url(),
     ADMIN_URL: z.string().url(),
+    /**
+     * Дополнительные источники для CORS, через запятую.
+     * На staging фронтенды какое-то время доступны и по адресу хостинга,
+     * и по собственному домену: список позволяет не выбирать один из них.
+     */
+    CORS_EXTRA_ORIGINS: z.string().default(''),
 
     DATABASE_URL: z.string().min(1),
 

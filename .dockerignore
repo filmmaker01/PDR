@@ -1,0 +1,29 @@
+# Контекст сборки: без этого файла в образ уезжают node_modules и артефакты,
+# и сборка на удалённом хостинге занимает минуты вместо секунд.
+node_modules
+**/node_modules
+**/dist
+**/.turbo
+**/.vite
+
+.git
+.github
+.qa-screens
+.staging-logs
+storage-staging
+storage-local
+apps/api/storage-*
+playwright-report
+test-results
+
+# Секреты не должны попадать в слои образа ни при каких условиях.
+**/.env
+**/.env.*
+!**/.env.example
+
+*.log
+*.md
+!README.md
+docs
+infra/qa
+infra/load
