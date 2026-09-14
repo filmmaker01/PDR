@@ -45,6 +45,10 @@ export default tseslint.config(
     // Динамический уезжает в собранный код как есть и падает в рантайме —
     // причём на путях ошибок, где это замечают в последнюю очередь.
     files: ['apps/**/*.ts', 'apps/**/*.tsx', 'packages/**/*.ts', 'packages/**/*.tsx'],
+    // Интеграционные тесты не собираются: их запускает vitest, который
+    // псевдоним резолвит. Отложенный импорт там нужен, чтобы модуль Nest
+    // не загружался до подготовки окружения.
+    ignores: ['apps/api/test/**'],
     rules: {
       'no-restricted-syntax': [
         'error',
@@ -82,7 +86,7 @@ export default tseslint.config(
   },
   {
     // Скрипты и конфиги могут писать в консоль.
-    files: ['**/*.config.{ts,mts,js,mjs,cjs}', 'apps/api/prisma/seed.ts', '**/scripts/**'],
+    files: ['**/*.config.{ts,mts,js,mjs,cjs}', 'apps/api/prisma/seed*.ts', '**/scripts/**'],
     rules: { 'no-console': 'off' },
   },
   {
