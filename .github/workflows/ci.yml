@@ -39,7 +39,6 @@ jobs:
       # в PDF не собирается, и тест печати падает.
       - run: sudo apt-get update && sudo apt-get install -y --no-install-recommends fonts-dejavu-core
       - uses: pnpm/action-setup@v4
-        with: { version: 10 }
       - uses: actions/setup-node@v4
         with: { node-version: 22, cache: pnpm }
       - run: pnpm install --frozen-lockfile
