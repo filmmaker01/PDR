@@ -1,6 +1,7 @@
 import { Injectable } from '@nestjs/common';
 import type { Cohort, Enrollment, Prisma } from '@prisma/client';
 import { addDays } from '@pdr/shared';
+import { AppError } from '@/common/errors/app.error';
 import { PrismaService } from '@/infra/prisma/prisma.service';
 import { AccessService } from '@/modules/access/access.service';
 import { CatalogService, type VersionTree } from '@/modules/learning/catalog/catalog.service';
@@ -354,7 +355,8 @@ export class StageAccessService {
   async assertStageOpen(enrollmentId: string, stageKey: string): Promise<void> {
     const access = await this.getStageAccess(enrollmentId, stageKey);
     if (access.status === 'locked') {
-      const { AppError } = await import('@/common/errors/app.error');
+      // Импорт статический: динамический не переписывает псевдоним пути при
+      // сборке, и в собранном приложении закрытый этап падал с 500 вместо 403.
       const first = access.reasons[0];
       throw new AppError(
         first?.code === 'no_course_access' ? 'product_access_required' : 'stage_locked',

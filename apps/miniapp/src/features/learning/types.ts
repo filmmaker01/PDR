@@ -91,11 +91,13 @@ export interface LessonDetails {
   isRequired: boolean;
   minWatchPercent: number;
   estimatedMinutes: number | null;
+  /**
+   * Про видео известно только то, что оно есть и сколько идёт. Ни адреса
+   * плеера, ни тем более ссылки на поток здесь нет: доступ к просмотру
+   * запрашивается отдельно и живёт минуты.
+   */
   video: {
-    embedUrl: string | null;
-    hlsUrl: string | null;
-    posterUrl: string | null;
-    expiresAt: string;
+    status: 'uploading' | 'processing' | 'ready' | 'failed';
     durationSec: number | null;
   } | null;
   materials: {
@@ -109,4 +111,17 @@ export interface LessonDetails {
   assignments: { key: string; title: string }[];
   progress: { completed: boolean; watchPercent: number; watchPositionSec: number };
   navigation: { previousKey: string | null; nextKey: string | null };
+}
+
+/** Сессия просмотра: выдаётся отдельным запросом и быстро протухает. */
+export interface PlaybackSession {
+  sessionId: string;
+  provider: string;
+  /** Страница плеера провайдера. Не поток. */
+  embedUrl: string;
+  /** Токен, который плеер предъявит нашему серверу при запросе лицензии. */
+  authToken: string;
+  watermark: string | null;
+  drm: boolean;
+  expiresAt: string;
 }

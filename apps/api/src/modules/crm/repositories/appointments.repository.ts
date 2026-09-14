@@ -1,4 +1,5 @@
 import { Injectable } from '@nestjs/common';
+import { AppError } from '@/common/errors/app.error';
 import { Prisma, type Appointment, type AppointmentStatus } from '@prisma/client';
 import { PrismaService } from '@/infra/prisma/prisma.service';
 import { WorkspaceScopedRepository } from '@/modules/workspaces/repositories/workspace-scoped.repository';
@@ -165,7 +166,6 @@ export class AppointmentsRepository extends WorkspaceScopedRepository {
       select: { id: true },
     });
     if (!existing) {
-      const { AppError } = await import('@/common/errors/app.error');
       throw AppError.notFound('Запись не найдена');
     }
     const { workspaceId: _ignored, id: _id, ...safe } = data;

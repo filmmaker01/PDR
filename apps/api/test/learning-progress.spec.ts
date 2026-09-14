@@ -237,14 +237,16 @@ describe('открытие этапов и прогресс', () => {
       expect(res.body.lessons).toEqual([]);
     });
 
-    it('открытый урок отдаёт билет на воспроизведение', async () => {
+    it('открытый урок сообщает о видео, но не даёт доступа к просмотру', async () => {
       const { enrollmentId } = await setup();
       const res = await http()
         .get(`/v1/learning/enrollments/${enrollmentId}/lessons/light`)
         .set(...student.authHeader)
         .expect(200);
-      expect(res.body.video.embedUrl).toBeTruthy();
-      expect(res.body.video.expiresAt).toBeTruthy();
+      // Доступ к просмотру выдаётся отдельным запросом и живёт минуты:
+      // в описании урока нет ни адреса плеера, ни токена.
+      expect(res.body.video.status).toBe('ready');
+      expect(res.body.video.embedUrl).toBeUndefined();
     });
 
     it('чужое зачисление недоступно', async () => {

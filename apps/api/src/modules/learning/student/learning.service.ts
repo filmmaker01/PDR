@@ -6,6 +6,8 @@ import { FilesService } from '@/modules/files/files.service';
 import { StageAccessService } from '@/modules/learning/progress/stage-access.service';
 import { ProgressService } from '@/modules/learning/progress/progress.service';
 import type { StageAccess } from '@/modules/learning/progress/stage-access.types';
+import { VideoSessionService } from '@/modules/learning/video-access/video-session.service';
+import type { PlaybackCapabilities, PlaybackTicket } from '@/infra/video/video.types';
 
 export interface CourseMap {
   enrollmentId: string;
@@ -35,6 +37,7 @@ export class LearningService {
     private readonly stageAccess: StageAccessService,
     private readonly progress: ProgressService,
     private readonly video: VideoService,
+    private readonly videoSessions: VideoSessionService,
     private readonly files: FilesService,
   ) {}
 
@@ -182,10 +185,10 @@ export class LearningService {
 
   /**
    * Урок с билетом на воспроизведение.
-   * Билет выдаётся только после проверки, что этап открыт и доступ действует, —
-   * скрытая кнопка в интерфейсе защитой не является.
+   * Доступ к просмотру видео здесь не выдаётся: он запрашивается отдельно,
+   * живёт минуты и проверяется заново. Скрытая кнопка защитой не является.
    */
-  async lessonDetails(enrollmentId: string, lessonKey: string, userId: string) {
+  async lessonDetails(enrollmentId: string, lessonKey: string) {
     const ctx = await this.stageAccess.loadContext(enrollmentId);
     const stageKey = this.stageAccess.stageKeyOfLesson(ctx.version, lessonKey);
     if (!stageKey) throw AppError.notFound('Урок не найден');
@@ -200,10 +203,6 @@ export class LearningService {
       where: { enrollmentId_lessonKey: { enrollmentId, lessonKey } },
     });
 
-    const playback = lesson.videoAssetId
-      ? await this.video.issuePlayback(lesson.videoAssetId, userId).catch(() => null)
-      : null;
-
     const index = stage.lessons.findIndex((l) => l.key === lessonKey);
 
     return {
@@ -214,12 +213,11 @@ export class LearningService {
       isRequired: lesson.isRequired,
       minWatchPercent: lesson.minWatchPercent,
       estimatedMinutes: lesson.estimatedMinutes,
-      video: playback
+      // Ни адреса плеера, ни тем более ссылки на поток здесь нет: доступ к
+      // просмотру запрашивается отдельно и живёт минуты, а не пока открыт урок.
+      video: lesson.videoAssetId
         ? {
-            embedUrl: playback.embedUrl ?? null,
-            hlsUrl: playback.hlsUrl ?? null,
-            posterUrl: playback.posterUrl ?? null,
-            expiresAt: playback.expiresAt.toISOString(),
+            status: lesson.videoAsset?.status ?? 'processing',
             durationSec: lesson.videoAsset?.durationSec ?? null,
           }
         : null,
@@ -244,6 +242,56 @@ export class LearningService {
         nextKey: index < stage.lessons.length - 1 ? (stage.lessons[index + 1]?.key ?? null) : null,
       },
     };
+  }
+
+  /**
+   * Сессия просмотра урока.
+   *
+   * Выдаётся только после полной проверки: зачисление принадлежит этому
+   * пользователю, доступ к курсу действует, этап открыт, урок существует в
+   * опубликованной версии и к нему привязано готовое видео. Любой из этих
+   * пунктов не сошёлся — билета нет.
+   */
+  async issuePlayback(input: {
+    enrollmentId: string;
+    lessonKey: string;
+    userId: string;
+    capabilities: PlaybackCapabilities;
+    ip?: string | null;
+    userAgent?: string | null;
+  }): Promise<PlaybackTicket & { sessionId: string }> {
+    await this.assertOwnEnrollment(input.enrollmentId, input.userId);
+
+    const ctx = await this.stageAccess.loadContext(input.enrollmentId);
+    const stageKey = this.stageAccess.stageKeyOfLesson(ctx.version, input.lessonKey);
+    if (!stageKey) throw AppError.notFound('Урок не найден');
+
+    // Здесь же проверяется и доступ к курсу: закрытый этап отдаёт
+    // product_access_required, если причина в нём.
+    await this.stageAccess.assertStageOpen(input.enrollmentId, stageKey);
+
+    const stage = ctx.version.stages.find((s) => s.key === stageKey)!;
+    const lesson = stage.lessons.find((l) => l.key === input.lessonKey);
+    if (!lesson?.videoAssetId) throw AppError.notFound('К уроку не приложено видео');
+
+    const issued = await this.videoSessions.issue({
+      userId: input.userId,
+      enrollmentId: input.enrollmentId,
+      lessonKey: input.lessonKey,
+      videoAssetId: lesson.videoAssetId,
+      capabilities: input.capabilities,
+      ip: input.ip,
+      userAgent: input.userAgent,
+    });
+
+    const ticket = await this.video.issuePlayback(lesson.videoAssetId, {
+      authToken: issued.authToken,
+      watermark: issued.watermark ?? '',
+      drm: issued.drm,
+      ttlSec: Math.max(1, Math.round((issued.session.expiresAt.getTime() - Date.now()) / 1000)),
+    });
+
+    return { ...ticket, sessionId: issued.session.id };
   }
 
   /** Ссылка на файл материала: проверяется открытость этапа. */

@@ -6,7 +6,7 @@ import { AppError } from '@/common/errors/app.error';
 import { JobsService } from '@/infra/jobs/jobs.service';
 import { JOB } from '@/infra/jobs/job-queue';
 import { VIDEO_PROVIDER } from '@/infra/video/video.module';
-import type { PlaybackTicket, VideoProvider } from '@/infra/video/video.types';
+import type { PlaybackRequest, PlaybackTicket, VideoProvider } from '@/infra/video/video.types';
 
 @Injectable()
 export class VideoService {
@@ -84,15 +84,65 @@ export class VideoService {
    * Билет на воспроизведение. Выдаётся только после проверки доступа —
    * вызывающий обязан убедиться, что этап открыт и доступ к курсу действует.
    */
-  async issuePlayback(videoAssetId: string, userId: string): Promise<PlaybackTicket> {
+  async issuePlayback(videoAssetId: string, request: PlaybackRequest): Promise<PlaybackTicket> {
     const asset = await this.getById(videoAssetId);
     if (asset.status !== 'ready') {
       throw new AppError('file_not_ready', 'Видео ещё обрабатывается, попробуйте позже');
     }
-    return this.provider.issuePlayback(asset.providerVideoId, {
-      userId,
-      ttlSec: this.config.env.VIDEO_PLAYBACK_TTL_SEC,
+    return this.provider.issuePlayback(asset.providerVideoId, request);
+  }
+
+  /**
+   * Приём файла от админки.
+   *
+   * Файл идёт потоком через наш сервер: ключ провайдера не должен попадать
+   * в браузер, а значит и загружать напрямую из админки нельзя.
+   */
+  async uploadContent(input: {
+    videoAssetId: string;
+    body: NodeJS.ReadableStream;
+    contentType: string;
+    sizeBytes: number;
+    fileName: string;
+  }): Promise<VideoAsset> {
+    const asset = await this.getById(input.videoAssetId);
+    if (asset.status !== 'uploading') {
+      throw AppError.conflict('Файл для этого видео уже загружен');
+    }
+    const limit = this.config.env.FILE_MAX_SIZE_VIDEO;
+    if (input.sizeBytes > limit) {
+      throw new AppError(
+        'file_too_large',
+        `Файл больше допустимых ${Math.round(limit / 1024 / 1024)} МБ`,
+      );
+    }
+
+    try {
+      await this.provider.upload({
+        providerVideoId: asset.providerVideoId,
+        body: input.body,
+        contentType: input.contentType,
+        sizeBytes: input.sizeBytes,
+        fileName: input.fileName,
+      });
+    } catch (err) {
+      this.logger.error({ err, videoAssetId: asset.id }, 'Загрузка видео провайдеру не удалась');
+      return this.prisma.videoAsset.update({
+        where: { id: asset.id },
+        data: { status: 'failed', error: (err as Error).message.slice(0, 500) },
+      });
+    }
+
+    const updated = await this.prisma.videoAsset.update({
+      where: { id: asset.id },
+      data: { status: 'processing', sizeBytes: BigInt(input.sizeBytes) },
     });
+    await this.jobs.enqueue(
+      JOB.videoPoll,
+      { videoAssetId: asset.id },
+      { startAfterSec: 15, retryLimit: 0, singletonKey: `video:${asset.id}:uploaded` },
+    );
+    return updated;
   }
 
   async remove(videoAssetId: string): Promise<void> {

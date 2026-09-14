@@ -8,8 +8,12 @@ import {
   Param,
   Patch,
   Post,
+  Put,
+  Req,
 } from '@nestjs/common';
 import { ApiOperation, ApiTags } from '@nestjs/swagger';
+import type { Request } from 'express';
+import { AppError } from '@/common/errors/app.error';
 import { zodBody } from '@/common/pipes/zod-validation.pipe';
 import {
   CurrentAuth,
@@ -442,6 +446,32 @@ export class AdminCatalogController {
       uploadUrl: result.uploadUrl,
       instructions: result.instructions,
     };
+  }
+
+  /**
+   * Приём файла.
+   *
+   * Тело читается потоком: видео на сотни мегабайт не должно собираться в
+   * памяти. Ключ провайдера остаётся на сервере, поэтому загрузка идёт через
+   * нас, а не напрямую из браузера.
+   */
+  @Put('videos/:videoId/content')
+  @Audited({ entityType: 'video', action: 'upload', idFrom: { param: 'videoId' } })
+  @ApiOperation({ summary: 'Загрузка файла видео' })
+  async uploadVideo(@Param('videoId') videoId: string, @Req() req: Request) {
+    const sizeBytes = Number(req.headers['content-length'] ?? 0);
+    if (!Number.isFinite(sizeBytes) || sizeBytes <= 0) {
+      throw AppError.validation('Не удалось определить размер файла');
+    }
+    const fileName = decodeURIComponent(String(req.headers['x-file-name'] ?? 'video'));
+    const asset = await this.video.uploadContent({
+      videoAssetId: videoId,
+      body: req,
+      contentType: String(req.headers['content-type'] ?? 'application/octet-stream'),
+      sizeBytes,
+      fileName,
+    });
+    return { id: asset.id, status: asset.status, error: asset.error };
   }
 
   @Get('videos/:videoId')

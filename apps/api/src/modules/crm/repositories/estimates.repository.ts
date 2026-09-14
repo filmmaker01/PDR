@@ -1,4 +1,5 @@
 import { Injectable } from '@nestjs/common';
+import { AppError } from '@/common/errors/app.error';
 import { Prisma, type Estimate } from '@prisma/client';
 import { PrismaService } from '@/infra/prisma/prisma.service';
 import { WorkspaceScopedRepository } from '@/modules/workspaces/repositories/workspace-scoped.repository';
@@ -99,7 +100,6 @@ export class EstimatesRepository extends WorkspaceScopedRepository {
       select: { id: true },
     });
     if (!existing) {
-      const { AppError } = await import('@/common/errors/app.error');
       throw AppError.notFound('Смета не найдена');
     }
     const { workspaceId: _ws, id: _id, ...safe } = data;

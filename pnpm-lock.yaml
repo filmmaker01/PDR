@@ -217,6 +217,9 @@ importers:
 
   apps/miniapp:
     dependencies:
+      '@kinescope/player-iframe-api-loader':
+        specifier: ^0.9.0
+        version: 0.9.0
       '@pdr/api-client':
         specifier: workspace:*
         version: link:../../packages/api-client
@@ -1218,6 +1221,9 @@ packages:
 
   '@jridgewell/trace-mapping@0.3.31':
     resolution: {integrity: sha512-zzNR+SdQSDJzc8joaeP8QQoCQr8NuYx2dIIytl1QeBEZHJ9uW6hebsrYgbz8hJwUQao3TWCMtmfV8Nu1twOLAw==}
+
+  '@kinescope/player-iframe-api-loader@0.9.0':
+    resolution: {integrity: sha512-n1gWbV7sqZNH/9HmWjJGKcj9czbUHlpSGuUl7zhBR6qV1M1XSlBG9gqyGbSmeCCtnAsg1O+IUX1a1vb8QXoGdg==}
 
   '@ljharb/through@2.3.14':
     resolution: {integrity: sha512-ajBvlKpWucBB17FuQYUShqpqy8GRgYEpJW0vWJbUu1CV9lWyrDCapy0lScU8T8Z6qn49sSwJB3+M+evYIdGg+A==}
@@ -5544,6 +5550,8 @@ snapshots:
     dependencies:
       '@jridgewell/resolve-uri': 3.1.2
       '@jridgewell/sourcemap-codec': 1.6.0
+
+  '@kinescope/player-iframe-api-loader@0.9.0': {}
 
   '@ljharb/through@2.3.14':
     dependencies:

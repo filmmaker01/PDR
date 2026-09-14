@@ -8,6 +8,7 @@ import {
   Button,
   Card,
   Checkbox,
+  Box,
   Group,
   List,
   Loader,
@@ -25,8 +26,9 @@ import {
 import { useDisclosure } from '@mantine/hooks';
 import { IconArrowDown, IconArrowUp, IconTrash } from '@tabler/icons-react';
 import { api } from '@/shared/api';
+import { VideoUploadField } from './VideoUploadField';
 import { useApiMutation, useApiQuery } from '@/shared/query';
-import type { ExamNode, PublishIssue, StageNode, VersionTree, VideoAssetRow } from './types';
+import type { ExamNode, PublishIssue, StageNode, VersionTree } from './types';
 import { QuestionEditor } from './QuestionEditor';
 
 export function CourseEditorPage() {
@@ -338,7 +340,6 @@ function LessonsTab({
   const [title, setTitle] = useState('');
   const [videoId, setVideoId] = useState<string | null>(null);
 
-  const videos = useApiQuery<VideoAssetRow[]>(['admin', 'videos'], '/admin/videos');
   const create = useApiMutation(
     () =>
       api.post(`/admin/stages/${stage.id}/lessons`, {
@@ -413,19 +414,9 @@ function LessonsTab({
               value={title}
               onChange={(e) => setTitle(e.currentTarget.value)}
             />
-            <Select
-              label="Видео"
-              placeholder="Выберите"
-              searchable
-              clearable
-              w={240}
-              value={videoId}
-              onChange={setVideoId}
-              data={(videos.data ?? []).map((v) => ({
-                value: v.id,
-                label: `${v.title}${v.status === 'ready' ? '' : ` (${v.status})`}`,
-              }))}
-            />
+            <Box w={280}>
+              <VideoUploadField value={videoId} onChange={setVideoId} />
+            </Box>
             <Button
               disabled={!key.trim() || !title.trim()}
               loading={create.isPending}

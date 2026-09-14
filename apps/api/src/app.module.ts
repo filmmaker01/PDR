@@ -28,6 +28,7 @@ import { AuditModule } from './modules/audit/audit.module';
 import { AuditInterceptor } from './modules/audit/audit.interceptor';
 import { CatalogModule } from './modules/learning/catalog/catalog.module';
 import { LearningModule } from './modules/learning/learning.module';
+import { VideoAccessModule } from './modules/learning/video-access/video-access.module';
 import { AssignmentsModule } from './modules/learning/assignments/assignments.module';
 import { ExamsModule } from './modules/learning/exams/exams.module';
 import { CrmModule } from './modules/crm/crm.module';
@@ -79,6 +80,7 @@ const REDACT_PATHS = [
     AuditModule,
     CatalogModule,
     LearningModule,
+    VideoAccessModule,
     AssignmentsModule,
     ExamsModule,
     CrmModule,

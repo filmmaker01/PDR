@@ -4,15 +4,12 @@ import {
   Badge,
   Button,
   Card,
-  Code,
-  CopyButton,
   Group,
   Loader,
   Modal,
   Stack,
   Table,
   Text,
-  TextInput,
   Title,
 } from '@mantine/core';
 import { useDisclosure } from '@mantine/hooks';
@@ -20,6 +17,7 @@ import { api } from '@/shared/api';
 import { useApiMutation, useApiQuery } from '@/shared/query';
 import { formatDate } from '@/shared/format';
 import type { VideoAssetRow } from './types';
+import { VideoUploadField } from './VideoUploadField';
 
 const KEY = ['admin', 'videos'];
 
@@ -110,72 +108,23 @@ export function VideosPage() {
 }
 
 function UploadModal({ opened, onClose }: { opened: boolean; onClose: () => void }) {
-  const [title, setTitle] = useState('');
-  const [target, setTarget] = useState<{ uploadUrl?: string; instructions?: string } | null>(null);
-
-  const create = useApiMutation(
-    () =>
-      api.post<{ id: string; uploadUrl?: string; instructions?: string }>('/admin/videos', {
-        title,
-      }),
-    {
-      invalidate: [KEY],
-      onSuccess: (result) => setTarget(result),
-    },
-  );
+  const [videoId, setVideoId] = useState<string | null>(null);
 
   return (
     <Modal
       opened={opened}
       onClose={() => {
         onClose();
-        setTarget(null);
-        setTitle('');
+        setVideoId(null);
       }}
       title="Загрузка видео"
     >
       <Stack>
-        {target ? (
-          <>
-            <Alert color="green">Запись создана. Загрузите файл по адресу ниже.</Alert>
-            {target.uploadUrl ? (
-              <Group>
-                <Code style={{ flex: 1, overflowWrap: 'anywhere' }}>{target.uploadUrl}</Code>
-                <CopyButton value={target.uploadUrl}>
-                  {({ copied, copy }) => (
-                    <Button size="xs" variant="light" onClick={copy}>
-                      {copied ? 'Скопировано' : 'Копировать'}
-                    </Button>
-                  )}
-                </CopyButton>
-              </Group>
-            ) : null}
-            {target.instructions ? (
-              <Text size="sm" c="dimmed">
-                {target.instructions}
-              </Text>
-            ) : null}
-            <Text size="sm" c="dimmed">
-              Статус обновится автоматически, когда провайдер закончит обработку.
-            </Text>
-          </>
-        ) : (
-          <>
-            <TextInput
-              label="Название"
-              required
-              value={title}
-              onChange={(e) => setTitle(e.currentTarget.value)}
-            />
-            <Button
-              disabled={!title.trim()}
-              loading={create.isPending}
-              onClick={() => create.mutate(undefined)}
-            >
-              Создать запись и получить адрес загрузки
-            </Button>
-          </>
-        )}
+        <Text size="sm" c="dimmed">
+          Файл уходит через наш сервер: ключ видеоплатформы не попадает в браузер, а заходить в её
+          кабинет не нужно.
+        </Text>
+        <VideoUploadField value={videoId} onChange={setVideoId} label="Файл или уже загруженное" />
       </Stack>
     </Modal>
   );

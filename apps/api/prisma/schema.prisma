@@ -87,6 +87,7 @@ model User {
   auditEntries           AuditLog[]
   publishedVersions      CourseVersion[]         @relation("CourseVersionPublishedBy")
   uploadedVideos         VideoAsset[]            @relation("VideoUploadedBy")
+  videoViewSessions      VideoViewSession[]      @relation("VideoViewSessionUser")
   enrollments            Enrollment[]
   curatedCohorts         CohortCurator[]
   stageOverrides         StageOverride[]         @relation("StageOverrideCreatedBy")
@@ -648,14 +649,64 @@ model VideoAsset {
   status          VideoStatus @default(uploading)
   uploadedById    String?     @map("uploaded_by") @db.Uuid
   error           String?
+  /// Размер исходного файла: показывается в админке и ограничивает загрузку.
+  sizeBytes       BigInt?     @map("size_bytes")
   createdAt       DateTime    @default(now()) @map("created_at") @db.Timestamptz(6)
   updatedAt       DateTime    @updatedAt @map("updated_at") @db.Timestamptz(6)
 
-  uploadedBy User?    @relation("VideoUploadedBy", fields: [uploadedById], references: [id], onDelete: SetNull)
-  lessons    Lesson[]
+  uploadedBy   User?              @relation("VideoUploadedBy", fields: [uploadedById], references: [id], onDelete: SetNull)
+  lessons      Lesson[]
+  viewSessions VideoViewSession[]
 
   @@unique([provider, providerVideoId])
   @@map("video_assets")
+}
+
+/// Причина, по которой сессия просмотра перестала действовать.
+enum VideoSessionRevokeReason {
+  access_ended
+  superseded
+  lesson_closed
+  manual
+}
+
+/// Сессия просмотра урока.
+///
+/// Плеер не получает ничего, что играет само по себе: провайдер спрашивает
+/// разрешение у нас по токену этой сессии. Поэтому отзыв доступа мгновенно
+/// закрывает и уже открытый плеер, а не только следующий вход.
+model VideoViewSession {
+  id           String                    @id @default(uuid()) @db.Uuid
+  userId       String                    @map("user_id") @db.Uuid
+  enrollmentId String                    @map("enrollment_id") @db.Uuid
+  lessonKey    String                    @map("lesson_key")
+  videoAssetId String                    @map("video_asset_id") @db.Uuid
+  /// Метка, которую провайдер рисует поверх видео. Без персональных данных.
+  watermark    String
+  /// Был ли выдан DRM-режим: зависит от возможностей клиента.
+  drm          Boolean                   @default(false)
+  /// Что клиент сообщил о поддержке защищённого воспроизведения.
+  capabilities Json?
+  issuedAt     DateTime                  @default(now()) @map("issued_at") @db.Timestamptz(6)
+  expiresAt    DateTime                  @map("expires_at") @db.Timestamptz(6)
+  revokedAt    DateTime?                 @map("revoked_at") @db.Timestamptz(6)
+  revokeReason VideoSessionRevokeReason? @map("revoke_reason")
+  /// Сколько раз провайдер спрашивал разрешение и когда в последний раз.
+  checkCount   Int                       @default(0) @map("check_count")
+  lastCheckAt  DateTime?                 @map("last_check_at") @db.Timestamptz(6)
+  ip           String?
+  userAgent    String?                   @map("user_agent")
+
+  user       User       @relation("VideoViewSessionUser", fields: [userId], references: [id], onDelete: Cascade)
+  enrollment Enrollment @relation(fields: [enrollmentId], references: [id], onDelete: Cascade)
+  videoAsset VideoAsset @relation(fields: [videoAssetId], references: [id], onDelete: Cascade)
+
+  @@index([userId, revokedAt])
+  @@index([enrollmentId, lessonKey])
+  @@index([expiresAt])
+  /// Частичный уникальный индекс video_session_single_active создан миграцией:
+  /// Prisma не умеет описывать условие WHERE revoked_at IS NULL.
+  @@map("video_view_sessions")
 }
 
 model Assignment {
@@ -815,13 +866,14 @@ model Enrollment {
   createdAt     DateTime         @default(now()) @map("created_at") @db.Timestamptz(6)
   updatedAt     DateTime         @updatedAt @map("updated_at") @db.Timestamptz(6)
 
-  cohort           Cohort            @relation(fields: [cohortId], references: [id], onDelete: Cascade)
-  user             User              @relation(fields: [userId], references: [id], onDelete: Cascade)
+  cohort           Cohort             @relation(fields: [cohortId], references: [id], onDelete: Cascade)
+  user             User               @relation(fields: [userId], references: [id], onDelete: Cascade)
   lessonProgress   LessonProgress[]
   submissions      Submission[]
   examAttempts     ExamAttempt[]
   stageOverrides   StageOverride[]
   stageCompletions StageCompletion[]
+  videoSessions    VideoViewSession[]
 
   @@unique([cohortId, userId])
   @@index([userId])

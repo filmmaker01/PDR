@@ -27,7 +27,15 @@ async function bootstrap(): Promise<void> {
   app.enableCors({
     origin: config.corsOrigins,
     credentials: true,
-    allowedHeaders: ['Content-Type', 'Authorization', 'Idempotency-Key', 'X-Request-Id'],
+    // X-File-Name нужен загрузке видео из админки: без него preflight режет
+    // запрос, и файл не уходит.
+    allowedHeaders: [
+      'Content-Type',
+      'Authorization',
+      'Idempotency-Key',
+      'X-Request-Id',
+      'X-File-Name',
+    ],
     exposedHeaders: ['X-Request-Id'],
     maxAge: 86_400,
   });

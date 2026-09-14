@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useRef, useState } from 'react';
+import { useCallback, useRef, useState } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { ApiError } from '@pdr/api-client';
@@ -60,16 +60,6 @@ export function LessonScreen() {
     },
   });
 
-  useEffect(() => {
-    return () => {
-      // Уход с экрана: досылаем последнюю позицию.
-      const player = document.querySelector('video');
-      if (player && player.duration > 0) {
-        sendProgress(player.currentTime, (player.currentTime / player.duration) * 100, true);
-      }
-    };
-  }, [sendProgress]);
-
   if (lesson.isLoading) return <SkeletonList rows={3} />;
 
   if (lesson.isError) {
@@ -108,12 +98,22 @@ export function LessonScreen() {
         </div>
       </div>
 
-      {data.video ? (
+      {data.video?.status === 'ready' ? (
         <VideoPlayer
-          video={data.video}
+          enrollmentId={enrollmentId}
+          lessonKey={lessonKey}
           startAtSec={data.progress.watchPositionSec}
+          durationSec={data.video.durationSec}
           onProgress={sendProgress}
         />
+      ) : data.video ? (
+        <Card>
+          <div className="pdr-hint">
+            {data.video.status === 'failed'
+              ? 'Видео не удалось обработать. Мы уже знаем об этом.'
+              : 'Видео ещё обрабатывается. Откройте урок чуть позже.'}
+          </div>
+        </Card>
       ) : (
         <Card>
           <div className="pdr-hint">К этому уроку видео не приложено.</div>

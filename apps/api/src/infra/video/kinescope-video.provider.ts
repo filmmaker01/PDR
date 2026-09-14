@@ -1,6 +1,7 @@
 import { Injectable, Logger } from '@nestjs/common';
 import { AppConfigService } from '@/config/config.service';
 import type {
+  PlaybackRequest,
   PlaybackTicket,
   VideoProvider,
   VideoStatusResult,
@@ -9,21 +10,20 @@ import type {
 
 const API_BASE = 'https://api.kinescope.io/v1';
 const UPLOAD_BASE = 'https://uploader.kinescope.io/v2';
+const EMBED_BASE = 'https://kinescope.io';
 
 interface KinescopeVideo {
   id: string;
   status?: string;
   duration?: number;
-  play_link?: string;
-  embed_link?: string;
-  hls_link?: string;
-  poster?: { original?: string };
 }
 
 /**
  * Kinescope: приватные видео и защищённый плеер.
- * Доступ к воспроизведению выдаёт наш сервер — только после проверки того,
- * что этап открыт и доступ к курсу действует.
+ *
+ * Наружу отдаётся только адрес плеера. Ссылки на поток (hls, mp4) сознательно
+ * не запрашиваются и не возвращаются: любая из них воспроизводится без нашего
+ * участия, и весь смысл проверки доступа на этом заканчивается.
  */
 @Injectable()
 export class KinescopeVideoProvider implements VideoProvider {
@@ -61,11 +61,43 @@ export class KinescopeVideoProvider implements VideoProvider {
 
     return {
       providerVideoId: created.data.id,
-      // Kinescope принимает файл по TUS-протоколу на отдельный домен.
-      uploadUrl: `${UPLOAD_BASE}/${created.data.id}`,
-      instructions:
-        'Загрузка выполняется протоколом TUS на uploader.kinescope.io с тем же токеном доступа.',
+      instructions: 'Файл загружается через наш сервер: токен Kinescope не попадает в браузер.',
     };
+  }
+
+  /**
+   * Загрузка файла.
+   *
+   * Идёт через наш бэкенд, а не напрямую из браузера: адрес загрузки
+   * Kinescope требует основной токен доступа, и отдавать его в админку значит
+   * отдать вместе с ним весь аккаунт.
+   */
+  async upload(input: {
+    providerVideoId: string;
+    body: NodeJS.ReadableStream;
+    contentType: string;
+    sizeBytes: number;
+    fileName: string;
+  }): Promise<void> {
+    const response = await fetch(`${UPLOAD_BASE}/${input.providerVideoId}`, {
+      method: 'POST',
+      headers: {
+        Authorization: `Bearer ${this.config.env.KINESCOPE_API_KEY}`,
+        'Content-Type': input.contentType || 'application/octet-stream',
+        'Content-Length': String(input.sizeBytes),
+        'X-File-Name': encodeURIComponent(input.fileName),
+        'X-Video-Id': input.providerVideoId,
+      },
+      // Тело читается потоком: файл не собирается в памяти целиком.
+      // duplex обязателен для потокового тела и не описан в типах Node.
+      body: input.body,
+      duplex: 'half',
+    } as unknown as RequestInit);
+
+    if (!response.ok) {
+      const text = await response.text().catch(() => '');
+      throw new Error(`Kinescope upload ${response.status}: ${text.slice(0, 300)}`);
+    }
   }
 
   async getStatus(providerVideoId: string): Promise<VideoStatusResult> {
@@ -87,17 +119,23 @@ export class KinescopeVideoProvider implements VideoProvider {
     }
   }
 
-  async issuePlayback(
-    providerVideoId: string,
-    options: { userId: string; ttlSec: number },
-  ): Promise<PlaybackTicket> {
-    const result = await this.call<{ data: KinescopeVideo }>(`/videos/${providerVideoId}`);
-    void options.userId;
+  /**
+   * Адрес плеера.
+   *
+   * drmauthtoken провайдер присылает обратно к нам, когда запрашивает
+   * разрешение на воспроизведение: по нему мы находим сессию и заново
+   * проверяем права. Поэтому адрес сам по себе ничего не открывает.
+   */
+  async issuePlayback(providerVideoId: string, request: PlaybackRequest): Promise<PlaybackTicket> {
     return {
-      embedUrl: result.data.embed_link ?? result.data.play_link,
-      hlsUrl: result.data.hls_link,
-      posterUrl: result.data.poster?.original,
-      expiresAt: new Date(Date.now() + options.ttlSec * 1000),
+      provider: this.name,
+      // Плеер собирает клиент через официальный IFrame Player API, поэтому
+      // здесь адрес ролика, а не готовый iframe с параметрами в строке.
+      embedUrl: `${EMBED_BASE}/${providerVideoId}`,
+      authToken: request.authToken,
+      watermark: request.watermark || null,
+      drm: request.drm,
+      expiresAt: new Date(Date.now() + request.ttlSec * 1000),
     };
   }
 

@@ -1,4 +1,5 @@
 import { Injectable } from '@nestjs/common';
+import { AppError } from '@/common/errors/app.error';
 import { Prisma, type PriceListItem } from '@prisma/client';
 import { PrismaService } from '@/infra/prisma/prisma.service';
 import { WorkspaceScopedRepository } from '@/modules/workspaces/repositories/workspace-scoped.repository';
@@ -53,7 +54,6 @@ export class PriceListRepository extends WorkspaceScopedRepository {
   ): Promise<PriceListItem> {
     const existing = await this.findById(workspaceId, itemId);
     if (!existing) {
-      const { AppError } = await import('@/common/errors/app.error');
       throw AppError.notFound('Позиция прайса не найдена');
     }
     const { workspaceId: _ws, id: _id, ...safe } = data;

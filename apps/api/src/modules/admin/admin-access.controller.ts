@@ -12,6 +12,7 @@ import { AccessService } from '@/modules/access/access.service';
 import { Audited } from '@/modules/audit/audit.interceptor';
 import { NotificationsService } from '@/modules/notifications/notifications.service';
 import { ClubService } from '@/modules/club/club.service';
+import { VideoSessionService } from '@/modules/learning/video-access/video-session.service';
 import {
   createGrantSchema,
   extendGrantSchema,
@@ -51,6 +52,7 @@ export class AdminAccessController {
     private readonly access: AccessService,
     private readonly notifications: NotificationsService,
     private readonly club: ClubService,
+    private readonly videoSessions: VideoSessionService,
   ) {}
 
   @Get()
@@ -121,6 +123,11 @@ export class AdminAccessController {
       await this.club.onGrantEnded(grant.userId, 'access_revoked');
     }
 
+    // Отзыв доступа к курсу гасит и открытые сейчас плееры.
+    if (grant.product === 'course' && grant.userId) {
+      await this.videoSessions.revokeForUser(grant.userId, 'access_ended');
+    }
+
     // Пользователь должен узнать об отзыве, не обнаружив его в интерфейсе.
     if (grant.userId) {
       await this.notifications.notify({
@@ -144,6 +151,9 @@ export class AdminAccessController {
     const grant = await this.access.suspend(grantId, body.reason);
     if (grant.product === 'club' && grant.userId) {
       await this.club.onGrantEnded(grant.userId, 'access_suspended');
+    }
+    if (grant.product === 'course' && grant.userId) {
+      await this.videoSessions.revokeForUser(grant.userId, 'access_ended');
     }
     return serialize(grant);
   }

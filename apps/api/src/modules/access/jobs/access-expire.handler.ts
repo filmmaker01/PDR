@@ -5,6 +5,7 @@ import { PrismaService } from '@/infra/prisma/prisma.service';
 import { NotificationsService } from '@/modules/notifications/notifications.service';
 import { AccessService } from '../access.service';
 import { ClubService } from '@/modules/club/club.service';
+import { VideoSessionService } from '@/modules/learning/video-access/video-session.service';
 
 const PRODUCT_LABELS: Record<string, string> = {
   course: 'Доступ к курсу',
@@ -33,6 +34,7 @@ export class AccessExpireHandler extends JobHandler<typeof JOB.accessExpire> {
     private readonly notifications: NotificationsService,
     private readonly prisma: PrismaService,
     private readonly club: ClubService,
+    private readonly videoSessions: VideoSessionService,
   ) {
     super();
   }
@@ -57,6 +59,11 @@ export class AccessExpireHandler extends JobHandler<typeof JOB.accessExpire> {
     for (const grant of expired) {
       if (grant.product === 'club' && grant.userId) {
         await this.club.onGrantEnded(grant.userId, 'access_expired');
+      }
+      // Истёкший доступ к курсу закрывает и уже открытый плеер: иначе выданная
+      // сессия доигрывает урок до конца своего срока.
+      if (grant.product === 'course' && grant.userId) {
+        await this.videoSessions.revokeForUser(grant.userId, 'access_ended');
       }
     }
   }

@@ -73,7 +73,23 @@ export const envSchema = z
     VIDEO_PROVIDER: z.enum(['kinescope', 'mock']).default('mock'),
     KINESCOPE_API_KEY: z.string().default(''),
     KINESCOPE_PARENT_ID: z.string().default(''),
-    VIDEO_PLAYBACK_TTL_SEC: z.coerce.number().int().positive().default(7200),
+    /// Шаблон плеера с включёнными watermark и запретом скачивания.
+    KINESCOPE_PLAYER_TEMPLATE_ID: z.string().default(''),
+    /**
+     * Жизнь сессии просмотра. Короткая намеренно: выданный адрес плеера
+     * должен переставать работать быстро, а продление стоит один запрос.
+     */
+    VIDEO_SESSION_TTL_SEC: z.coerce.number().int().positive().max(3600).default(300),
+    /**
+     * Подпись токена, который уходит провайдеру и возвращается к нам при
+     * проверке доступа. Отдельный секрет: утечка не даёт входа в приложение.
+     */
+    VIDEO_TOKEN_SECRET: z.string().default(''),
+    /// Общий рубильник DRM. Включается после проверки на реальных устройствах.
+    VIDEO_DRM_ENABLED: bool.default(false),
+    VIDEO_WATERMARK_ENABLED: bool.default(true),
+    /// Общий секрет, которым провайдер подписывает запросы проверки доступа.
+    VIDEO_AUTH_CALLBACK_SECRET: z.string().default(''),
 
     SENTRY_DSN: z.string().default(''),
     LOG_LEVEL: z.enum(['fatal', 'error', 'warn', 'info', 'debug', 'trace']).default('info'),
@@ -117,6 +133,16 @@ export const envSchema = z
         code: z.ZodIssueCode.custom,
         path: ['KINESCOPE_API_KEY'],
         message: 'KINESCOPE_API_KEY обязателен при VIDEO_PROVIDER=kinescope',
+      });
+    }
+
+    // Без секрета подписи сессию просмотра подделает кто угодно, поэтому с
+    // реальным провайдером он обязателен, а не «желателен».
+    if (env.VIDEO_PROVIDER === 'kinescope' && env.VIDEO_TOKEN_SECRET.length < 32) {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        path: ['VIDEO_TOKEN_SECRET'],
+        message: 'VIDEO_TOKEN_SECRET обязателен и должен быть не короче 32 символов',
       });
     }
 

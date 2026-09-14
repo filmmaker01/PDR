@@ -1,4 +1,5 @@
 import { Body, Controller, Get, HttpCode, HttpStatus, Param, Post, Put } from '@nestjs/common';
+import { AppError } from '@/common/errors/app.error';
 import { ApiOperation, ApiTags } from '@nestjs/swagger';
 import { Idempotent } from '@/common/interceptors/idempotency.interceptor';
 import { zodBody } from '@/common/pipes/zod-validation.pipe';
@@ -117,7 +118,6 @@ export class ExamsController {
   private async ownEnrollmentOf(attemptId: string, userId: string): Promise<string> {
     const attempt = await this.exams.attemptForGrading(attemptId);
     if (attempt.enrollment.user.id !== userId) {
-      const { AppError } = await import('@/common/errors/app.error');
       throw AppError.notFound('Попытка не найдена');
     }
     return attempt.enrollmentId;
