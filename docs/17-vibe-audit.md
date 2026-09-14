@@ -1,5 +1,11 @@
 # 17. Аудит: шаблон Vibe против текущего PDR
 
+**Статус: архитектурный справочник. План миграции заморожен** и не
+выполняется до первого живого staging. Приоритет — запуск: защита видео,
+боевой Telegram-бот и Mini App, клуб, публичный staging, реальные ключи
+Kinescope, прогон в Telegram на iOS/Android/Desktop. К выборочному переносу
+решений из Vibe возвращаемся после успешного живого staging.
+
 Дата: 2026-09-14. Сравнивались `di-sukharev/vibe` (master, коммит `059d50e`,
 2026-09-13) и `filmmaker01/PDR` (ветка `claude/sleepy-hamilton-atoayb`).
 Код не менялся; это план.
@@ -45,7 +51,7 @@ serverless для PDR не подходит (см. «Yandex Cloud»). Стоим
 | Terraform | **ADOPT частично** | `infra/yandex/production/foundation.tf` + `storage.tf` + `secrets.tf` (сеть, Managed PG, Object Storage, Lockbox, сервисные аккаунты) — переносятся почти как есть. `runtime/` (Serverless Containers, API Gateway, timer-триггеры) — **NOT NEEDED** |
 | Yandex Cloud вместо Render/Amvera | **ADOPT, но не в serverless-форме** | См. следующий раздел |
 | Object Storage | **ADOPT** | S3-драйвер PDR уже работает с любым S3-совместимым endpoint (`S3_ENDPOINT`, `S3_FORCE_PATH_STYLE`) |
-| Managed PostgreSQL | **ADOPT** | Версию в Terraform сменить с `18` на `16`; проверить наличие `btree_gist` в списке расширений Yandex (сайт заблокирован из этой сессии — не подтверждено) |
+| Managed PostgreSQL | **ADOPT** | Версию в Terraform сменить с `18` на `16`. `btree_gist` в Yandex Managed PostgreSQL поддерживается (подтверждено заказчиком), поэтому `EXCLUDE`-ограничение календаря переносится без изменений |
 | Serverless / scheduled jobs | **NOT NEEDED** | pg-boss остаётся; расписания живут в коде обработчиков |
 | CI/CD | **KEEP** | У Vibe GitHub Actions нет принципиально («все проверки локально»). В PDR есть `ci.yml` с PostgreSQL-сервисом, lint, typecheck, unit, integration, build — это лучше |
 | `website` (Astro) | **NOT NEEDED** | Публичного сайта нет |
@@ -101,6 +107,9 @@ Storage и резидентность данных в РФ. Против Render:
 
 ## Итог
 
+Выполнять не сейчас: раздел описывает целевое состояние, к которому
+возвращаемся после живого staging.
+
 ### 1. Конечная архитектура PDR
 
 ```
@@ -154,9 +163,6 @@ NestJS, Prisma 6 + PostgreSQL 16 + сырой SQL для `EXCLUDE`, pg-boss с
 - **Контракты**: при переносе схем ответов вскроются расхождения между тем,
   что API реально отдаёт, и тем, что фронтенд ожидал. Это не риск миграции, а
   её польза — но каждое расхождение надо разбирать, а не «подгонять схему».
-- **`btree_gist` на Managed PG**: не подтверждено из этой сессии. Если
-  расширения нет — календарь без защиты от пересечений, что недопустимо;
-  проверять до создания кластера.
 - **Прайс и лимиты Yandex**: не проверены (сайт заблокирован прокси).
 - **Соблазн переписать по пути**: Vibe красиво разложен по слоям
   transport/application/domain/infrastructure. Перекладывать существующие
@@ -214,3 +220,5 @@ NestJS, Prisma 6 + PostgreSQL 16 + сырой SQL для `EXCLUDE`, pg-boss с
   `.github/workflows/ci.yml`, `infra/docker/compose.deploy.yml`,
   `docs/02-architecture.md`, `docs/11-testing-quality.md`, `docs/14-deploy-staging.md`.
 - Подсчёты сделаны по дереву репозиториев (`find`, `grep -c`) на дату аудита.
+- Поддержка `btree_gist` в Yandex Managed PostgreSQL — со слов заказчика
+  (документация Yandex из этой сессии недоступна).
