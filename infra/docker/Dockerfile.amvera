@@ -1,0 +1,71 @@
+# syntax=docker/dockerfile:1
+#
+# Единый образ для Amvera: API, worker и оба фронтенда.
+#
+# Amvera читает один файл конфигурации из корня репозитория, а каждое
+# приложение заводится отдельным проектом. Собирать три разных образа из
+# одного репозитория там негде, поэтому образ один, а что именно запускать,
+# решает переменная PROCESS_ROLE в entrypoint.
+#
+# Адреса фронтендов вшиваются плейсхолдером: переменные окружения на этапе
+# сборки в Amvera недоступны, подстановка выполняется при старте контейнера.
+
+FROM node:22-bookworm-slim AS base
+ENV PNPM_HOME=/pnpm PATH=/pnpm:$PATH
+RUN corepack enable && apt-get update \
+  && apt-get install -y --no-install-recommends openssl ca-certificates fonts-dejavu-core \
+  && rm -rf /var/lib/apt/lists/*
+WORKDIR /app
+
+# ── Зависимости всего монорепозитория ───────────────────────────────────────
+FROM base AS deps
+COPY package.json pnpm-lock.yaml pnpm-workspace.yaml .npmrc ./
+COPY apps/api/package.json apps/api/
+COPY apps/miniapp/package.json apps/miniapp/
+COPY apps/admin/package.json apps/admin/
+COPY packages/shared/package.json packages/shared/
+COPY packages/api-client/package.json packages/api-client/
+COPY packages/ui/package.json packages/ui/
+RUN pnpm install --frozen-lockfile
+
+# ── Сборка ──────────────────────────────────────────────────────────────────
+FROM deps AS build
+COPY tsconfig.base.json ./
+COPY packages packages
+COPY apps/api apps/api
+COPY apps/miniapp apps/miniapp
+COPY apps/admin apps/admin
+
+RUN pnpm --filter @pdr/shared build \
+  && pnpm --filter @pdr/api exec prisma generate \
+  && pnpm --filter @pdr/api exec nest build
+
+# Плейсхолдеры заменяются на настоящие значения в entrypoint.
+ENV VITE_API_URL=__PDR_API_URL__ VITE_BOT_USERNAME=__PDR_BOT_USERNAME__
+RUN pnpm --filter @pdr/miniapp build && pnpm --filter @pdr/admin build
+
+# ── Образ для запуска ───────────────────────────────────────────────────────
+FROM base AS runtime
+ENV NODE_ENV=production
+RUN apt-get update && apt-get install -y --no-install-recommends nginx \
+  && rm -rf /var/lib/apt/lists/* /etc/nginx/sites-enabled/default
+
+COPY --from=build /app/node_modules ./node_modules
+COPY --from=build /app/package.json ./package.json
+COPY --from=build /app/packages/shared/dist ./packages/shared/dist
+COPY --from=build /app/packages/shared/package.json ./packages/shared/package.json
+COPY --from=build /app/apps/api/dist ./apps/api/dist
+COPY --from=build /app/apps/api/package.json ./apps/api/package.json
+COPY --from=build /app/apps/api/prisma ./apps/api/prisma
+
+COPY --from=build /app/apps/miniapp/dist /srv/miniapp
+COPY --from=build /app/apps/admin/dist /srv/admin
+COPY infra/nginx/security-headers.conf /etc/nginx/pdr-security-headers.conf
+COPY infra/nginx/spa.conf /etc/nginx/conf.d/spa.conf
+COPY infra/docker/amvera-entrypoint.sh /app/entrypoint.sh
+RUN chmod +x /app/entrypoint.sh
+
+# Порт один на все роли: в Amvera containerPort задаётся в общем для
+# репозитория файле конфигурации.
+EXPOSE 3000
+CMD ["/app/entrypoint.sh"]
