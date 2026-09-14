@@ -28,3 +28,5 @@ apps/api/.env.staging
 apps/api/storage-staging/
 /.qa-screens/
 /storage-staging/
+.vercel
+.env*
