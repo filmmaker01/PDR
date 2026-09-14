@@ -18,6 +18,8 @@
     "db:migrate": "pnpm --filter @pdr/api db:migrate",
     "db:deploy": "pnpm --filter @pdr/api db:deploy",
     "db:seed": "pnpm --filter @pdr/api db:seed",
+    "telegram:setup": "pnpm --filter @pdr/api exec tsx ../../infra/scripts/telegram-setup.ts",
+    "telegram:check": "pnpm --filter @pdr/api exec tsx ../../infra/scripts/telegram-setup.ts --check",
     "db:reset": "pnpm --filter @pdr/api db:reset",
     "dev": "pnpm --parallel --filter @pdr/api --filter @pdr/miniapp --filter @pdr/admin dev"
   },

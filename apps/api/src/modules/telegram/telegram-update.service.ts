@@ -6,6 +6,8 @@ import { TelegramService } from '@/infra/telegram/telegram.service';
 import { UsersService } from '@/modules/users/users.service';
 import { AuthService } from '@/modules/auth/auth.service';
 import { ClubService } from '@/modules/club/club.service';
+import { AuditService } from '@/modules/audit/audit.service';
+import { clubRightsProblems } from '@/infra/telegram/setup-plan';
 
 const START_HELP = [
   'Это приложение для PDR-мастеров: обучение и учёт заказов.',
@@ -29,6 +31,7 @@ export class TelegramUpdateService {
     private readonly users: UsersService,
     private readonly auth: AuthService,
     private readonly club: ClubService,
+    private readonly audit: AuditService,
   ) {}
 
   /** Защита от повторной доставки одного и того же обновления. */
@@ -62,6 +65,10 @@ export class TelegramUpdateService {
       );
       return;
     }
+    if (update.my_chat_member) {
+      await this.onBotStatusChange(update.my_chat_member);
+      return;
+    }
     if (update.chat_member) {
       // Человек вышел сам или его удалили вручную — состояние нужно знать.
       await this.club.onChatMemberUpdate(
@@ -72,6 +79,46 @@ export class TelegramUpdateService {
       return;
     }
     this.logger.debug({ keys: Object.keys(update) }, 'Обновление без обработчика');
+  }
+
+  /**
+   * Изменение статуса самого бота в чате.
+   *
+   * Значение имеет один случай: бота убрали из группы клуба или сняли права.
+   * После этого одобрение заявок молча перестаёт работать — заявки приходят,
+   * а approveChatJoinRequest отвечает ошибкой, — и узнать об этом больше
+   * неоткуда. Поэтому событие попадает и в лог, и в журнал действий, который
+   * виден администратору.
+   */
+  private async onBotStatusChange(update: NonNullable<Update['my_chat_member']>): Promise<void> {
+    const chatId = String(update.chat.id);
+    if (!this.telegram.clubChatId || chatId !== this.telegram.clubChatId) return;
+
+    const member = update.new_chat_member;
+    const problems = clubRightsProblems({
+      status: member.status,
+      can_invite_users: 'can_invite_users' in member ? member.can_invite_users : undefined,
+      can_restrict_members:
+        'can_restrict_members' in member ? member.can_restrict_members : undefined,
+    });
+
+    if (problems.length === 0) {
+      this.logger.log({ chatId, status: member.status }, 'Права бота в группе клуба в порядке');
+    } else {
+      this.logger.error(
+        { chatId, status: member.status, problems },
+        'Бот потерял права в группе клуба: заявки перестанут обрабатываться',
+      );
+    }
+
+    await this.audit
+      .record({
+        entityType: 'club_chat',
+        entityId: chatId,
+        action: problems.length === 0 ? 'bot_rights_ok' : 'bot_rights_lost',
+        after: { status: member.status, problems },
+      })
+      .catch(() => undefined);
   }
 
   private async handleMessage(message: NonNullable<Update['message']>): Promise<void> {
