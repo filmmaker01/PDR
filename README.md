@@ -22,6 +22,7 @@
 | 12 | [docs/12-roadmap.md](docs/12-roadmap.md) | Порядок реализации по этапам с проверяемым результатом каждого |
 | 13 | [docs/13-staging.md](docs/13-staging.md) | Локальное staging-окружение, демо-вход, демо-данные, прогоны QA |
 | 14 | [docs/14-deploy-staging.md](docs/14-deploy-staging.md) | Публичный staging на Amvera: схема хостинга, `amvera.yml`, порядок запуска |
+| 15 | [docs/15-video-protection.md](docs/15-video-protection.md) | Защита видео: закрытый просмотр, DRM, watermark, совместимость с Telegram WebView |
 
 Руководства пользователей:
 
