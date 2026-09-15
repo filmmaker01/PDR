@@ -7,7 +7,7 @@ import {
 } from '@nestjs/common';
 import { Reflector } from '@nestjs/core';
 import { createHash } from 'node:crypto';
-import { Observable, from, of, switchMap, tap } from 'rxjs';
+import { Observable, from, mergeMap, of, switchMap } from 'rxjs';
 import type { Response } from 'express';
 import { PrismaService } from '@/infra/prisma/prisma.service';
 import { AppError } from '../errors/app.error';
@@ -63,9 +63,12 @@ export class IdempotencyInterceptor implements NestInterceptor {
           return of(existing.responseBody);
         }
         return next.handle().pipe(
-          tap((body: unknown) => {
+          mergeMap(async (body: unknown) => {
             const res = context.switchToHttp().getResponse<Response>();
-            void this.prisma.idempotencyKey
+            // Ответ отдаётся только после того, как запись о ключе сохранена.
+            // Иначе повтор, пришедший сразу следом, не найдёт её и выполнит
+            // операцию второй раз — а именно от этого ключ и защищает.
+            await this.prisma.idempotencyKey
               .create({
                 data: {
                   userId,
@@ -75,7 +78,10 @@ export class IdempotencyInterceptor implements NestInterceptor {
                   responseBody: (body ?? {}) as object,
                 },
               })
+              // Запись могла появиться из параллельного запроса с тем же
+              // ключом: ответ от этого не становится неверным.
               .catch(() => undefined);
+            return body;
           }),
         );
       }),
