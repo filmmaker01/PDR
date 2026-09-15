@@ -73,7 +73,6 @@ export class TelegramSetupController {
 
   @Get()
   @Public()
-  @ApiExcludeController()
   async check(@Req() req: Request): Promise<SetupReport> {
     return this.run(req, false);
   }
