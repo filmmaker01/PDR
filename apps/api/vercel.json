@@ -1,0 +1,28 @@
+{
+  "$schema": "https://openapi.vercel.sh/vercel.json",
+  "framework": null,
+  "installCommand": "cd ../.. && pnpm install --frozen-lockfile --filter @pdr/api...",
+  "buildCommand": "cd ../.. && pnpm --filter @pdr/shared build && pnpm --filter @pdr/api exec prisma generate && pnpm --filter @pdr/api exec nest build",
+  "outputDirectory": "public",
+  "github": {
+    "silent": true
+  },
+  "functions": {
+    "api/index.ts": {
+      "maxDuration": 300,
+      "memory": 1024
+    }
+  },
+  "rewrites": [
+    {
+      "source": "/(.*)",
+      "destination": "/api/index"
+    }
+  ],
+  "crons": [
+    {
+      "path": "/v1/jobs/tick",
+      "schedule": "* * * * *"
+    }
+  ]
+}

@@ -1652,6 +1652,42 @@ model Export {
   @@map("exports")
 }
 
+/// Очередь фоновых задач. Заменяет pg-boss: на Vercel нет постоянного процесса,
+/// который держал бы его соединения и таймеры, поэтому очередь — обычная таблица,
+/// а разбирает её cron-эндпоинт `/v1/jobs/tick`.
+///
+/// Состояния: `pending` → `active` → `done` | `failed`. Задача берётся
+/// `FOR UPDATE SKIP LOCKED`, поэтому параллельные вызовы tick не дублируют работу.
+model JobQueue {
+  id   String @id @default(uuid()) @db.Uuid
+  name String
+
+  payload Json @default("{}")
+
+  /// Не раньше этого момента. Для отложенных задач и повторов после ошибки.
+  runAt DateTime @map("run_at") @db.Timestamptz(6)
+
+  state String @default("pending")
+
+  attempts      Int @default(0)
+  retryLimit    Int @default(3) @map("retry_limit")
+  retryDelaySec Int @default(30) @map("retry_delay_sec")
+
+  /// Ключ уникальности: повторная постановка, пока задача не завершена,
+  /// не создаёт дубль. Частичный уникальный индекс — в миграции.
+  singletonKey String? @map("singleton_key")
+
+  lastError String? @map("last_error")
+
+  startedAt   DateTime? @map("started_at") @db.Timestamptz(6)
+  completedAt DateTime? @map("completed_at") @db.Timestamptz(6)
+  createdAt   DateTime  @default(now()) @map("created_at") @db.Timestamptz(6)
+
+  @@index([state, runAt])
+  @@index([name, state])
+  @@map("job_queue")
+}
+
 /// Отметка об успешной резервной копии. Пишет скрипт `infra/backup/backup.sh`,
 /// читает задача `backup.verify` и дашборд администратора.
 model BackupRun {

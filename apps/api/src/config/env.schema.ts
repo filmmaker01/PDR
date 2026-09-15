@@ -91,6 +91,12 @@ export const envSchema = z
     /// Общий секрет, которым провайдер подписывает запросы проверки доступа.
     VIDEO_AUTH_CALLBACK_SECRET: z.string().default(''),
 
+    /**
+     * Общий секрет планировщика: им закрыт эндпоинт разбора очереди.
+     * На Vercel эту же переменную планировщик подставляет в заголовок запроса.
+     */
+    CRON_SECRET: z.string().default(''),
+
     SENTRY_DSN: z.string().default(''),
     LOG_LEVEL: z.enum(['fatal', 'error', 'warn', 'info', 'debug', 'trace']).default('info'),
 
@@ -143,6 +149,17 @@ export const envSchema = z
         code: z.ZodIssueCode.custom,
         path: ['VIDEO_TOKEN_SECRET'],
         message: 'VIDEO_TOKEN_SECRET обязателен и должен быть не короче 32 символов',
+      });
+    }
+
+    // Разбор очереди закрыт этим секретом. Без него эндпоинт планировщика
+    // отвечает отказом, и фоновые задачи молча перестают выполняться —
+    // поэтому на staging и в production переменная обязательна.
+    if (isProdLike && env.CRON_SECRET.length < 16) {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        path: ['CRON_SECRET'],
+        message: 'CRON_SECRET обязателен и должен быть не короче 16 символов',
       });
     }
 
