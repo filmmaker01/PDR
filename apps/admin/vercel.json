@@ -9,6 +9,10 @@
   },
   "rewrites": [
     {
+      "source": "/api/(.*)",
+      "destination": "https://pdr-api.vercel.app/$1"
+    },
+    {
       "source": "/((?!api/).*)",
       "destination": "/index.html"
     }
