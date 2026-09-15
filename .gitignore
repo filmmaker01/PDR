@@ -30,3 +30,4 @@ apps/api/storage-staging/
 /storage-staging/
 .vercel
 .env*
+apps/api/storage-local/
