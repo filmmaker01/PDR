@@ -14,13 +14,7 @@ export class ZodValidationPipe implements PipeTransform {
     try {
       return this.schema.parse(value);
     } catch (e) {
-      if (e instanceof ZodError) {
-        throw new AppError(
-          'validation_failed',
-          'Проверьте правильность заполнения полей',
-          e.issues.map((i) => ({ path: i.path.join('.'), message: i.message, code: i.code })),
-        );
-      }
+      if (e instanceof ZodError) throw AppError.fromZod(e);
       throw e;
     }
   }

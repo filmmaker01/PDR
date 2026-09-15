@@ -1,5 +1,6 @@
 import { HttpException, HttpStatus } from '@nestjs/common';
 import type { ErrorCode } from '@pdr/shared';
+import type { ZodError } from 'zod';
 
 const STATUS_BY_CODE: Partial<Record<ErrorCode, HttpStatus>> = {
   unauthorized: HttpStatus.UNAUTHORIZED,
@@ -64,6 +65,21 @@ export class AppError extends HttpException {
 
   static validation(message: string, details?: unknown): AppError {
     return new AppError('validation_failed', message, details);
+  }
+
+  /**
+   * Ошибка разбора zod-схемы.
+   *
+   * Тело запроса проверяется пайпом, а параметры строки запроса — прямым
+   * вызовом `parse` в контроллерах. Общая точка нужна, чтобы оба пути
+   * отвечали одинаково: иначе неверный параметр выглядел бы сбоем сервера.
+   */
+  static fromZod(error: ZodError): AppError {
+    return new AppError(
+      'validation_failed',
+      'Проверьте правильность заполнения полей',
+      error.issues.map((i) => ({ path: i.path.join('.'), message: i.message, code: i.code })),
+    );
   }
 
   static conflict(message: string, details?: unknown): AppError {

@@ -8,6 +8,7 @@ import {
 } from '@nestjs/common';
 import type { Request, Response } from 'express';
 import type { ApiErrorBody, ErrorCode } from '@pdr/shared';
+import { ZodError } from 'zod';
 import { AppError } from '../errors/app.error';
 
 /** Единый формат ответа об ошибке: { error: { code, message, details?, requestId } }. */
@@ -28,9 +29,14 @@ export class AllExceptionsFilter implements ExceptionFilter {
     let message = 'Внутренняя ошибка сервера';
     let details: unknown;
 
-    if (exception instanceof AppError) {
-      status = exception.getStatus();
-      const body = exception.getResponse() as {
+    // Параметры строки запроса контроллеры разбирают прямым вызовом `parse`,
+    // минуя пайп, поэтому ZodError доходит сюда. Без этой ветки неверный
+    // параметр отвечал бы «внутренней ошибкой сервера».
+    const error = exception instanceof ZodError ? AppError.fromZod(exception) : exception;
+
+    if (error instanceof AppError) {
+      status = error.getStatus();
+      const body = error.getResponse() as {
         code: ErrorCode;
         message: string;
         details?: unknown;
@@ -38,20 +44,20 @@ export class AllExceptionsFilter implements ExceptionFilter {
       code = body.code;
       message = body.message;
       details = body.details;
-    } else if (exception instanceof HttpException) {
-      status = exception.getStatus();
-      const body = exception.getResponse();
+    } else if (error instanceof HttpException) {
+      status = error.getStatus();
+      const body = error.getResponse();
       code = mapHttpStatusToCode(status);
       message =
         typeof body === 'string'
           ? body
-          : (((body as { message?: string | string[] }).message as string) ?? exception.message);
+          : (((body as { message?: string | string[] }).message as string) ?? error.message);
       if (Array.isArray(message)) message = message.join('; ');
-    } else if (exception instanceof Error) {
-      this.logger.error({ err: exception, requestId }, exception.message);
+    } else if (error instanceof Error) {
+      this.logger.error({ err: error, requestId }, error.message);
       if (this.exposeInternals) {
-        message = exception.message;
-        details = { stack: exception.stack };
+        message = error.message;
+        details = { stack: error.stack };
       }
     }
 
