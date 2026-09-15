@@ -30,7 +30,7 @@ export interface ObjectHead {
  */
 export interface StorageProvider {
   readonly bucket: string;
-  readonly kind: 's3' | 'local';
+  readonly kind: 's3' | 'local' | 'blob';
 
   presignUpload(
     key: string,

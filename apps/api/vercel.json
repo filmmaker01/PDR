@@ -8,9 +8,8 @@
     "silent": true
   },
   "functions": {
-    "api/index.ts": {
-      "maxDuration": 300,
-      "memory": 1024
+    "api/index.js": {
+      "maxDuration": 300
     }
   },
   "rewrites": [
