@@ -35,6 +35,8 @@ export const ERROR_CODES = [
   'version_immutable',
   'publish_validation_failed',
   // прочее
+  'ai_unavailable',
+  'ai_failed',
   'rate_limited',
   'internal_error',
   'service_unavailable',

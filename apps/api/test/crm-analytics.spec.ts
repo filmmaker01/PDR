@@ -97,7 +97,7 @@ describe('CRM: сотрудники и аналитика', () => {
       expect(res.body.completedTotalMinor).toBe(1600000);
       expect(res.body.receivedMinor).toBe(1200000);
       expect(res.body.averageCheckMinor).toBe(800000);
-      expect(res.body.outstandingDebtMinor).toBe(400000);
+      expect(res.body.outstandingDebtMinor).toBeUndefined();
       expect(res.body.newClients).toBe(2);
       expect(res.body.currency).toBe('RUB');
     });

@@ -15,7 +15,6 @@ import {
 } from '../repositories/orders.repository';
 import { AppointmentsService } from '../appointments/appointments.service';
 import {
-  ACTIVE_STATUSES,
   allowedFrom,
   canTransition,
   isOwnerOnlyTransition,
@@ -346,7 +345,13 @@ export class OrdersService {
     return this.orders.history(ctx.workspaceId, orderId);
   }
 
-  /** Сводка «Сегодня»: активные заказы и задолженность. */
+  /**
+   * Сводка «Сегодня»: что в работе и что готово к выдаче.
+   *
+   * Задолженности здесь нет намеренно: в PDR-мастерской работы оплачиваются
+   * сразу, и показатель «сколько нам должны» только отвлекал. Учёт оплат
+   * при этом никуда не делся — он живёт в карточке заказа и журнале оплат.
+   */
   async summary(ctx: WorkspaceContext) {
     const filter = this.scopeFilter(ctx, { limit: 1 });
 
@@ -355,48 +360,7 @@ export class OrdersService {
       this.orders.count(ctx.workspaceId, { ...filter, statuses: ['ready'] }),
     ]);
 
-    const debtOrders = await this.orders.list(ctx.workspaceId, {
-      ...filter,
-      statuses: ['delivered', 'ready'],
-      limit: 200,
-    });
-    const withDebt = debtOrders.items.filter((order) => {
-      const agreed = order.agreedTotalMinor ?? 0n;
-      return agreed > order.paidMinor;
-    });
-    const debtMinor = withDebt.reduce(
-      (sum, order) => sum + ((order.agreedTotalMinor ?? 0n) - order.paidMinor),
-      0n,
-    );
-
-    return {
-      activeCount,
-      readyCount,
-      debt: { count: withDebt.length, totalMinor: Number(debtMinor) },
-      currency: ctx.workspace.currency,
-    };
-  }
-
-  async debts(ctx: WorkspaceContext) {
-    const filter = this.scopeFilter(ctx, {
-      limit: 200,
-      statuses: [...ACTIVE_STATUSES, 'delivered'],
-    });
-    const result = await this.orders.list(ctx.workspaceId, filter);
-    return result.items
-      .filter((order) => (order.agreedTotalMinor ?? 0n) > order.paidMinor)
-      .map((order) => ({
-        id: order.id,
-        number: order.number,
-        clientName: order.client.name,
-        clientPhone: order.client.phone,
-        status: order.status,
-        agreedTotalMinor: Number(order.agreedTotalMinor ?? 0n),
-        paidMinor: Number(order.paidMinor),
-        debtMinor: Number((order.agreedTotalMinor ?? 0n) - order.paidMinor),
-        currency: order.currency,
-        deliveredAt: order.deliveredAt?.toISOString() ?? null,
-      }));
+    return { activeCount, readyCount, currency: ctx.workspace.currency };
   }
 
   private async resolveAssignee(

@@ -2,12 +2,31 @@ import { useState } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
 import { useMutation, useQueryClient } from '@tanstack/react-query';
 import { ApiError } from '@pdr/api-client';
-import { Button, Card, Field, Input, ListItem, Textarea } from '@pdr/ui';
+import {
+  Badge,
+  Button,
+  CarScheme,
+  Card,
+  Field,
+  Input,
+  ListItem,
+  MediaUploader,
+  Textarea,
+  useUploadQueue,
+} from '@pdr/ui';
+import { damageTypeLabel, panelLabel } from '@pdr/shared';
 import { api } from '@/shared/api';
+import { createUploadTransport } from '@/shared/uploads';
 import { formatPhoneRu } from '@/shared/format';
 import { alertDialog, confirmDialog, haptic } from '@/shared/telegram';
 import { useClients, useMembers, useWorkspace } from './api';
-import { APPOINTMENT_KIND_OPTIONS, type AppointmentKind, type ClientListItem } from './types';
+import { DamageSheet } from './DamageSheet';
+import {
+  APPOINTMENT_KIND_OPTIONS,
+  type AppointmentKind,
+  type ClientListItem,
+  type DamageDraft,
+} from './types';
 
 /** Создание заказа: клиент, автомобиль и заказ одной операцией. */
 export function NewOrderScreen() {
@@ -30,6 +49,11 @@ export function NewOrderScreen() {
   const [assigneeMemberId, setAssigneeMemberId] = useState<string>('');
   const [idempotencyKey] = useState(() => crypto.randomUUID());
 
+  const [damages, setDamages] = useState<DamageDraft[]>([]);
+  const [panelCode, setPanelCode] = useState<string | null>(null);
+  const [damageSheet, setDamageSheet] = useState(false);
+  const [fileIds, setFileIds] = useState<string[]>([]);
+
   const [withAppointment, setWithAppointment] = useState(false);
   const [day, setDay] = useState(() => new Date().toISOString().slice(0, 10));
   const [time, setTime] = useState('10:00');
@@ -37,6 +61,20 @@ export function NewOrderScreen() {
   const [kind, setKind] = useState<AppointmentKind>('inspection');
 
   const clients = useClients(workspaceId, search);
+
+  // Файлы уезжают в хранилище сразу, а к заказу привязываются после его
+  // создания: снять повреждение важно в момент осмотра, а не после формы.
+  const uploads = useUploadQueue({
+    transport: createUploadTransport({ scope: 'order_photo', workspaceId }),
+    onUploaded: async (fileId) => {
+      setFileIds((current) => [...current, fileId]);
+    },
+  });
+
+  const damageCounts = damages.reduce<Record<string, number>>((acc, damage) => {
+    acc[damage.panelCode] = (acc[damage.panelCode] ?? 0) + 1;
+    return acc;
+  }, {});
   const members = useMembers(workspaceId);
   const workspace = useWorkspace(workspaceId);
   const canAssign = workspace.data?.permissions.includes('orders.assign') ?? false;
@@ -74,6 +112,23 @@ export function NewOrderScreen() {
       ),
     onSuccess: async (order) => {
       haptic('success');
+
+      // Повреждения и снимки привязываются к уже созданному заказу: отдельный
+      // сбой на фотографии не должен отменять сам заказ.
+      for (const damage of damages) {
+        await api
+          .post(`/workspaces/${workspaceId}/orders/${order.id}/damages`, damage)
+          .catch(() => undefined);
+      }
+      for (const fileId of fileIds) {
+        await api
+          .post(`/workspaces/${workspaceId}/orders/${order.id}/photos`, {
+            fileId,
+            category: 'before',
+          })
+          .catch(() => undefined);
+      }
+
       await queryClient.invalidateQueries({ queryKey: ['crm'] });
       navigate(`/workspace/${workspaceId}/orders/${order.id}`, { replace: true });
     },
@@ -269,6 +324,53 @@ export function NewOrderScreen() {
         </div>
       </Card>
 
+      <h2 className="pdr-subtitle">Фотографии</h2>
+      <Card>
+        <MediaUploader
+          items={uploads.items}
+          onAdd={uploads.add}
+          onRetry={uploads.retry}
+          onRemove={uploads.remove}
+          accept="image/*"
+          capture
+          label="Добавить фото"
+          hint="Снимите повреждение с камеры или выберите готовую фотографию."
+        />
+      </Card>
+
+      <h2 className="pdr-subtitle">Повреждения</h2>
+      <Card>
+        <CarScheme
+          counts={damageCounts}
+          onSelect={(code) => {
+            setPanelCode(code);
+            setDamageSheet(true);
+          }}
+          hint="Отметьте повреждённые детали — их можно будет оценить сразу после создания заказа."
+        />
+      </Card>
+
+      {damages.length > 0 ? (
+        <Card flat>
+          <div className="pdr-list">
+            {damages.map((damage, index) => (
+              <ListItem
+                key={index}
+                title={panelLabel(damage.panelCode) ?? damage.panelCode}
+                subtitle={[
+                  damageTypeLabel(damage.damageType),
+                  damage.sizeClass ? `размер ${damage.sizeClass}` : null,
+                ]
+                  .filter(Boolean)
+                  .join(' · ')}
+                right={<Badge tone="muted">убрать</Badge>}
+                onClick={() => setDamages((current) => current.filter((_, i) => i !== index))}
+              />
+            ))}
+          </div>
+        </Card>
+      ) : null}
+
       <h2 className="pdr-subtitle">Запись в календарь</h2>
       <Card>
         <div className="pdr-stack">
@@ -323,9 +425,13 @@ export function NewOrderScreen() {
         </div>
       </Card>
 
+      {uploads.pending ? (
+        <div className="pdr-hint">Идёт загрузка фотографий, не закрывайте приложение.</div>
+      ) : null}
+
       <Button
         block
-        disabled={!clientReady || (withAppointment && (!day || !time))}
+        disabled={!clientReady || uploads.pending || (withAppointment && (!day || !time))}
         loading={create.isPending}
         onClick={() => create.mutate({})}
       >
@@ -334,6 +440,19 @@ export function NewOrderScreen() {
       <Button variant="secondary" block onClick={() => navigate(-1)}>
         Отмена
       </Button>
+
+      {panelCode ? (
+        <DamageSheet
+          open={damageSheet}
+          onClose={() => setDamageSheet(false)}
+          workspaceId={workspaceId}
+          parent={{ orderId: '' }}
+          panelCode={panelCode}
+          canEdit
+          draftMode
+          onDraftSave={(draft) => setDamages((current) => [...current, draft])}
+        />
+      ) : null}
     </div>
   );
 }

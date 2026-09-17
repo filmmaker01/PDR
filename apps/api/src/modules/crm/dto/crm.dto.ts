@@ -285,6 +285,8 @@ export const attachPhotoSchema = z
     fileId: z.string().uuid(),
     category: z.enum(PHOTO_CATEGORIES).default('before'),
     estimateItemId: z.string().uuid().nullable().optional(),
+    /** Привязка снимка к конкретному повреждению на схеме кузова. */
+    damageId: z.string().uuid().nullable().optional(),
     caption: optionalString(200),
   })
   .strict();
@@ -295,5 +297,6 @@ export const updatePhotoSchema = z
     caption: optionalString(200),
     position: z.number().int().min(0).max(10_000).optional(),
     estimateItemId: z.string().uuid().nullable().optional(),
+    damageId: z.string().uuid().nullable().optional(),
   })
   .strict();

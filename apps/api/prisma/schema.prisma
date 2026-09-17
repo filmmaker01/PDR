@@ -102,6 +102,10 @@ model User {
   createdEstimates       Estimate[]              @relation("EstimateCreatedBy")
   createdPayments        PaymentEntry[]          @relation("PaymentCreatedBy")
   createdOrderPhotos     OrderPhoto[]            @relation("OrderPhotoCreatedBy")
+  createdLeads           Lead[]                  @relation("LeadCreatedBy")
+  leadStatusChanges      LeadStatusHistory[]     @relation("LeadStatusChangedBy")
+  createdDamages         Damage[]                @relation("DamageCreatedBy")
+  createdAssessments     Assessment[]            @relation("AssessmentCreatedBy")
   clubMembership         ClubMembership?
   exports                Export[]                @relation("ExportRequestedBy")
   clubEvents             ClubEvent[]
@@ -210,27 +214,33 @@ model Workspace {
   settings    Json      @default("{}")
   /// Счётчик номеров заказов внутри мастерской.
   orderSeq    Int       @default(0) @map("order_seq")
+  /// Счётчик номеров обращений внутри мастерской.
+  leadSeq     Int       @default(0) @map("lead_seq")
   createdById String?   @map("created_by") @db.Uuid
   archivedAt  DateTime? @map("archived_at") @db.Timestamptz(6)
   createdAt   DateTime  @default(now()) @map("created_at") @db.Timestamptz(6)
   updatedAt   DateTime  @updatedAt @map("updated_at") @db.Timestamptz(6)
 
-  createdBy     User?                 @relation("WorkspaceCreatedBy", fields: [createdById], references: [id], onDelete: SetNull)
-  members       WorkspaceMember[]
-  invitations   WorkspaceInvitation[]
-  grants        AccessGrant[]
-  files         StoredFile[]
-  auditEntries  AuditLog[]
-  clients       Client[]
-  vehicles      Vehicle[]
-  orders        Order[]
-  appointments  Appointment[]
-  priceList     PriceListItem[]
-  estimates     Estimate[]
-  estimateItems EstimateItem[]
-  payments      PaymentEntry[]
-  orderPhotos   OrderPhoto[]
-  exports       Export[]
+  createdBy       User?                 @relation("WorkspaceCreatedBy", fields: [createdById], references: [id], onDelete: SetNull)
+  members         WorkspaceMember[]
+  invitations     WorkspaceInvitation[]
+  grants          AccessGrant[]
+  files           StoredFile[]
+  auditEntries    AuditLog[]
+  clients         Client[]
+  vehicles        Vehicle[]
+  orders          Order[]
+  appointments    Appointment[]
+  priceList       PriceListItem[]
+  estimates       Estimate[]
+  estimateItems   EstimateItem[]
+  payments        PaymentEntry[]
+  orderPhotos     OrderPhoto[]
+  leads           Lead[]
+  damages         Damage[]
+  assessments     Assessment[]
+  exports         Export[]
+  assessmentItems AssessmentItem[]
 
   @@map("workspaces")
 }
@@ -251,6 +261,7 @@ model WorkspaceMember {
   user         User          @relation(fields: [userId], references: [id], onDelete: Cascade)
   orders       Order[]
   appointments Appointment[]
+  leads        Lead[]
 
   @@unique([workspaceId, userId])
   @@unique([workspaceId, id], name: "member_in_workspace")
@@ -404,15 +415,16 @@ model StoredFile {
   updatedAt      DateTime   @updatedAt @map("updated_at") @db.Timestamptz(6)
   deletedAt      DateTime?  @map("deleted_at") @db.Timestamptz(6)
 
-  owner           User             @relation("FileOwner", fields: [ownerUserId], references: [id], onDelete: Cascade)
-  workspace       Workspace?       @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
-  stageCovers     Stage[]          @relation("StageCover")
-  lessonMaterials LessonMaterial[] @relation("LessonMaterialFile")
-  questionImages  Question[]       @relation("QuestionImage")
-  submissionFiles SubmissionFile[] @relation("SubmissionFiles")
-  attemptFiles    AttemptFile[]    @relation("AttemptFiles")
-  orderPhotos     OrderPhoto[]     @relation("OrderPhotoFile")
-  exports         Export[]         @relation("ExportFile")
+  owner            User             @relation("FileOwner", fields: [ownerUserId], references: [id], onDelete: Cascade)
+  workspace        Workspace?       @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  stageCovers      Stage[]          @relation("StageCover")
+  lessonMaterials  LessonMaterial[] @relation("LessonMaterialFile")
+  questionImages   Question[]       @relation("QuestionImage")
+  submissionFiles  SubmissionFile[] @relation("SubmissionFiles")
+  attemptFiles     AttemptFile[]    @relation("AttemptFiles")
+  orderPhotos      OrderPhoto[]     @relation("OrderPhotoFile")
+  photoAnnotations OrderPhoto[]     @relation("OrderPhotoAnnotationFile")
+  exports          Export[]         @relation("ExportFile")
 
   @@index([workspaceId, scope])
   @@index([ownerUserId, scope])
@@ -1145,6 +1157,7 @@ model Client {
   vehicles     Vehicle[]
   orders       Order[]
   appointments Appointment[]
+  leads        Lead[]
 
   /// Нужен для составных внешних ключей: связь не может пересечь мастерскую.
   @@unique([workspaceId, id], name: "client_in_workspace")
@@ -1173,6 +1186,7 @@ model Vehicle {
   workspace Workspace @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
   client    Client    @relation(fields: [workspaceId, clientId], references: [workspaceId, id], onDelete: Cascade)
   orders    Order[]
+  leads     Lead[]
 
   @@unique([workspaceId, id], name: "vehicle_in_workspace")
   @@index([workspaceId, plate])
@@ -1225,6 +1239,9 @@ model Order {
   agreedEstimate Estimate?            @relation("OrderAgreedEstimate", fields: [workspaceId, agreedEstimateId], references: [workspaceId, id], onDelete: NoAction, onUpdate: NoAction)
   paymentEntries PaymentEntry[]
   orderPhotos    OrderPhoto[]
+  damages        Damage[]
+  assessments    Assessment[]
+  leads          Lead[]               @relation("LeadConvertedOrder")
 
   @@unique([workspaceId, number], name: "order_number_in_workspace")
   @@unique([workspaceId, id], name: "order_in_workspace")
@@ -1278,6 +1295,8 @@ model Appointment {
   workspaceId      String            @map("workspace_id") @db.Uuid
   /// Запись может быть без заказа: первичный осмотр до оформления.
   orderId          String?           @map("order_id") @db.Uuid
+  /// Запись по обращению: клиента записали ещё до появления заказа.
+  leadId           String?           @map("lead_id") @db.Uuid
   clientId         String?           @map("client_id") @db.Uuid
   assigneeMemberId String?           @map("assignee_member_id") @db.Uuid
   startsAt         DateTime          @map("starts_at") @db.Timestamptz(6)
@@ -1296,6 +1315,7 @@ model Appointment {
 
   workspace Workspace        @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
   order     Order?           @relation(fields: [workspaceId, orderId], references: [workspaceId, id], onDelete: Cascade)
+  lead      Lead?            @relation(fields: [workspaceId, leadId], references: [workspaceId, id], onDelete: Cascade)
   client    Client?          @relation(fields: [workspaceId, clientId], references: [workspaceId, id], onDelete: Restrict)
   assignee  WorkspaceMember? @relation(fields: [workspaceId, assigneeMemberId], references: [workspaceId, id], onDelete: Restrict)
   createdBy User?            @relation("AppointmentCreatedBy", fields: [createdById], references: [id], onDelete: SetNull)
@@ -1303,6 +1323,7 @@ model Appointment {
   @@index([workspaceId, startsAt])
   @@index([workspaceId, assigneeMemberId, startsAt])
   @@index([workspaceId, orderId])
+  @@index([workspaceId, leadId])
   @@index([status, startsAt])
   @@map("appointments")
 }
@@ -1374,8 +1395,9 @@ model PriceListItem {
   createdAt      DateTime         @default(now()) @map("created_at") @db.Timestamptz(6)
   updatedAt      DateTime         @updatedAt @map("updated_at") @db.Timestamptz(6)
 
-  workspace     Workspace      @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
-  estimateItems EstimateItem[]
+  workspace       Workspace        @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  estimateItems   EstimateItem[]
+  assessmentItems AssessmentItem[]
 
   @@unique([workspaceId, id], name: "price_item_in_workspace")
   @@index([workspaceId, isActive, position])
@@ -1527,28 +1549,303 @@ model PaymentEntry {
   @@map("payment_entries")
 }
 
+/// Снимок мастерской: принадлежит заказу либо обращению (проверка в базе),
+/// может быть привязан к конкретному повреждению и к позиции сметы.
+/// Разметка хранится отдельно от оригинала: `annotation` — векторные фигуры,
+/// `annotationFileId` — сведённая картинка для печати и выгрузки. Сам файл
+/// оригинала не перезаписывается никогда.
 model OrderPhoto {
-  id             String        @id @default(uuid()) @db.Uuid
-  workspaceId    String        @map("workspace_id") @db.Uuid
-  orderId        String        @map("order_id") @db.Uuid
-  fileId         String        @map("file_id") @db.Uuid
-  category       PhotoCategory @default(before)
+  id               String        @id @default(uuid()) @db.Uuid
+  workspaceId      String        @map("workspace_id") @db.Uuid
+  orderId          String?       @map("order_id") @db.Uuid
+  /// Снимок обращения: переносится в заказ при конверсии.
+  leadId           String?       @map("lead_id") @db.Uuid
+  fileId           String        @map("file_id") @db.Uuid
+  category         PhotoCategory @default(before)
+  /// Привязка снимка к конкретному повреждению на схеме кузова.
+  damageId         String?       @map("damage_id") @db.Uuid
   /// Привязка снимка к конкретному повреждению в смете.
-  estimateItemId String?       @map("estimate_item_id") @db.Uuid
-  caption        String?
-  position       Int           @default(0)
-  createdById    String?       @map("created_by") @db.Uuid
-  createdAt      DateTime      @default(now()) @map("created_at") @db.Timestamptz(6)
+  estimateItemId   String?       @map("estimate_item_id") @db.Uuid
+  /// Векторная разметка поверх снимка: {"v":1,"shapes":[…]}.
+  annotation       Json?
+  /// Сведённая картинка с разметкой. Оригинал остаётся отдельным файлом.
+  annotationFileId String?       @map("annotation_file_id") @db.Uuid
+  annotatedAt      DateTime?     @map("annotated_at") @db.Timestamptz(6)
+  caption          String?
+  position         Int           @default(0)
+  createdById      String?       @map("created_by") @db.Uuid
+  createdAt        DateTime      @default(now()) @map("created_at") @db.Timestamptz(6)
 
-  workspace    Workspace     @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
-  order        Order         @relation(fields: [workspaceId, orderId], references: [workspaceId, id], onDelete: Cascade)
-  file         StoredFile    @relation("OrderPhotoFile", fields: [fileId], references: [id], onDelete: Cascade)
-  estimateItem EstimateItem? @relation(fields: [workspaceId, estimateItemId], references: [workspaceId, id], onDelete: NoAction, onUpdate: NoAction)
-  createdBy    User?         @relation("OrderPhotoCreatedBy", fields: [createdById], references: [id], onDelete: SetNull)
+  workspace      Workspace     @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  order          Order?        @relation(fields: [workspaceId, orderId], references: [workspaceId, id], onDelete: Cascade)
+  lead           Lead?         @relation(fields: [workspaceId, leadId], references: [workspaceId, id], onDelete: Cascade)
+  file           StoredFile    @relation("OrderPhotoFile", fields: [fileId], references: [id], onDelete: Cascade)
+  annotationFile StoredFile?   @relation("OrderPhotoAnnotationFile", fields: [annotationFileId], references: [id], onDelete: SetNull)
+  // NoAction: составной ключ включает workspace_id, обнулить его нельзя.
+  // Перед удалением повреждения сервис сам снимает ссылку со снимков.
+  damage         Damage?       @relation(fields: [workspaceId, damageId], references: [workspaceId, id], onDelete: NoAction, onUpdate: NoAction)
+  estimateItem   EstimateItem? @relation(fields: [workspaceId, estimateItemId], references: [workspaceId, id], onDelete: NoAction, onUpdate: NoAction)
+  createdBy      User?         @relation("OrderPhotoCreatedBy", fields: [createdById], references: [id], onDelete: SetNull)
 
   @@unique([orderId, fileId], name: "photo_file_in_order")
+  @@unique([workspaceId, id], name: "photo_in_workspace")
   @@index([orderId, category, position])
+  @@index([leadId, position])
+  @@index([damageId])
   @@map("order_photos")
+}
+
+// ── Обращения, повреждения, оценки (этап 17) ─────────────────────────────────
+
+enum LeadSource {
+  online
+  offline
+
+  @@map("lead_source")
+}
+
+/// Канал обращения. Известен не всегда: клиент мог просто приехать.
+enum LeadChannel {
+  telegram
+  whatsapp
+  vk
+  call
+  in_person
+  other
+
+  @@map("lead_channel")
+}
+
+enum LeadStatus {
+  new
+  estimated
+  awaiting_decision
+  callback
+  scheduled
+  rejected
+
+  @@map("lead_status")
+}
+
+/// Обращение — единый входящий лид независимо от того, откуда клиент пришёл:
+/// приехал лично, написал в мессенджер, прислал фотографии или получил
+/// дистанционную оценку. Одна сущность вместо трёх: данные обращения
+/// переезжают в заказ при конверсии и не вводятся повторно.
+model Lead {
+  id               String       @id @default(uuid()) @db.Uuid
+  workspaceId      String       @map("workspace_id") @db.Uuid
+  /// Порядковый номер внутри мастерской.
+  number           Int
+  /// Заполняется, когда клиент уже есть в базе. Холодный контакт живёт
+  /// в полях contact*, чтобы не засорять справочник клиентов.
+  clientId         String?      @map("client_id") @db.Uuid
+  vehicleId        String?      @map("vehicle_id") @db.Uuid
+  contactName      String?      @map("contact_name")
+  /// E.164 после нормализации.
+  contactPhone     String?      @map("contact_phone")
+  /// Ник, ссылка или другой способ связи, если телефона нет.
+  contactExtra     String?      @map("contact_extra")
+  vehicleMake      String?      @map("vehicle_make")
+  vehicleModel     String?      @map("vehicle_model")
+  vehiclePlate     String?      @map("vehicle_plate")
+  vehicleYear      Int?         @map("vehicle_year")
+  vehicleColor     String?      @map("vehicle_color")
+  source           LeadSource   @default(offline)
+  channel          LeadChannel?
+  status           LeadStatus   @default(new)
+  comment          String?
+  /// Предварительная оценка: итог последней сохранённой оценки.
+  estimateMinor    BigInt?      @map("estimate_minor")
+  currency         String       @db.Char(3)
+  /// Когда перезвонить или написать. По нему строится список «перезвонить».
+  nextContactAt    DateTime?    @map("next_contact_at") @db.Timestamptz(6)
+  rejectReason     String?      @map("reject_reason")
+  assigneeMemberId String?      @map("assignee_member_id") @db.Uuid
+  /// Заказ, в который превратилось обращение. Обратная ссылка нужна, чтобы
+  /// по одному обращению не появился второй заказ.
+  convertedOrderId String?      @map("converted_order_id") @db.Uuid
+  convertedAt      DateTime?    @map("converted_at") @db.Timestamptz(6)
+  archivedAt       DateTime?    @map("archived_at") @db.Timestamptz(6)
+  createdById      String?      @map("created_by") @db.Uuid
+  createdAt        DateTime     @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt        DateTime     @updatedAt @map("updated_at") @db.Timestamptz(6)
+
+  workspace      Workspace           @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  client         Client?             @relation(fields: [workspaceId, clientId], references: [workspaceId, id], onDelete: Restrict)
+  vehicle        Vehicle?            @relation(fields: [workspaceId, vehicleId], references: [workspaceId, id], onDelete: Restrict)
+  assignee       WorkspaceMember?    @relation(fields: [workspaceId, assigneeMemberId], references: [workspaceId, id], onDelete: Restrict)
+  // NoAction, а не SetNull: составной ключ включает workspace_id, обнулить его нельзя.
+  convertedOrder Order?              @relation("LeadConvertedOrder", fields: [workspaceId, convertedOrderId], references: [workspaceId, id], onDelete: NoAction, onUpdate: NoAction)
+  createdBy      User?               @relation("LeadCreatedBy", fields: [createdById], references: [id], onDelete: SetNull)
+  statusHistory  LeadStatusHistory[]
+  damages        Damage[]
+  photos         OrderPhoto[]
+  assessments    Assessment[]
+  appointments   Appointment[]
+
+  @@unique([workspaceId, number], name: "lead_number_in_workspace")
+  @@unique([workspaceId, id], name: "lead_in_workspace")
+  @@index([workspaceId, status, createdAt])
+  @@index([workspaceId, nextContactAt])
+  @@index([workspaceId, clientId])
+  @@map("leads")
+}
+
+model LeadStatusHistory {
+  id          String      @id @default(uuid()) @db.Uuid
+  workspaceId String      @map("workspace_id") @db.Uuid
+  leadId      String      @map("lead_id") @db.Uuid
+  fromStatus  LeadStatus? @map("from_status")
+  toStatus    LeadStatus  @map("to_status")
+  changedById String?     @map("changed_by") @db.Uuid
+  comment     String?
+  createdAt   DateTime    @default(now()) @map("created_at") @db.Timestamptz(6)
+
+  lead      Lead  @relation(fields: [workspaceId, leadId], references: [workspaceId, id], onDelete: Cascade)
+  changedBy User? @relation("LeadStatusChangedBy", fields: [changedById], references: [id], onDelete: SetNull)
+
+  @@index([leadId, createdAt])
+  @@map("lead_status_history")
+}
+
+/// Откуда взялась цена повреждения. Значение от AI никогда не считается
+/// окончательным: как только мастер правит сумму, источник становится manual.
+enum DamagePriceSource {
+  manual
+  params
+  ai
+
+  @@map("damage_price_source")
+}
+
+/// Повреждение конкретного элемента кузова, отмеченного на схеме автомобиля.
+/// Принадлежит обращению либо заказу — проверка в базе. При конверсии
+/// обращения в заказ повреждение переезжает, а не копируется.
+model Damage {
+  id               String             @id @default(uuid()) @db.Uuid
+  workspaceId      String             @map("workspace_id") @db.Uuid
+  leadId           String?            @map("lead_id") @db.Uuid
+  orderId          String?            @map("order_id") @db.Uuid
+  /// Код элемента кузова из справочника BODY_PANELS.
+  panelCode        String             @map("panel_code")
+  damageType       String?            @map("damage_type")
+  sizeClass        String?            @map("size_class")
+  /// Размеры области повреждения в миллиметрах: 40×40 см — это 400×400.
+  widthMm          Int?               @map("width_mm")
+  heightMm         Int?               @map("height_mm")
+  quantity         Int                @default(1)
+  material         Material?
+  accessDifficulty AccessDifficulty?  @map("access_difficulty")
+  onEdge           Boolean            @default(false) @map("on_edge")
+  comment          String?
+  /// Предварительная стоимость по этому повреждению.
+  priceMinor       BigInt?            @map("price_minor")
+  priceSource      DamagePriceSource? @map("price_source")
+  position         Int                @default(0)
+  createdById      String?            @map("created_by") @db.Uuid
+  createdAt        DateTime           @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt        DateTime           @updatedAt @map("updated_at") @db.Timestamptz(6)
+
+  workspace       Workspace        @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  lead            Lead?            @relation(fields: [workspaceId, leadId], references: [workspaceId, id], onDelete: Cascade)
+  order           Order?           @relation(fields: [workspaceId, orderId], references: [workspaceId, id], onDelete: Cascade)
+  createdBy       User?            @relation("DamageCreatedBy", fields: [createdById], references: [id], onDelete: SetNull)
+  photos          OrderPhoto[]
+  assessmentItems AssessmentItem[]
+
+  @@unique([workspaceId, id], name: "damage_in_workspace")
+  @@index([leadId, position])
+  @@index([orderId, position])
+  @@index([workspaceId, panelCode])
+  @@map("damages")
+}
+
+/// Способ оценки: вручную, расчётом по параметрам повреждения или
+/// предварительным разбором фотографии.
+enum AssessmentMethod {
+  manual
+  params
+  ai
+
+  @@map("assessment_method")
+}
+
+/// Одна оценка ремонта. Хранит и предложенный расчёт, и итог после правки
+/// мастером: предложение остаётся видимым, а окончательная сумма — всегда
+/// за человеком. Результат AI ценой не является.
+model Assessment {
+  id             String           @id @default(uuid()) @db.Uuid
+  workspaceId    String           @map("workspace_id") @db.Uuid
+  leadId         String?          @map("lead_id") @db.Uuid
+  orderId        String?          @map("order_id") @db.Uuid
+  method         AssessmentMethod
+  currency       String           @db.Char(3)
+  /// Сумма, которую предложил расчёт или разбор фотографии.
+  suggestedMinor BigInt           @default(0) @map("suggested_minor")
+  /// Итог, который утвердил мастер. Именно он уходит в обращение и смету.
+  totalMinor     BigInt           @default(0) @map("total_minor")
+  /// Правил ли мастер итог руками.
+  overridden     Boolean          @default(false)
+  /// Краткое объяснение расчёта или разбора фотографии.
+  explanation    String?
+  note           String?
+  /// Имя адаптера AI и модель: оценку нужно уметь перепроверить позже.
+  aiProvider     String?          @map("ai_provider")
+  aiModel        String?          @map("ai_model")
+  /// Сырой ответ провайдера — для разбора спорных случаев.
+  aiRaw          Json?            @map("ai_raw")
+  aiConfidence   Float?           @map("ai_confidence")
+  createdById    String?          @map("created_by") @db.Uuid
+  createdAt      DateTime         @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt      DateTime         @updatedAt @map("updated_at") @db.Timestamptz(6)
+
+  workspace Workspace        @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  lead      Lead?            @relation(fields: [workspaceId, leadId], references: [workspaceId, id], onDelete: Cascade)
+  order     Order?           @relation(fields: [workspaceId, orderId], references: [workspaceId, id], onDelete: Cascade)
+  createdBy User?            @relation("AssessmentCreatedBy", fields: [createdById], references: [id], onDelete: SetNull)
+  items     AssessmentItem[]
+
+  @@unique([workspaceId, id], name: "assessment_in_workspace")
+  @@index([leadId, createdAt])
+  @@index([orderId, createdAt])
+  @@map("assessments")
+}
+
+model AssessmentItem {
+  id                      String            @id @default(uuid()) @db.Uuid
+  workspaceId             String            @map("workspace_id") @db.Uuid
+  assessmentId            String            @map("assessment_id") @db.Uuid
+  /// Повреждение на схеме кузова, если оценка сделана по нему.
+  damageId                String?           @map("damage_id") @db.Uuid
+  position                Int
+  panelCode               String?           @map("panel_code")
+  damageType              String?           @map("damage_type")
+  sizeClass               String?           @map("size_class")
+  widthMm                 Int?              @map("width_mm")
+  heightMm                Int?              @map("height_mm")
+  quantity                Int               @default(1)
+  material                Material?
+  accessDifficulty        AccessDifficulty? @map("access_difficulty")
+  onEdge                  Boolean           @default(false) @map("on_edge")
+  /// Цена за единицу, которую предложил расчёт.
+  suggestedUnitPriceMinor BigInt            @default(0) @map("suggested_unit_price_minor")
+  /// Цена за единицу после правки мастером.
+  unitPriceMinor          BigInt            @default(0) @map("unit_price_minor")
+  lineTotalMinor          BigInt            @default(0) @map("line_total_minor")
+  priceListItemId         String?           @map("price_list_item_id") @db.Uuid
+  /// Уверенность разбора фотографии, 0–1. Только для метода ai.
+  confidence              Float?
+  comment                 String?
+
+  workspace     Workspace      @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  assessment    Assessment     @relation(fields: [workspaceId, assessmentId], references: [workspaceId, id], onDelete: Cascade)
+  // NoAction: составной ключ включает workspace_id, обнулить его нельзя.
+  damage        Damage?        @relation(fields: [workspaceId, damageId], references: [workspaceId, id], onDelete: NoAction, onUpdate: NoAction)
+  // NoAction: использованная позиция прайса деактивируется, а не удаляется.
+  priceListItem PriceListItem? @relation(fields: [workspaceId, priceListItemId], references: [workspaceId, id], onDelete: NoAction, onUpdate: NoAction)
+
+  @@index([assessmentId, position])
+  @@map("assessment_items")
 }
 
 // ── Закрытый клуб (этап 14) ──────────────────────────────────────────────────

@@ -124,7 +124,7 @@ export class OrdersRepository extends WorkspaceScopedRepository {
 
   async create(
     workspaceId: string,
-    data: Prisma.OrderUncheckedCreateInput,
+    data: Omit<Prisma.OrderUncheckedCreateInput, 'workspaceId'>,
     tx?: Prisma.TransactionClient,
   ): Promise<Order> {
     const client = tx ?? this.prisma;

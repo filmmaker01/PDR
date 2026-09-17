@@ -37,6 +37,11 @@ const STATUS_BY_CODE: Partial<Record<ErrorCode, HttpStatus>> = {
   version_immutable: HttpStatus.CONFLICT,
   publish_validation_failed: HttpStatus.UNPROCESSABLE_ENTITY,
 
+  // AI-оценка не настроена: остальные способы оценки продолжают работать,
+  // поэтому это не сбой сервера, а сообщение «включите провайдера».
+  ai_unavailable: HttpStatus.SERVICE_UNAVAILABLE,
+  ai_failed: HttpStatus.BAD_GATEWAY,
+
   rate_limited: HttpStatus.TOO_MANY_REQUESTS,
   internal_error: HttpStatus.INTERNAL_SERVER_ERROR,
   service_unavailable: HttpStatus.SERVICE_UNAVAILABLE,

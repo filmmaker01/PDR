@@ -9,6 +9,7 @@ import { JobsModule } from './infra/jobs/jobs.module';
 import { TelegramModule } from './infra/telegram/telegram.module';
 import { StorageModule } from './infra/storage/storage.module';
 import { VideoModule } from './infra/video/video.module';
+import { AiModule } from './infra/ai/ai.module';
 import { RequestIdMiddleware } from './common/interceptors/request-id.middleware';
 import { IdempotencyInterceptor } from './common/interceptors/idempotency.interceptor';
 import { RateLimitGuard } from './common/guards/rate-limit.guard';
@@ -71,6 +72,7 @@ const REDACT_PATHS = [
     TelegramModule,
     StorageModule,
     VideoModule,
+    AiModule,
     UsersModule,
     AuthModule,
     AccessModule,

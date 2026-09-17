@@ -1,4 +1,4 @@
-import type { PresignResponse, UploadTransport } from '@pdr/ui';
+import { uploadOne, type PresignResponse, type UploadTransport } from '@pdr/ui';
 import { api } from './api';
 
 export interface UploadScopeOptions {
@@ -30,4 +30,19 @@ export async function fileUrl(
 ): Promise<string> {
   const result = await api.get<{ url: string }>(`/files/${fileId}/url`, { query: { variant } });
   return result.url;
+}
+
+/**
+ * Разовая загрузка одного файла без очереди.
+ *
+ * Нужна для сведённой картинки с разметкой: она собирается на лету и должна
+ * уехать в хранилище сразу, а не встать в общий список «добавленных снимков».
+ */
+export async function uploadBlob(
+  blob: Blob,
+  name: string,
+  options: UploadScopeOptions,
+): Promise<string> {
+  const file = new File([blob], name, { type: blob.type || 'image/jpeg' });
+  return uploadOne(file, createUploadTransport(options), () => {});
 }

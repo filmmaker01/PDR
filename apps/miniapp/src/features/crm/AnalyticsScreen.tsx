@@ -123,12 +123,6 @@ export function AnalyticsScreen() {
                 {formatMinor(summary.data.averageCheckMinor, currency)}
               </div>
             </Card>
-            <Card>
-              <div className="pdr-hint">Задолженность</div>
-              <div style={{ fontSize: 20, fontWeight: 700 }}>
-                {formatMinor(summary.data.outstandingDebtMinor, currency)}
-              </div>
-            </Card>
           </div>
 
           <Card>

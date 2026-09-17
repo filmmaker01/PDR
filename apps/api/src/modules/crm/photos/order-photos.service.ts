@@ -1,101 +1,131 @@
 import { Injectable } from '@nestjs/common';
-import type { Order, OrderPhoto, PhotoCategory, User } from '@prisma/client';
-import { ownsRecord } from '@pdr/shared';
+import { Prisma, type OrderPhoto, type PhotoCategory, type User } from '@prisma/client';
 import { AppError } from '@/common/errors/app.error';
 import { FilesService } from '@/modules/files/files.service';
 import type { WorkspaceContext } from '@/modules/workspaces/workspace.types';
-import { OrdersRepository } from '../repositories/orders.repository';
+import { CrmParentAccess, isLeadParent } from '../access/crm-parent.access';
 import { EstimatesRepository } from '../repositories/estimates.repository';
+import { DamagesRepository } from '../repositories/damages.repository';
 import {
   OrderPhotosRepository,
   type OrderPhotoWithFile,
+  type PhotoParent,
 } from '../repositories/order-photos.repository';
 
 /** Больше тысячи снимков на заказ — это не работа, а ошибка загрузки. */
 const MAX_PHOTOS_PER_ORDER = 1000;
+/** Обращение — это ещё не заказ: пачка снимков от клиента, а не съёмка ремонта. */
+const MAX_PHOTOS_PER_LEAD = 100;
 
 export interface AttachPhotoInput {
   fileId: string;
   category?: PhotoCategory;
   estimateItemId?: string | null;
+  damageId?: string | null;
   caption?: string | null;
+}
+
+/**
+ * Разметка повреждения поверх снимка.
+ *
+ * Хранится векторно, а не картинкой: так её можно открыть и поправить, а
+ * оригинал остаётся нетронутым. Сведённая картинка — производная, нужна для
+ * печати и выгрузки; без неё разметка всё равно не теряется.
+ */
+export interface PhotoMarkupInput {
+  annotation: unknown | null;
+  annotationFileId?: string | null;
 }
 
 @Injectable()
 export class OrderPhotosService {
   constructor(
     private readonly photos: OrderPhotosRepository,
-    private readonly orders: OrdersRepository,
+    private readonly access: CrmParentAccess,
     private readonly estimates: EstimatesRepository,
+    private readonly damages: DamagesRepository,
     private readonly files: FilesService,
   ) {}
+
+  // ── Чтение ────────────────────────────────────────────────────────────────
+
+  async listFor(
+    ctx: WorkspaceContext,
+    parent: PhotoParent,
+    auth: { user: User; platformRoles: string[] },
+  ): Promise<{ items: (OrderPhotoWithFile & { thumbUrl: string | null })[] }> {
+    await this.access.assertReadable(ctx, parent);
+    const items = await this.photos.listFor(ctx.workspaceId, parent);
+    if (items.length === 0) return { items: [] };
+
+    // Ссылки пачкой: список фотографий не должен делать запрос на каждую.
+    // Сведённая разметка — отдельный файл, её ссылка нужна там же.
+    const fileIds = [
+      ...new Set(
+        items.flatMap((photo) =>
+          photo.annotationFileId ? [photo.fileId, photo.annotationFileId] : [photo.fileId],
+        ),
+      ),
+    ];
+    const urls = await this.files.downloadUrls(fileIds, auth.user, auth.platformRoles, 'thumb');
+    return { items: items.map((photo) => ({ ...photo, thumbUrl: urls[photo.fileId] ?? null })) };
+  }
 
   async listForOrder(
     ctx: WorkspaceContext,
     orderId: string,
     auth: { user: User; platformRoles: string[] },
-  ): Promise<{
-    items: (OrderPhotoWithFile & { thumbUrl: string | null })[];
-  }> {
-    await this.orderFor(ctx, orderId);
-    const items = await this.photos.listForOrder(ctx.workspaceId, orderId);
-    if (items.length === 0) return { items: [] };
-
-    // Ссылки пачкой: список фотографий не должен делать запрос на каждую.
-    const urls = await this.files.downloadUrls(
-      items.map((photo) => photo.fileId),
-      auth.user,
-      auth.platformRoles,
-      'thumb',
-    );
-    return { items: items.map((photo) => ({ ...photo, thumbUrl: urls[photo.fileId] ?? null })) };
+  ) {
+    return this.listFor(ctx, { orderId }, auth);
   }
 
-  /** Привязка уже загруженного файла к заказу. */
+  // ── Привязка и правка ─────────────────────────────────────────────────────
+
+  /** Привязка уже загруженного файла к заказу или обращению. */
   async attach(
     ctx: WorkspaceContext,
-    orderId: string,
+    parent: PhotoParent,
     input: AttachPhotoInput,
   ): Promise<OrderPhoto> {
-    const order = await this.orderFor(ctx, orderId);
-    this.assertCanWrite(ctx, order);
+    await this.access.assertWritable(ctx, parent);
 
-    const count = await this.photos.countForOrder(ctx.workspaceId, orderId);
-    if (count >= MAX_PHOTOS_PER_ORDER) {
-      throw AppError.validation('В заказе слишком много фотографий');
+    const count = await this.photos.countFor(ctx.workspaceId, parent);
+    const limit = isLeadParent(parent) ? MAX_PHOTOS_PER_LEAD : MAX_PHOTOS_PER_ORDER;
+    if (count >= limit) {
+      throw AppError.validation(
+        isLeadParent(parent)
+          ? 'В обращении слишком много фотографий'
+          : 'В заказе слишком много фотографий',
+      );
     }
 
-    const file = await this.files.getById(input.fileId);
-    if (file.scope !== 'order_photo') {
-      throw AppError.validation('Файл загружен не как фотография заказа');
-    }
-    // Файл и заказ обязаны быть из одной мастерской: иначе снимок чужого
-    // клиента попал бы в чужую карточку.
-    if (file.workspaceId !== ctx.workspaceId) throw AppError.notFound('Файл не найден');
-    if (file.ownerUserId !== ctx.userId && !ctx.permissions.has('orders.write_all')) {
-      throw AppError.notFound('Файл не найден');
-    }
+    await this.assertOwnFile(ctx, input.fileId);
 
     if (input.estimateItemId) {
-      await this.assertEstimateItem(ctx, orderId, input.estimateItemId);
+      if (isLeadParent(parent)) {
+        throw AppError.validation('У обращения ещё нет сметы');
+      }
+      await this.assertEstimateItem(ctx, parent.orderId, input.estimateItemId);
     }
+    if (input.damageId) await this.assertDamage(ctx, parent, input.damageId);
 
     const category = input.category ?? 'before';
-    const position = await this.photos.nextPosition(ctx.workspaceId, orderId, category);
+    const position = await this.photos.nextPosition(ctx.workspaceId, parent, category);
 
-    const existing = await this.photos.findByFile(ctx.workspaceId, orderId, input.fileId);
+    const existing = await this.photos.findByFile(ctx.workspaceId, parent, input.fileId);
     if (existing) {
       // Повторная привязка того же файла — это двойной тап, а не новая фотография.
-      throw new AppError('already_exists', 'Эта фотография уже добавлена в заказ', {
+      throw new AppError('already_exists', 'Эта фотография уже добавлена', {
         photoId: existing.id,
       });
     }
 
     return this.photos.create(ctx.workspaceId, {
-      orderId,
+      ...(isLeadParent(parent) ? { leadId: parent.leadId } : { orderId: parent.orderId }),
       fileId: input.fileId,
       category,
       estimateItemId: input.estimateItemId ?? null,
+      damageId: input.damageId ?? null,
       caption: input.caption ?? null,
       position,
       createdById: ctx.userId,
@@ -110,49 +140,158 @@ export class OrderPhotosService {
       caption?: string | null;
       position?: number;
       estimateItemId?: string | null;
+      damageId?: string | null;
     },
   ): Promise<OrderPhoto> {
-    const photo = await this.photos.findById(ctx.workspaceId, photoId);
-    if (!photo) throw AppError.notFound('Фотография не найдена');
-    const order = await this.orderFor(ctx, photo.orderId);
-    this.assertCanWrite(ctx, order);
+    const photo = await this.photoFor(ctx, photoId, 'write');
+    const parent = this.parentOf(photo);
 
     if (input.estimateItemId) {
-      await this.assertEstimateItem(ctx, photo.orderId, input.estimateItemId);
+      if (isLeadParent(parent)) throw AppError.validation('У обращения ещё нет сметы');
+      await this.assertEstimateItem(ctx, parent.orderId, input.estimateItemId);
     }
+    if (input.damageId) await this.assertDamage(ctx, parent, input.damageId);
 
     return this.photos.update(ctx.workspaceId, photoId, {
       ...(input.category !== undefined ? { category: input.category } : {}),
       ...(input.caption !== undefined ? { caption: input.caption } : {}),
       ...(input.position !== undefined ? { position: input.position } : {}),
       ...(input.estimateItemId !== undefined ? { estimateItemId: input.estimateItemId } : {}),
+      ...(input.damageId !== undefined ? { damageId: input.damageId } : {}),
     });
   }
 
-  /** Удаление снимка из заказа удаляет и сам файл: он больше нигде не нужен. */
+  /**
+   * Сохранение разметки повреждения на снимке.
+   *
+   * Оригинал не трогается: разметка приходит отдельно, а сведённая картинка
+   * загружается как самостоятельный файл. Именно поэтому в спорной ситуации
+   * видно и исходное состояние детали, и ровно ту вмятину, которую
+   * согласовали в работу.
+   */
+  async saveMarkup(
+    ctx: WorkspaceContext,
+    photoId: string,
+    input: PhotoMarkupInput,
+    auth: { user: User; platformRoles: string[] },
+  ): Promise<OrderPhoto> {
+    const photo = await this.photoFor(ctx, photoId, 'write');
+
+    if (input.annotationFileId) {
+      if (input.annotationFileId === photo.fileId) {
+        throw AppError.validation('Разметка не может подменять оригинал снимка');
+      }
+      await this.assertOwnFile(ctx, input.annotationFileId);
+    }
+
+    const cleared = input.annotation === null;
+    const previousAnnotationFileId = photo.annotationFileId;
+
+    const updated = await this.photos.update(ctx.workspaceId, photoId, {
+      annotation: cleared ? Prisma.DbNull : (input.annotation as Prisma.InputJsonValue),
+      annotationFileId: cleared
+        ? null
+        : (input.annotationFileId ?? previousAnnotationFileId ?? null),
+      annotatedAt: cleared ? null : new Date(),
+    });
+
+    // Прежняя сведённая картинка больше не нужна: она описывала старую разметку.
+    const replaced =
+      cleared || (input.annotationFileId && input.annotationFileId !== previousAnnotationFileId);
+    if (previousAnnotationFileId && replaced) {
+      await this.files.softDelete(previousAnnotationFileId, auth.user, auth.platformRoles);
+    }
+
+    return updated;
+  }
+
+  /** Удаление снимка удаляет и файлы: они больше нигде не нужны. */
   async remove(
     ctx: WorkspaceContext,
     photoId: string,
     auth: { user: User; platformRoles: string[] },
   ): Promise<void> {
-    const photo = await this.photos.findById(ctx.workspaceId, photoId);
-    if (!photo) throw AppError.notFound('Фотография не найдена');
-    const order = await this.orderFor(ctx, photo.orderId);
-    this.assertCanWrite(ctx, order);
+    const photo = await this.photoFor(ctx, photoId, 'write');
 
     await this.photos.delete(ctx.workspaceId, photoId);
     await this.files.softDelete(photo.fileId, auth.user, auth.platformRoles);
+    if (photo.annotationFileId) {
+      await this.files.softDelete(photo.annotationFileId, auth.user, auth.platformRoles);
+    }
   }
 
   async downloadUrl(
     ctx: WorkspaceContext,
     photoId: string,
     auth: { user: User; platformRoles: string[] },
+    variant: 'original' | 'annotation' = 'original',
   ): Promise<{ url: string; expiresAt: string }> {
+    const photo = await this.photoFor(ctx, photoId, 'read');
+    if (variant === 'annotation') {
+      if (!photo.annotationFileId) throw AppError.notFound('Разметка не сохранена');
+      return this.files.downloadUrl(
+        photo.annotationFileId,
+        auth.user,
+        auth.platformRoles,
+        'original',
+      );
+    }
+    return this.files.downloadUrl(photo.fileId, auth.user, auth.platformRoles, 'original');
+  }
+
+  /** Подписанные ссылки на оригиналы — нужны AI-оценке, чтобы отдать их провайдеру. */
+  async originalUrls(
+    photoIds: readonly string[],
+    ctx: WorkspaceContext,
+    auth: { user: User; platformRoles: string[] },
+  ): Promise<{ photoId: string; fileId: string; mimeType: string; url: string }[]> {
+    const result: { photoId: string; fileId: string; mimeType: string; url: string }[] = [];
+    for (const photoId of photoIds) {
+      const photo = await this.photoFor(ctx, photoId, 'read');
+      const { url } = await this.files.downloadUrl(
+        photo.fileId,
+        auth.user,
+        auth.platformRoles,
+        'original',
+      );
+      result.push({ photoId, fileId: photo.fileId, mimeType: photo.file.mimeType, url });
+    }
+    return result;
+  }
+
+  // ── Вспомогательное ───────────────────────────────────────────────────────
+
+  private parentOf(photo: OrderPhoto): PhotoParent {
+    if (photo.leadId) return { leadId: photo.leadId };
+    if (photo.orderId) return { orderId: photo.orderId };
+    // База гарантирует ровно одного владельца, но проверка дешевле отладки.
+    throw AppError.notFound('Фотография не найдена');
+  }
+
+  private async photoFor(
+    ctx: WorkspaceContext,
+    photoId: string,
+    intent: 'read' | 'write',
+  ): Promise<OrderPhotoWithFile> {
     const photo = await this.photos.findById(ctx.workspaceId, photoId);
     if (!photo) throw AppError.notFound('Фотография не найдена');
-    await this.orderFor(ctx, photo.orderId);
-    return this.files.downloadUrl(photo.fileId, auth.user, auth.platformRoles, 'original');
+    const parent = this.parentOf(photo);
+    if (intent === 'write') await this.access.assertWritable(ctx, parent);
+    else await this.access.assertReadable(ctx, parent);
+    return photo;
+  }
+
+  private async assertOwnFile(ctx: WorkspaceContext, fileId: string): Promise<void> {
+    const file = await this.files.getById(fileId);
+    if (file.scope !== 'order_photo') {
+      throw AppError.validation('Файл загружен не как фотография мастерской');
+    }
+    // Файл и карточка обязаны быть из одной мастерской: иначе снимок чужого
+    // клиента попал бы в чужую карточку.
+    if (file.workspaceId !== ctx.workspaceId) throw AppError.notFound('Файл не найден');
+    if (file.ownerUserId !== ctx.userId && !ctx.permissions.has('orders.write_all')) {
+      throw AppError.notFound('Файл не найден');
+    }
   }
 
   private async assertEstimateItem(
@@ -167,21 +306,17 @@ export class OrderPhotosService {
     if (!found) throw AppError.validation('Позиция сметы не найдена в этом заказе');
   }
 
-  private async orderFor(ctx: WorkspaceContext, orderId: string): Promise<Order> {
-    const order = await this.orders.findById(ctx.workspaceId, orderId);
-    if (!order) throw AppError.notFound('Заказ не найден');
-    if (!ctx.permissions.has('orders.read_all')) {
-      if (!ownsRecord({ memberId: ctx.member.id, userId: ctx.userId }, order)) {
-        throw AppError.notFound('Заказ не найден');
-      }
-    }
-    return order;
-  }
-
-  private assertCanWrite(ctx: WorkspaceContext, order: Order): void {
-    if (ctx.permissions.has('orders.write_all')) return;
-    if (!ownsRecord({ memberId: ctx.member.id, userId: ctx.userId }, order)) {
-      throw AppError.notFound('Заказ не найден');
-    }
+  /** Повреждение и снимок обязаны принадлежать одной и той же карточке. */
+  private async assertDamage(
+    ctx: WorkspaceContext,
+    parent: PhotoParent,
+    damageId: string,
+  ): Promise<void> {
+    const damage = await this.damages.findById(ctx.workspaceId, damageId);
+    if (!damage) throw AppError.validation('Повреждение не найдено');
+    const sameParent = isLeadParent(parent)
+      ? damage.leadId === parent.leadId
+      : damage.orderId === parent.orderId;
+    if (!sameParent) throw AppError.validation('Повреждение относится к другой карточке');
   }
 }

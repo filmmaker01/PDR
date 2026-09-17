@@ -231,14 +231,13 @@ describe('сквозные сценарии F1–F10', () => {
         .expect(201);
     }
 
-    const debts = await http()
-      .get(`/v1/workspaces/${ws.id}/debts`)
+    const beforeFinal = await http()
+      .get(`/v1/workspaces/${ws.id}/orders/${order.body.id}/payments`)
       .set(...master.authHeader)
       .expect(200);
-    expect(debts.body).toHaveLength(1);
-    expect(debts.body[0].debtMinor).toBe(780000);
+    expect(beforeFinal.body.remainingMinor).toBe(780000);
 
-    // Доплата закрывает долг.
+    // Доплата закрывает остаток.
     const final = await http()
       .post(`/v1/workspaces/${ws.id}/orders/${order.body.id}/payments`)
       .set(...master.authHeader)
@@ -246,11 +245,11 @@ describe('сквозные сценарии F1–F10', () => {
       .expect(201);
     expect(final.body.paymentStatus).toBe('paid');
 
-    const empty = await http()
-      .get(`/v1/workspaces/${ws.id}/debts`)
+    const afterFinal = await http()
+      .get(`/v1/workspaces/${ws.id}/orders/${order.body.id}/payments`)
       .set(...master.authHeader)
       .expect(200);
-    expect(empty.body).toHaveLength(0);
+    expect(afterFinal.body.remainingMinor).toBe(0);
   });
 
   it('F5: владелец приглашает сотрудника и назначает ему заказ', async () => {

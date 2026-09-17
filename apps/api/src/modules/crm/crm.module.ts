@@ -8,6 +8,10 @@ import { PriceListRepository } from './repositories/price-list.repository';
 import { PaymentsRepository } from './repositories/payments.repository';
 import { OrderPhotosRepository } from './repositories/order-photos.repository';
 import { AnalyticsRepository } from './repositories/analytics.repository';
+import { LeadsRepository } from './repositories/leads.repository';
+import { DamagesRepository } from './repositories/damages.repository';
+import { AssessmentsRepository } from './repositories/assessments.repository';
+import { CrmParentAccess } from './access/crm-parent.access';
 import { ClientsService } from './clients/clients.service';
 import { OrdersService } from './orders/orders.service';
 import { AppointmentsService } from './appointments/appointments.service';
@@ -17,6 +21,9 @@ import { EstimatePdfService } from './estimates/estimate-pdf.service';
 import { PaymentsService } from './payments/payments.service';
 import { OrderPhotosService } from './photos/order-photos.service';
 import { AnalyticsService } from './analytics/analytics.service';
+import { LeadsService } from './leads/leads.service';
+import { DamagesService } from './damages/damages.service';
+import { AssessmentsService } from './assessments/assessments.service';
 import { ClientsController } from './clients/clients.controller';
 import { OrdersController } from './orders/orders.controller';
 import { AppointmentsController } from './appointments/appointments.controller';
@@ -24,6 +31,9 @@ import { EstimatesController } from './estimates/estimates.controller';
 import { PaymentsController } from './payments/payments.controller';
 import { OrderPhotosController } from './photos/order-photos.controller';
 import { AnalyticsController } from './analytics/analytics.controller';
+import { LeadsController } from './leads/leads.controller';
+import { DamagesController } from './damages/damages.controller';
+import { AssessmentsController } from './assessments/assessments.controller';
 import { AppointmentRemindersHandler } from './appointments/jobs/appointment-reminders.handler';
 import { CrmWiring } from './crm.wiring';
 
@@ -36,6 +46,9 @@ import { CrmWiring } from './crm.wiring';
     PaymentsController,
     OrderPhotosController,
     AnalyticsController,
+    LeadsController,
+    DamagesController,
+    AssessmentsController,
   ],
   providers: [
     ClientsRepository,
@@ -47,6 +60,10 @@ import { CrmWiring } from './crm.wiring';
     PaymentsRepository,
     OrderPhotosRepository,
     AnalyticsRepository,
+    LeadsRepository,
+    DamagesRepository,
+    AssessmentsRepository,
+    CrmParentAccess,
     ClientsService,
     OrdersService,
     AppointmentsService,
@@ -56,6 +73,9 @@ import { CrmWiring } from './crm.wiring';
     PaymentsService,
     OrderPhotosService,
     AnalyticsService,
+    LeadsService,
+    DamagesService,
+    AssessmentsService,
     AppointmentRemindersHandler,
     CrmWiring,
   ],
@@ -68,6 +88,9 @@ import { CrmWiring } from './crm.wiring';
     PaymentsService,
     OrderPhotosService,
     AnalyticsService,
+    LeadsService,
+    DamagesService,
+    AssessmentsService,
     ClientsRepository,
     VehiclesRepository,
     OrdersRepository,
@@ -76,6 +99,9 @@ import { CrmWiring } from './crm.wiring';
     PriceListRepository,
     PaymentsRepository,
     OrderPhotosRepository,
+    LeadsRepository,
+    DamagesRepository,
+    AssessmentsRepository,
   ],
 })
 export class CrmModule {}

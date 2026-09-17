@@ -12,8 +12,10 @@ import { CalendarScreen } from '@/features/crm/CalendarScreen';
 import { OrdersScreen } from '@/features/crm/OrdersScreen';
 import { OrderScreen } from '@/features/crm/OrderScreen';
 import { NewOrderScreen } from '@/features/crm/NewOrderScreen';
+import { LeadsScreen } from '@/features/crm/LeadsScreen';
+import { LeadScreen } from '@/features/crm/LeadScreen';
+import { NewLeadScreen } from '@/features/crm/NewLeadScreen';
 import { ClientScreen, ClientsScreen, VehicleScreen } from '@/features/crm/ClientsScreen';
-import { DebtsScreen } from '@/features/crm/DebtsScreen';
 import { WorkspaceSettingsScreen } from '@/features/crm/WorkspaceSettingsScreen';
 import { PriceListScreen } from '@/features/crm/PriceListScreen';
 import { PaymentJournalScreen } from '@/features/crm/PaymentJournalScreen';
@@ -69,15 +71,17 @@ export const router = createBrowserRouter([
           { path: 'today', element: <TodayScreen /> },
           { path: 'calendar', element: <CalendarScreen /> },
           { path: 'orders', element: <OrdersScreen /> },
+          { path: 'leads', element: <LeadsScreen /> },
           { path: 'clients', element: <ClientsScreen /> },
           { path: 'settings', element: <WorkspaceSettingsScreen /> },
         ],
       },
       { path: 'workspace/:workspaceId/orders/new', element: <NewOrderScreen /> },
+      { path: 'workspace/:workspaceId/leads/new', element: <NewLeadScreen /> },
+      { path: 'workspace/:workspaceId/leads/:leadId', element: <LeadScreen /> },
       { path: 'workspace/:workspaceId/orders/:orderId', element: <OrderScreen /> },
       { path: 'workspace/:workspaceId/clients/:clientId', element: <ClientScreen /> },
       { path: 'workspace/:workspaceId/vehicles/:vehicleId', element: <VehicleScreen /> },
-      { path: 'workspace/:workspaceId/debts', element: <DebtsScreen /> },
       { path: 'workspace/:workspaceId/price-list', element: <PriceListScreen /> },
       { path: 'workspace/:workspaceId/payments', element: <PaymentJournalScreen /> },
       { path: 'workspace/:workspaceId/analytics', element: <AnalyticsScreen /> },

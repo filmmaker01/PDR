@@ -14,18 +14,29 @@ const RELATIONS = {
   file: { select: { id: true, status: true, mimeType: true, width: true, height: true } },
 } satisfies Prisma.OrderPhotoInclude;
 
+/** Снимок принадлежит либо заказу, либо обращению — так же, как в базе. */
+export type PhotoParent = { leadId: string } | { orderId: string };
+
+function whereParent(parent: PhotoParent): Prisma.OrderPhotoWhereInput {
+  return 'leadId' in parent ? { leadId: parent.leadId } : { orderId: parent.orderId };
+}
+
 @Injectable()
 export class OrderPhotosRepository extends WorkspaceScopedRepository {
   constructor(prisma: PrismaService) {
     super(prisma);
   }
 
-  async listForOrder(workspaceId: string, orderId: string): Promise<OrderPhotoWithFile[]> {
+  async listFor(workspaceId: string, parent: PhotoParent): Promise<OrderPhotoWithFile[]> {
     return this.prisma.orderPhoto.findMany({
-      where: { workspaceId, orderId },
+      where: { workspaceId, ...whereParent(parent) },
       include: RELATIONS,
       orderBy: [{ category: 'asc' }, { position: 'asc' }, { createdAt: 'asc' }],
     });
+  }
+
+  async listForOrder(workspaceId: string, orderId: string): Promise<OrderPhotoWithFile[]> {
+    return this.listFor(workspaceId, { orderId });
   }
 
   async findById(workspaceId: string, photoId: string): Promise<OrderPhotoWithFile | null> {
@@ -37,20 +48,20 @@ export class OrderPhotosRepository extends WorkspaceScopedRepository {
 
   async findByFile(
     workspaceId: string,
-    orderId: string,
+    parent: PhotoParent,
     fileId: string,
   ): Promise<OrderPhotoWithFile | null> {
     return this.prisma.orderPhoto.findFirst({
-      where: { workspaceId, orderId, fileId },
+      where: { workspaceId, ...whereParent(parent), fileId },
       include: RELATIONS,
     });
   }
 
-  async nextPosition(workspaceId: string, orderId: string, category: string): Promise<number> {
+  async nextPosition(workspaceId: string, parent: PhotoParent, category: string): Promise<number> {
     const last = await this.prisma.orderPhoto.findFirst({
       where: {
         workspaceId,
-        orderId,
+        ...whereParent(parent),
         category: category as Prisma.EnumPhotoCategoryFilter['equals'],
       },
       orderBy: { position: 'desc' },
@@ -88,7 +99,38 @@ export class OrderPhotosRepository extends WorkspaceScopedRepository {
     await this.prisma.orderPhoto.deleteMany({ where: { id: photoId, workspaceId } });
   }
 
+  async countFor(workspaceId: string, parent: PhotoParent): Promise<number> {
+    return this.prisma.orderPhoto.count({ where: { workspaceId, ...whereParent(parent) } });
+  }
+
   async countForOrder(workspaceId: string, orderId: string): Promise<number> {
-    return this.prisma.orderPhoto.count({ where: { workspaceId, orderId } });
+    return this.countFor(workspaceId, { orderId });
+  }
+
+  async countByDamage(workspaceId: string, damageIds: readonly string[]) {
+    if (damageIds.length === 0) return new Map<string, number>();
+    const rows = await this.prisma.orderPhoto.groupBy({
+      by: ['damageId'],
+      where: { workspaceId, damageId: { in: [...damageIds] } },
+      _count: { _all: true },
+    });
+    return new Map(rows.filter((r) => r.damageId).map((r) => [r.damageId!, r._count._all]));
+  }
+
+  /**
+   * Перенос снимков обращения в заказ при конверсии.
+   * Файлы не перезагружаются: у снимка просто меняется владелец.
+   */
+  async moveToOrder(
+    workspaceId: string,
+    leadId: string,
+    orderId: string,
+    tx: Prisma.TransactionClient,
+  ): Promise<number> {
+    const result = await tx.orderPhoto.updateMany({
+      where: { workspaceId, leadId },
+      data: { leadId: null, orderId },
+    });
+    return result.count;
   }
 }

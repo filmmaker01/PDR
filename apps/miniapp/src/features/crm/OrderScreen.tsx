@@ -17,13 +17,15 @@ import { api } from '@/shared/api';
 import { formatDateTime, formatMinor, formatPhoneRu } from '@/shared/format';
 import { alertDialog, confirmDialog, haptic } from '@/shared/telegram';
 import { useMembers, useOrder, useWorkspace } from './api';
+import { AssessmentSheet } from './AssessmentSheet';
+import { DamagesTab } from './DamagesTab';
 import { AppointmentSheet } from './AppointmentSheet';
 import { EstimatesTab } from './EstimatesTab';
 import { PaymentsTab } from './PaymentsTab';
 import { PhotosTab } from './PhotosTab';
 import { APPOINTMENT_STATUS_TONES, PAYMENT_LABELS, STATUS_TONES, type OrderStatus } from './types';
 
-type Tab = 'work' | 'photos' | 'estimate' | 'payments';
+type Tab = 'work' | 'photos' | 'damages' | 'estimate' | 'payments';
 
 export function OrderScreen() {
   const { workspaceId = '', orderId = '' } = useParams();
@@ -32,6 +34,7 @@ export function OrderScreen() {
   const [tab, setTab] = useState<Tab>('work');
   const [statusSheet, setStatusSheet] = useState(false);
   const [appointmentSheet, setAppointmentSheet] = useState(false);
+  const [assessmentSheet, setAssessmentSheet] = useState(false);
   const [pendingStatus, setPendingStatus] = useState<OrderStatus | null>(null);
   const [comment, setComment] = useState('');
 
@@ -93,6 +96,8 @@ export function OrderScreen() {
   const data = order.data!;
   const canEdit = workspace.data?.access.active ?? false;
   const canAssign = workspace.data?.permissions.includes('orders.assign') ?? false;
+  // Остаток к оплате: считается из согласованной сметы и принятых денег.
+  const remainingMinor = Math.max(0, (data.agreedTotalMinor ?? 0) - data.paidMinor);
 
   return (
     <div className="pdr-stack">
@@ -119,15 +124,19 @@ export function OrderScreen() {
           ) : (
             <Badge tone="muted">Смета не согласована</Badge>
           )}
-          {data.debtMinor > 0 ? (
-            <Badge tone="danger">Долг {formatMinor(data.debtMinor, data.currency)}</Badge>
-          ) : null}
         </div>
 
-        {canEdit && data.allowedTransitions.length > 0 ? (
-          <Button block style={{ marginTop: 12 }} onClick={() => setStatusSheet(true)}>
-            Изменить статус
-          </Button>
+        {canEdit ? (
+          <div className="pdr-stack" style={{ gap: 8, marginTop: 12 }}>
+            <Button block variant="secondary" onClick={() => setAssessmentSheet(true)}>
+              Сделать оценку
+            </Button>
+            {data.allowedTransitions.length > 0 ? (
+              <Button block onClick={() => setStatusSheet(true)}>
+                Изменить статус
+              </Button>
+            ) : null}
+          </div>
         ) : null}
       </Card>
 
@@ -135,6 +144,7 @@ export function OrderScreen() {
         tabs={[
           { value: 'work', label: 'Работа' },
           { value: 'photos', label: 'Фото' },
+          { value: 'damages', label: 'Повреждения' },
           { value: 'estimate', label: 'Расчёт' },
           { value: 'payments', label: 'Оплаты' },
         ]}
@@ -290,12 +300,28 @@ export function OrderScreen() {
       ) : null}
 
       {tab === 'photos' ? (
-        <PhotosTab workspaceId={workspaceId} orderId={orderId} canEdit={canEdit} />
+        <PhotosTab workspaceId={workspaceId} parent={{ orderId }} canEdit={canEdit} />
+      ) : null}
+      {tab === 'damages' ? (
+        <DamagesTab
+          workspaceId={workspaceId}
+          parent={{ orderId }}
+          canEdit={canEdit}
+          currency={data.currency}
+        />
       ) : null}
       {tab === 'estimate' ? (
         <EstimatesTab workspaceId={workspaceId} orderId={orderId} canEdit={canEdit} />
       ) : null}
       {tab === 'payments' ? <PaymentsTab workspaceId={workspaceId} orderId={orderId} /> : null}
+
+      <AssessmentSheet
+        open={assessmentSheet}
+        onClose={() => setAssessmentSheet(false)}
+        workspaceId={workspaceId}
+        parent={{ orderId }}
+        currency={data.currency}
+      />
 
       <AppointmentSheet
         open={appointmentSheet}
@@ -321,11 +347,11 @@ export function OrderScreen() {
                   }
                   if (!(await confirmDialog(`Перевести заказ в «${transitionTo.label}»?`))) return;
 
-                  // При выдаче с остатком сразу предлагаем принять доплату:
+                  // При выдаче с остатком сразу предлагаем принять оплату:
                   // деньги проще взять, пока клиент стоит рядом.
-                  if (transitionTo.status === 'delivered' && data.debtMinor > 0) {
+                  if (transitionTo.status === 'delivered' && remainingMinor > 0) {
                     const takeNow = await confirmDialog(
-                      `Остаток ${formatMinor(data.debtMinor, data.currency)}. Принять оплату сейчас?`,
+                      `Не оплачено ${formatMinor(remainingMinor, data.currency)}. Принять оплату сейчас?`,
                     );
                     transition.mutate({ to: transitionTo.status });
                     if (takeNow) setTab('payments');

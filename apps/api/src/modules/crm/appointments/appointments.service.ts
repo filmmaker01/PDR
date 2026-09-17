@@ -25,6 +25,8 @@ const MAX_RANGE_DAYS = 62;
 
 export interface CreateAppointmentInput {
   orderId?: string | null;
+  /** Запись по обращению: клиента записали ещё до появления заказа. */
+  leadId?: string | null;
   clientId?: string | null;
   assigneeMemberId?: string | null;
   /** Локальное время мастерской: `YYYY-MM-DDTHH:mm`. */
@@ -139,6 +141,7 @@ export class AppointmentsService {
         ctx.workspaceId,
         {
           orderId,
+          leadId: input.leadId ?? null,
           clientId,
           assigneeMemberId,
           startsAt,

@@ -1223,7 +1223,291 @@ async function seedWorkspace(input: {
     data: { scheduledStartAt: todayAt(10) },
   });
 
+  await seedLeads({
+    workspaceId: workspace.id,
+    ownerUserId: input.ownerId,
+    ownerMemberId: owner.id,
+  });
+
   return workspace.id;
+}
+
+
+/**
+ * Обращения: главный экран мастерской показывает счётчики по ним, поэтому в
+ * демо нужны все характерные состояния — от свежего сообщения в Telegram до
+ * отказа и уже превращённого в заказ обращения.
+ */
+interface LeadSpec {
+  contactName: string;
+  contactPhone: string | null;
+  contactExtra: string | null;
+  vehicleMake: string;
+  vehicleModel: string;
+  vehiclePlate: string | null;
+  source: 'online' | 'offline';
+  channel: 'telegram' | 'whatsapp' | 'vk' | 'call' | 'in_person' | 'other';
+  status: 'new' | 'estimated' | 'awaiting_decision' | 'callback' | 'scheduled' | 'rejected';
+  comment: string;
+  estimate: number | null;
+  createdDaysAgo: number;
+  /** Через сколько дней связаться. Отрицательное — срок уже прошёл. */
+  contactInDays?: number;
+  rejectReason?: string;
+  withPhoto?: boolean;
+  damages?: { panel: string; type: string; size: string; widthMm: number; price: number }[];
+}
+
+const LEADS: LeadSpec[] = [
+  {
+    contactName: 'Марина',
+    contactPhone: '+79031234567',
+    contactExtra: '@marina_pdr',
+    vehicleMake: 'Kia',
+    vehicleModel: 'Rio',
+    vehiclePlate: 'Т444ТТ96',
+    source: 'online',
+    channel: 'telegram',
+    status: 'new',
+    comment: 'Прислала фото: вмятина на двери после парковки. Спрашивает цену.',
+    estimate: null,
+    createdDaysAgo: 0,
+    withPhoto: true,
+    damages: [{ panel: 'door_fl', type: 'door_ding', size: 'M', widthMm: 40, price: 4500 }],
+  },
+  {
+    contactName: 'Артём',
+    contactPhone: '+79041112233',
+    contactExtra: null,
+    vehicleMake: 'Hyundai',
+    vehicleModel: 'Solaris',
+    vehiclePlate: 'У777УУ96',
+    source: 'online',
+    channel: 'whatsapp',
+    status: 'estimated',
+    comment: 'Град, капот и крыша. Прислал восемь фотографий.',
+    estimate: 32_000,
+    createdDaysAgo: 2,
+    withPhoto: true,
+    damages: [
+      { panel: 'hood', type: 'hail', size: 'S', widthMm: 15, price: 18_000 },
+      { panel: 'roof', type: 'hail', size: 'S', widthMm: 15, price: 14_000 },
+    ],
+  },
+  {
+    contactName: 'Сергей',
+    contactPhone: '+79095554433',
+    contactExtra: null,
+    vehicleMake: 'Toyota',
+    vehicleModel: 'Camry',
+    vehiclePlate: null,
+    source: 'online',
+    channel: 'call',
+    status: 'awaiting_decision',
+    comment: 'Назвали цену по телефону, думает.',
+    estimate: 12_000,
+    createdDaysAgo: 4,
+    contactInDays: 2,
+  },
+  {
+    contactName: 'Ольга',
+    contactPhone: '+79026667788',
+    contactExtra: null,
+    vehicleMake: 'Renault',
+    vehicleModel: 'Duster',
+    vehiclePlate: 'Х100ХХ96',
+    source: 'offline',
+    channel: 'in_person',
+    status: 'callback',
+    comment: 'Приезжала на осмотр, просила перезвонить после зарплаты.',
+    estimate: 9_500,
+    createdDaysAgo: 9,
+    contactInDays: -2,
+  },
+  {
+    contactName: 'Дмитрий',
+    contactPhone: '+79087776655',
+    contactExtra: null,
+    vehicleMake: 'Skoda',
+    vehicleModel: 'Octavia',
+    vehiclePlate: 'Е321ЕЕ96',
+    source: 'online',
+    channel: 'vk',
+    status: 'scheduled',
+    comment: 'Записан на осмотр, вмятина на крыле.',
+    estimate: 6_000,
+    createdDaysAgo: 6,
+  },
+  {
+    contactName: 'Без имени',
+    contactPhone: null,
+    contactExtra: '@cold_lead',
+    vehicleMake: 'Lada',
+    vehicleModel: 'Vesta',
+    vehiclePlate: null,
+    source: 'online',
+    channel: 'telegram',
+    status: 'rejected',
+    comment: 'Спросил цену и пропал.',
+    estimate: 7_000,
+    createdDaysAgo: 15,
+    rejectReason: 'Дорого, поехал в другой сервис',
+  },
+];
+
+async function seedLeads(input: {
+  workspaceId: string;
+  ownerUserId: string;
+  ownerMemberId: string;
+}): Promise<void> {
+  let number = 0;
+
+  for (const spec of LEADS) {
+    number += 1;
+    const createdAt = daysAgo(spec.createdDaysAgo);
+
+    const lead = await prisma.lead.create({
+      data: {
+        workspaceId: input.workspaceId,
+        number,
+        contactName: spec.contactName,
+        contactPhone: spec.contactPhone,
+        contactExtra: spec.contactExtra,
+        vehicleMake: spec.vehicleMake,
+        vehicleModel: spec.vehicleModel,
+        vehiclePlate: spec.vehiclePlate,
+        source: spec.source,
+        channel: spec.channel,
+        status: spec.status,
+        comment: spec.comment,
+        estimateMinor: spec.estimate === null ? null : minor(spec.estimate),
+        currency: 'RUB',
+        nextContactAt:
+          spec.contactInDays === undefined ? null : daysAgo(-spec.contactInDays),
+        rejectReason: spec.rejectReason ?? null,
+        assigneeMemberId: input.ownerMemberId,
+        createdById: input.ownerUserId,
+        createdAt,
+      },
+    });
+
+    await prisma.leadStatusHistory.create({
+      data: {
+        workspaceId: input.workspaceId,
+        leadId: lead.id,
+        fromStatus: null,
+        toStatus: 'new',
+        changedById: input.ownerUserId,
+        comment: 'Обращение создано',
+        createdAt,
+      },
+    });
+    if (spec.status !== 'new') {
+      await prisma.leadStatusHistory.create({
+        data: {
+          workspaceId: input.workspaceId,
+          leadId: lead.id,
+          fromStatus: 'new',
+          toStatus: spec.status,
+          changedById: input.ownerUserId,
+          comment: spec.rejectReason ?? null,
+          createdAt: daysAgo(Math.max(0, spec.createdDaysAgo - 1)),
+        },
+      });
+    }
+
+    const damageIds: string[] = [];
+    for (const [index, damage] of (spec.damages ?? []).entries()) {
+      const created = await prisma.damage.create({
+        data: {
+          workspaceId: input.workspaceId,
+          leadId: lead.id,
+          panelCode: damage.panel,
+          damageType: damage.type,
+          sizeClass: damage.size,
+          widthMm: damage.widthMm,
+          heightMm: damage.widthMm,
+          quantity: 1,
+          priceMinor: minor(damage.price),
+          priceSource: 'params',
+          position: index + 1,
+          createdById: input.ownerUserId,
+          createdAt,
+        },
+      });
+      damageIds.push(created.id);
+    }
+
+    if (spec.withPhoto) {
+      const fileId = await createPhotoFile({
+        ownerUserId: input.ownerUserId,
+        workspaceId: input.workspaceId,
+        label: `Обращение №${number}`,
+        color: '#7a5b8e',
+      });
+      await prisma.orderPhoto.create({
+        data: {
+          workspaceId: input.workspaceId,
+          leadId: lead.id,
+          fileId,
+          category: 'before',
+          damageId: damageIds[0] ?? null,
+          caption: `${spec.vehicleMake} ${spec.vehicleModel}`,
+          position: 1,
+          createdById: input.ownerUserId,
+          createdAt,
+        },
+      });
+    }
+
+    // Сохранённая оценка: в карточке обращения видно, откуда взялась сумма.
+    if (spec.estimate !== null) {
+      const assessment = await prisma.assessment.create({
+        data: {
+          workspaceId: input.workspaceId,
+          leadId: lead.id,
+          method: damageIds.length > 0 ? 'params' : 'manual',
+          currency: 'RUB',
+          suggestedMinor: minor(spec.estimate),
+          totalMinor: minor(spec.estimate),
+          overridden: damageIds.length === 0,
+          explanation:
+            damageIds.length > 0
+              ? 'Расчёт по прайсу мастерской'
+              : 'Стоимость названа мастером по телефону',
+          createdById: input.ownerUserId,
+          createdAt,
+        },
+      });
+
+      for (const [index, damage] of (spec.damages ?? []).entries()) {
+        await prisma.assessmentItem.create({
+          data: {
+            workspaceId: input.workspaceId,
+            assessmentId: assessment.id,
+            damageId: damageIds[index] ?? null,
+            position: index + 1,
+            panelCode: damage.panel,
+            damageType: damage.type,
+            sizeClass: damage.size,
+            widthMm: damage.widthMm,
+            heightMm: damage.widthMm,
+            quantity: 1,
+            suggestedUnitPriceMinor: minor(damage.price),
+            unitPriceMinor: minor(damage.price),
+            lineTotalMinor: minor(damage.price),
+          },
+        });
+      }
+    }
+  }
+
+  // Счётчик номеров догоняет вставленные обращения: иначе первое созданное
+  // из интерфейса упрётся в уникальный индекс (workspace_id, number).
+  await prisma.workspace.update({
+    where: { id: input.workspaceId },
+    data: { leadSeq: number },
+  });
 }
 
 /** Вторая мастерская: доступ к CRM закончился — видно состояние «только чтение». */
@@ -1442,6 +1726,9 @@ async function main(): Promise<void> {
     сметы: await prisma.estimate.count(),
     оплаты: await prisma.paymentEntry.count(),
     фотографии: await prisma.orderPhoto.count(),
+    обращения: await prisma.lead.count(),
+    повреждения: await prisma.damage.count(),
+    оценки: await prisma.assessment.count(),
   };
   console.log('Демо-данные готовы:', counts);
   console.log(

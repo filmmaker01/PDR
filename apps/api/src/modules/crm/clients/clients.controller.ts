@@ -79,7 +79,6 @@ export class ClientsController {
       tags: card.client.tags,
       archivedAt: card.client.archivedAt?.toISOString() ?? null,
       anonymizedAt: card.client.anonymizedAt?.toISOString() ?? null,
-      debtMinor: Number(card.debtMinor),
       currency: ws.workspace.currency,
       vehicles: card.vehicles.map((v) => ({
         id: v.id,

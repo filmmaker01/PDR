@@ -147,6 +147,35 @@ export const FILE_STATUSES = [
 ] as const;
 export type FileStatus = (typeof FILE_STATUSES)[number];
 
+export const LEAD_SOURCES = ['online', 'offline'] as const;
+export type LeadSource = (typeof LEAD_SOURCES)[number];
+
+export const LEAD_CHANNELS = [
+  'telegram',
+  'whatsapp',
+  'vk',
+  'call',
+  'in_person',
+  'other',
+] as const;
+export type LeadChannel = (typeof LEAD_CHANNELS)[number];
+
+export const LEAD_STATUSES = [
+  'new',
+  'estimated',
+  'awaiting_decision',
+  'callback',
+  'scheduled',
+  'rejected',
+] as const;
+export type LeadStatus = (typeof LEAD_STATUSES)[number];
+
+export const ASSESSMENT_METHODS = ['manual', 'params', 'ai'] as const;
+export type AssessmentMethod = (typeof ASSESSMENT_METHODS)[number];
+
+export const DAMAGE_PRICE_SOURCES = ['manual', 'params', 'ai'] as const;
+export type DamagePriceSource = (typeof DAMAGE_PRICE_SOURCES)[number];
+
 export const CLUB_STATUSES = [
   'none',
   'invited',

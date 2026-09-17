@@ -92,6 +92,19 @@ export const envSchema = z
     VIDEO_AUTH_CALLBACK_SECRET: z.string().default(''),
 
     /**
+     * Разбор фотографии повреждения. `disabled` — AI-оценка выключена,
+     * и это рабочее состояние: обращения, схема кузова, разметка снимков,
+     * ручная оценка и расчёт по прайсу от неё не зависят. `mock` — заглушка
+     * для локальной разработки и демо. `openai_compatible` — любой сервис
+     * с API вида Chat Completions; модель меняется переменной AI_MODEL.
+     */
+    AI_PROVIDER: z.enum(['disabled', 'mock', 'openai_compatible']).default('disabled'),
+    AI_BASE_URL: z.string().default('https://api.openai.com/v1'),
+    AI_API_KEY: z.string().default(''),
+    AI_MODEL: z.string().default(''),
+    AI_TIMEOUT_MS: z.coerce.number().int().positive().max(120_000).default(45_000),
+
+    /**
      * Общий секрет планировщика: им закрыт эндпоинт разбора очереди.
      * На Vercel эту же переменную планировщик подставляет в заголовок запроса.
      */
@@ -132,6 +145,28 @@ export const envSchema = z
           });
         }
       }
+    }
+
+    if (env.AI_PROVIDER === 'openai_compatible') {
+      for (const key of ['AI_API_KEY', 'AI_MODEL'] as const) {
+        if (!env[key]) {
+          ctx.addIssue({
+            code: z.ZodIssueCode.custom,
+            path: [key],
+            message: `${key} обязателен при AI_PROVIDER=openai_compatible`,
+          });
+        }
+      }
+    }
+
+    // Заглушка выдаёт демонстрационный разбор. В production он выглядел бы
+    // как настоящая оценка, поэтому там допустимы только disabled и реальный провайдер.
+    if (env.AI_PROVIDER === 'mock' && env.APP_ENV === 'production') {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        path: ['AI_PROVIDER'],
+        message: 'AI_PROVIDER=mock недопустим в production: это выдуманный разбор фотографии',
+      });
     }
 
     if (env.VIDEO_PROVIDER === 'kinescope' && !env.KINESCOPE_API_KEY) {

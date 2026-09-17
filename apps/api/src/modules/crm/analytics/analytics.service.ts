@@ -26,7 +26,6 @@ export interface AnalyticsSummary {
   completedOrders: number;
   completedTotalMinor: number;
   receivedMinor: number;
-  outstandingDebtMinor: number;
   averageCheckMinor: number;
   newClients: number;
   appointmentMinutes: number;
@@ -42,10 +41,9 @@ export class AnalyticsService {
   async summary(ctx: WorkspaceContext, input: PeriodInput): Promise<AnalyticsSummary> {
     const period = this.resolvePeriod(ctx, input);
 
-    const [completed, received, debt, newClients, minutes] = await Promise.all([
+    const [completed, received, newClients, minutes] = await Promise.all([
       this.analytics.completed(ctx.workspaceId, period.range),
       this.analytics.received(ctx.workspaceId, period.range),
-      this.analytics.outstandingDebt(ctx.workspaceId, period.range),
       this.analytics.newClients(ctx.workspaceId, period.range),
       this.analytics.appointmentMinutes(ctx.workspaceId, period.range),
     ]);
@@ -57,7 +55,6 @@ export class AnalyticsService {
       completedOrders: completed.count,
       completedTotalMinor: completed.totalMinor,
       receivedMinor: received,
-      outstandingDebtMinor: debt,
       // Средний чек по завершённым заказам: делить поступления на заказы нельзя,
       // они относятся к разным периодам.
       averageCheckMinor:

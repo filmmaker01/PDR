@@ -81,16 +81,4 @@ export class ClientsRepository extends WorkspaceScopedRepository {
   async countOrders(workspaceId: string, clientId: string): Promise<number> {
     return this.prisma.order.count({ where: { workspaceId, clientId } });
   }
-
-  async debtMinor(workspaceId: string, clientId: string): Promise<bigint> {
-    const orders = await this.prisma.order.findMany({
-      where: { workspaceId, clientId, status: { not: 'cancelled' }, archivedAt: null },
-      select: { agreedTotalMinor: true, paidMinor: true },
-    });
-    return orders.reduce((sum, order) => {
-      const agreed = order.agreedTotalMinor ?? 0n;
-      const debt = agreed - order.paidMinor;
-      return debt > 0n ? sum + debt : sum;
-    }, 0n);
-  }
 }

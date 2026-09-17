@@ -1,3 +1,12 @@
+import type { MarkupDoc } from '@pdr/ui';
+import type {
+  AssessmentMethod,
+  DamagePriceSource,
+  LeadChannel,
+  LeadSource,
+  LeadStatus,
+} from '@pdr/shared';
+
 export type OrderStatus =
   'new' | 'pending_approval' | 'scheduled' | 'in_progress' | 'ready' | 'delivered' | 'cancelled';
 
@@ -31,7 +40,6 @@ export interface OrderCard extends OrderListItem {
   cancelledAt: string | null;
   cancelReason: string | null;
   archivedAt: string | null;
-  debtMinor: number;
   allowedTransitions: { status: OrderStatus; label: string }[];
   history: {
     id: string;
@@ -70,7 +78,6 @@ export interface ClientCard {
   tags: string[];
   archivedAt: string | null;
   anonymizedAt: string | null;
-  debtMinor: number;
   currency: string;
   vehicles: {
     id: string;
@@ -122,7 +129,6 @@ export interface VehicleCard {
 export interface TodaySummary {
   activeCount: number;
   readyCount: number;
-  debt: { count: number; totalMinor: number };
   currency: string;
 }
 
@@ -371,11 +377,20 @@ export interface PaymentJournalEntry extends PaymentEntry {
 export interface OrderPhoto {
   id: string;
   fileId: string;
+  leadId: string | null;
+  orderId: string | null;
   category: PhotoCategory;
   categoryLabel: string;
   caption: string | null;
   position: number;
+  /** Привязка снимка к конкретному повреждению на схеме кузова. */
+  damageId: string | null;
   estimateItemId: string | null;
+  /** Векторная разметка: рисуется поверх оригинала, сам файл не меняется. */
+  annotation: MarkupDoc | null;
+  hasMarkup: boolean;
+  annotationFileId: string | null;
+  annotatedAt: string | null;
   status: string;
   width: number | null;
   height: number | null;
@@ -405,7 +420,6 @@ export interface AnalyticsSummary {
   completedOrders: number;
   completedTotalMinor: number;
   receivedMinor: number;
-  outstandingDebtMinor: number;
   averageCheckMinor: number;
   newClients: number;
   appointmentMinutes: number;
@@ -449,3 +463,214 @@ export interface InvitationInfo {
   expiresAt: string;
   createdAt: string;
 }
+
+// -- Обращения, повреждения, оценки -------------------------------------------
+
+export type { AssessmentMethod, DamagePriceSource, LeadChannel, LeadSource, LeadStatus };
+
+export interface LeadListItem {
+  id: string;
+  number: number;
+  status: LeadStatus;
+  statusLabel: string;
+  source: LeadSource;
+  sourceLabel: string;
+  channel: LeadChannel | null;
+  channelLabel: string | null;
+  contact: {
+    clientId: string | null;
+    name: string | null;
+    phone: string | null;
+    extra: string | null;
+  };
+  vehicle: {
+    vehicleId: string | null;
+    make: string | null;
+    model: string | null;
+    plate: string | null;
+    year: number | null;
+    color: string | null;
+  };
+  comment: string | null;
+  estimateMinor: number | null;
+  currency: string;
+  nextContactAt: string | null;
+  rejectReason: string | null;
+  assignee: { id: string; name: string; color: string | null } | null;
+  convertedOrder: { id: string; number: number } | null;
+  convertedAt: string | null;
+  archivedAt: string | null;
+  createdAt: string;
+  allowedTransitions: { status: LeadStatus; label: string }[];
+}
+
+export interface LeadCard extends LeadListItem {
+  history: {
+    id: string;
+    fromStatus: LeadStatus | null;
+    toStatus: LeadStatus;
+    comment: string | null;
+    createdAt: string;
+    changedBy: string;
+  }[];
+}
+
+export interface LeadsSummary {
+  total: number;
+  byStatus: Record<string, number>;
+  rejected: number;
+  /** Сколько обращений «перезвонить» уже просрочено. */
+  due: number;
+}
+
+export interface Damage {
+  id: string;
+  leadId: string | null;
+  orderId: string | null;
+  panelCode: string;
+  damageType: string | null;
+  sizeClass: string | null;
+  widthMm: number | null;
+  heightMm: number | null;
+  quantity: number;
+  material: 'steel' | 'aluminum' | 'other' | null;
+  accessDifficulty: 'easy' | 'medium' | 'hard' | null;
+  onEdge: boolean;
+  comment: string | null;
+  priceMinor: number | null;
+  priceSource: DamagePriceSource | null;
+  position: number;
+  photoCount: number;
+  createdAt: string;
+}
+
+export interface AssessmentItem {
+  id: string;
+  damageId: string | null;
+  position: number;
+  panelCode: string | null;
+  damageType: string | null;
+  sizeClass: string | null;
+  widthMm: number | null;
+  heightMm: number | null;
+  quantity: number;
+  material: 'steel' | 'aluminum' | 'other' | null;
+  accessDifficulty: 'easy' | 'medium' | 'hard' | null;
+  onEdge: boolean;
+  suggestedUnitPriceMinor: number;
+  unitPriceMinor: number;
+  lineTotalMinor: number;
+  priceListItemId: string | null;
+  confidence: number | null;
+  comment: string | null;
+}
+
+export interface Assessment {
+  id: string;
+  leadId: string | null;
+  orderId: string | null;
+  method: AssessmentMethod;
+  methodLabel: string;
+  currency: string;
+  suggestedMinor: number;
+  totalMinor: number;
+  overridden: boolean;
+  explanation: string | null;
+  note: string | null;
+  ai: { provider: string; model: string | null; confidence: number | null } | null;
+  createdAt: string;
+  createdBy: string | null;
+  items: AssessmentItem[];
+}
+
+/** Строка расчёта, который пришёл с сервера и ещё не сохранён. */
+export interface AssessmentLine {
+  damageId: string | null;
+  position: number;
+  panelCode: string;
+  damageType: string | null;
+  sizeClass: string | null;
+  quantity: number;
+  priceListItemId: string | null;
+  priceListTitle: string | null;
+  basePriceMinor: number;
+  multipliers: { reason: string; factor: number }[];
+  suggestedUnitPriceMinor: number;
+  unitPriceMinor: number;
+  lineTotalMinor: number;
+  overridden: boolean;
+  explanation: string;
+  comment: string | null;
+}
+
+export interface AssessmentPreview {
+  suggestedMinor: number;
+  totalMinor: number;
+  explanation: string;
+  lines: AssessmentLine[];
+  currency: string;
+}
+
+export interface AssessmentAnalysis extends AssessmentPreview {
+  label: string;
+  disclaimer: string;
+  ai: {
+    provider: string;
+    model: string;
+    confidence: number | null;
+    explanation: string;
+    raw: unknown;
+  };
+  items: DamageDraft[];
+}
+
+export interface AssessmentCapabilities {
+  methods: { value: AssessmentMethod; label: string; available: boolean; provider?: string }[];
+}
+
+/** Повреждение в форме, ещё не сохранённое на сервере. */
+export interface DamageDraft {
+  panelCode: string;
+  damageType?: string | null;
+  sizeClass?: string | null;
+  widthMm?: number | null;
+  heightMm?: number | null;
+  quantity?: number;
+  material?: 'steel' | 'aluminum' | 'other' | null;
+  accessDifficulty?: 'easy' | 'medium' | 'hard' | null;
+  onEdge?: boolean;
+  comment?: string | null;
+}
+
+export const LEAD_STATUS_TONES: Record<
+  LeadStatus,
+  'info' | 'success' | 'warning' | 'muted' | 'danger'
+> = {
+  new: 'info',
+  estimated: 'info',
+  awaiting_decision: 'warning',
+  callback: 'warning',
+  scheduled: 'success',
+  rejected: 'muted',
+};
+
+export const LEAD_CHANNEL_OPTIONS: { value: LeadChannel; label: string }[] = [
+  { value: 'telegram', label: 'Telegram' },
+  { value: 'whatsapp', label: 'WhatsApp' },
+  { value: 'vk', label: 'VK' },
+  { value: 'call', label: 'Звонок' },
+  { value: 'in_person', label: 'Лично' },
+  { value: 'other', label: 'Другое' },
+];
+
+export const MATERIAL_OPTIONS: { value: 'steel' | 'aluminum' | 'other'; label: string }[] = [
+  { value: 'steel', label: 'Сталь' },
+  { value: 'aluminum', label: 'Алюминий' },
+  { value: 'other', label: 'Другое' },
+];
+
+export const ACCESS_OPTIONS: { value: 'easy' | 'medium' | 'hard'; label: string }[] = [
+  { value: 'easy', label: 'Простой доступ' },
+  { value: 'medium', label: 'Средний' },
+  { value: 'hard', label: 'Сложный' },
+];

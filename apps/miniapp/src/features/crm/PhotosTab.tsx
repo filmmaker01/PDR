@@ -1,26 +1,51 @@
 import { useState } from 'react';
-import { useMutation, useQueryClient } from '@tanstack/react-query';
-import { ApiError } from '@pdr/api-client';
-import { Button, Card, EmptyState, MediaUploader, SkeletonList, useUploadQueue } from '@pdr/ui';
+import { useQueryClient } from '@tanstack/react-query';
+import {
+  Badge,
+  Button,
+  Card,
+  EmptyState,
+  MediaUploader,
+  SkeletonList,
+  useUploadQueue,
+} from '@pdr/ui';
 import { api } from '@/shared/api';
 import { createUploadTransport } from '@/shared/uploads';
-import { alertDialog, confirmDialog, haptic } from '@/shared/telegram';
-import { useOrderPhotos } from './api';
-import { PHOTO_CATEGORY_OPTIONS, type PhotoCategory } from './types';
+import { photosPath, useDamages, useLeadPhotos, useOrderPhotos } from './api';
+import { PhotoMarkupSheet } from './PhotoMarkupSheet';
+import type { DamageParent } from './DamageSheet';
+import { PHOTO_CATEGORY_OPTIONS, type OrderPhoto, type PhotoCategory } from './types';
 
-/** Вкладка «Фото»: снимки «до / в процессе / после» и документы. */
+/**
+ * Фотографии заказа или обращения.
+ *
+ * Кнопка добавления — самая заметная на вкладке и открывает камеру сразу:
+ * на мобильном снимок делают прямо у машины, а не выбирают из галереи.
+ * Нажатие на снимок открывает разметку, а не просто увеличенную картинку:
+ * отметить вмятину важнее, чем рассмотреть её.
+ */
 export function PhotosTab({
   workspaceId,
-  orderId,
+  parent,
   canEdit,
 }: {
   workspaceId: string;
-  orderId: string;
+  parent: DamageParent;
   canEdit: boolean;
 }) {
   const queryClient = useQueryClient();
-  const photos = useOrderPhotos(workspaceId, orderId);
+  const leadId = 'leadId' in parent ? parent.leadId : '';
+  const orderId = 'orderId' in parent ? parent.orderId : '';
+
+  const leadPhotos = useLeadPhotos(workspaceId, leadId, Boolean(leadId));
+  const orderPhotos = useOrderPhotos(workspaceId, orderId);
+  const query = leadId ? leadPhotos : orderPhotos;
+  const allPhotos: OrderPhoto[] = query.data?.items ?? [];
+
+  const damages = useDamages(workspaceId, parent);
+
   const [category, setCategory] = useState<PhotoCategory>('before');
+  const [opened, setOpened] = useState<OrderPhoto | null>(null);
 
   const invalidate = async (): Promise<void> => {
     await queryClient.invalidateQueries({ queryKey: ['crm', 'photos'] });
@@ -30,44 +55,39 @@ export function PhotosTab({
     transport: createUploadTransport({ scope: 'order_photo', workspaceId }),
     onUploaded: async (fileId) => {
       // Категория берётся на момент загрузки: мастер снимает пачку в одном режиме.
-      await api.post(`/workspaces/${workspaceId}/orders/${orderId}/photos`, { fileId, category });
+      await api.post(photosPath(workspaceId, parent), { fileId, category });
       await invalidate();
     },
   });
 
-  const remove = useMutation({
-    mutationFn: (photoId: string) =>
-      api.delete(`/workspaces/${workspaceId}/orders/${orderId}/photos/${photoId}`),
-    onSuccess: async () => {
-      haptic('success');
-      await invalidate();
-    },
-    onError: async (e) =>
-      alertDialog(e instanceof ApiError ? e.message : 'Не удалось удалить фотографию'),
-  });
+  if (query.isLoading) return <SkeletonList rows={3} />;
 
-  const openOriginal = useMutation({
-    mutationFn: async (photoId: string) => {
-      const { url } = await api.get<{ url: string }>(
-        `/workspaces/${workspaceId}/orders/${orderId}/photos/${photoId}/download`,
-      );
-      window.open(url, '_blank');
-    },
-    onError: async (e) =>
-      alertDialog(e instanceof ApiError ? e.message : 'Не удалось открыть фотографию'),
-  });
-
-  if (photos.isLoading) return <SkeletonList rows={3} />;
-
-  const items = (photos.data?.items ?? []).filter((photo) => photo.category === category);
+  const items = allPhotos.filter((photo) => photo.category === category);
 
   return (
     <div className="pdr-stack">
+      {canEdit ? (
+        <Card>
+          <MediaUploader
+            items={uploads.items}
+            onAdd={uploads.add}
+            onRetry={uploads.retry}
+            onRemove={uploads.remove}
+            accept="image/*"
+            capture
+            label={`Добавить фото · ${PHOTO_CATEGORY_OPTIONS.find((o) => o.value === category)?.label}`}
+            hint="Снимки загружаются в фоне: можно продолжать работу, не дожидаясь конца загрузки."
+          />
+        </Card>
+      ) : null}
+
+      {uploads.pending ? (
+        <div className="pdr-hint">Идёт загрузка, не закрывайте приложение.</div>
+      ) : null}
+
       <div className="pdr-chips">
         {PHOTO_CATEGORY_OPTIONS.map((option) => {
-          const count = (photos.data?.items ?? []).filter(
-            (photo) => photo.category === option.value,
-          ).length;
+          const count = allPhotos.filter((photo) => photo.category === option.value).length;
           return (
             <button
               key={option.value}
@@ -97,7 +117,12 @@ export function PhotosTab({
             }}
           >
             {items.map((photo) => (
-              <div key={photo.id} style={{ position: 'relative' }}>
+              <button
+                key={photo.id}
+                type="button"
+                style={{ all: 'unset', position: 'relative', cursor: 'pointer' }}
+                onClick={() => setOpened(photo)}
+              >
                 {photo.thumbUrl ? (
                   <img
                     src={photo.thumbUrl}
@@ -107,51 +132,35 @@ export function PhotosTab({
                       aspectRatio: '1',
                       objectFit: 'cover',
                       borderRadius: 8,
-                      cursor: 'pointer',
                     }}
-                    onClick={() => openOriginal.mutate(photo.id)}
                   />
                 ) : (
                   <div className="pdr-skeleton" style={{ aspectRatio: '1' }} />
                 )}
-                {canEdit ? (
-                  <button
-                    type="button"
-                    className="pdr-uploader__remove"
-                    aria-label="Удалить"
-                    onClick={async () => {
-                      if (await confirmDialog('Удалить фотографию?')) remove.mutate(photo.id);
-                    }}
-                  >
-                    ×
-                  </button>
+                {photo.hasMarkup ? (
+                  <span style={{ position: 'absolute', left: 4, bottom: 4 }}>
+                    <Badge tone="info">разметка</Badge>
+                  </span>
                 ) : null}
-              </div>
+              </button>
             ))}
+          </div>
+          <div className="pdr-hint" style={{ marginTop: 8 }}>
+            Нажмите на снимок, чтобы отметить конкретное повреждение.
           </div>
         </Card>
       )}
 
-      {canEdit ? (
-        <Card>
-          <MediaUploader
-            items={uploads.items}
-            onAdd={uploads.add}
-            onRetry={uploads.retry}
-            onRemove={uploads.remove}
-            accept="image/*"
-            capture
-            label={`Добавить «${PHOTO_CATEGORY_OPTIONS.find((o) => o.value === category)?.label}»`}
-            hint="Снимки загружаются в фоне: можно продолжать работу, не дожидаясь конца загрузки."
-          />
-        </Card>
-      ) : null}
+      <PhotoMarkupSheet
+        open={opened !== null}
+        onClose={() => setOpened(null)}
+        workspaceId={workspaceId}
+        photo={opened}
+        damages={damages.data?.items ?? []}
+        canEdit={canEdit}
+      />
 
-      {uploads.pending ? (
-        <div className="pdr-hint">Идёт загрузка, не закрывайте приложение.</div>
-      ) : null}
-
-      <Button variant="ghost" block onClick={() => void photos.refetch()}>
+      <Button variant="ghost" block onClick={() => void query.refetch()}>
         Обновить
       </Button>
     </div>

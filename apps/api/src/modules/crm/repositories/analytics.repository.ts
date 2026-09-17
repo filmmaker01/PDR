@@ -73,19 +73,6 @@ export class AnalyticsRepository extends WorkspaceScopedRepository {
     return Number(rows[0]?.received ?? 0);
   }
 
-  /** Текущая задолженность по выданным заказам. */
-  async outstandingDebt(workspaceId: string, period: AnalyticsPeriod): Promise<number> {
-    const rows = await this.prisma.$queryRaw<{ debt: bigint | null }[]>(Prisma.sql`
-      SELECT sum(coalesce(agreed_total_minor, 0) - paid_minor)::bigint AS debt
-      FROM orders
-      WHERE workspace_id = ${workspaceId}::uuid
-        AND status = 'delivered'
-        AND coalesce(agreed_total_minor, 0) > paid_minor
-        ${this.assignee(period, Prisma.sql`assignee_member_id`)}
-    `);
-    return Number(rows[0]?.debt ?? 0);
-  }
-
   async newClients(workspaceId: string, period: AnalyticsPeriod): Promise<number> {
     return this.prisma.client.count({
       where: { workspaceId, createdAt: { gte: period.from, lt: period.to } },

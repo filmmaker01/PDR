@@ -188,11 +188,6 @@ export function ClientScreen() {
             </a>
           </div>
         ) : null}
-        {data.debtMinor > 0 ? (
-          <div style={{ marginTop: 8 }}>
-            <Badge tone="danger">Долг {formatMinor(data.debtMinor, data.currency)}</Badge>
-          </div>
-        ) : null}
         {data.notes ? (
           <div className="pdr-hint" style={{ marginTop: 8, whiteSpace: 'pre-wrap' }}>
             {data.notes}

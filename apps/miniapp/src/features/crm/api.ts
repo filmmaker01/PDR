@@ -2,6 +2,12 @@ import { useQuery } from '@tanstack/react-query';
 import { api } from '@/shared/api';
 import type {
   AnalyticsEmployeeRow,
+  Assessment,
+  AssessmentCapabilities,
+  Damage,
+  LeadCard,
+  LeadListItem,
+  LeadsSummary,
   AnalyticsSeriesPoint,
   AnalyticsSummary,
   Appointment,
@@ -98,27 +104,6 @@ export function useVehicle(workspaceId: string, vehicleId: string) {
   return useQuery({
     queryKey: ['crm', 'vehicle', workspaceId, vehicleId],
     queryFn: () => api.get<VehicleCard>(`/workspaces/${workspaceId}/vehicles/${vehicleId}`),
-  });
-}
-
-export function useDebts(workspaceId: string) {
-  return useQuery({
-    queryKey: ['crm', 'debts', workspaceId],
-    queryFn: () =>
-      api.get<
-        {
-          id: string;
-          number: number;
-          clientName: string;
-          clientPhone: string | null;
-          status: string;
-          agreedTotalMinor: number;
-          paidMinor: number;
-          debtMinor: number;
-          currency: string;
-          deliveredAt: string | null;
-        }[]
-      >(`/workspaces/${workspaceId}/debts`),
   });
 }
 
@@ -228,6 +213,9 @@ export function usePaymentJournal(
 export function useOrderPhotos(workspaceId: string, orderId: string) {
   return useQuery({
     queryKey: ['crm', 'photos', workspaceId, orderId],
+    // Те же компоненты открываются и для обращения: без идентификатора заказа
+    // запрос ушёл бы на адрес с пустым сегментом пути.
+    enabled: Boolean(orderId),
     queryFn: () =>
       api.get<{ categories: Record<string, string>; items: OrderPhoto[] }>(
         `/workspaces/${workspaceId}/orders/${orderId}/photos`,
@@ -287,4 +275,154 @@ export function useInvitations(workspaceId: string, enabled: boolean) {
     enabled,
     queryFn: () => api.get<InvitationInfo[]>(`/workspaces/${workspaceId}/invitations`),
   });
+}
+
+// -- Обращения ----------------------------------------------------------------
+
+export interface LeadFilter {
+  status?: string[];
+  q?: string;
+  source?: string;
+  channel?: string;
+  /** Только те, кому пора звонить. */
+  due?: boolean;
+}
+
+export function useLeads(workspaceId: string, filter: LeadFilter = {}) {
+  return useQuery({
+    queryKey: ['crm', 'leads', workspaceId, filter],
+    queryFn: () =>
+      api.get<{ items: LeadListItem[]; nextCursor: string | null }>(
+        `/workspaces/${workspaceId}/leads`,
+        {
+          query: {
+            status: filter.status,
+            q: filter.q || undefined,
+            source: filter.source,
+            channel: filter.channel,
+            due: filter.due ? 'true' : undefined,
+            limit: 100,
+          },
+        },
+      ),
+  });
+}
+
+export function useLeadsSummary(workspaceId: string) {
+  return useQuery({
+    queryKey: ['crm', 'leads-summary', workspaceId],
+    queryFn: () => api.get<LeadsSummary>(`/workspaces/${workspaceId}/leads/summary`),
+  });
+}
+
+export function useLead(workspaceId: string, leadId: string) {
+  return useQuery({
+    queryKey: ['crm', 'lead', workspaceId, leadId],
+    queryFn: () => api.get<LeadCard>(`/workspaces/${workspaceId}/leads/${leadId}`),
+  });
+}
+
+// -- Повреждения на схеме кузова ----------------------------------------------
+
+/**
+ * Повреждения обращения или заказа. Адрес разный, форма ответа одна:
+ * схема кузова и карточка повреждения в интерфейсе общие.
+ */
+export function useDamages(
+  workspaceId: string,
+  parent: { leadId?: string; orderId?: string },
+  enabled = true,
+) {
+  const path = parent.leadId
+    ? `/workspaces/${workspaceId}/leads/${parent.leadId}/damages`
+    : `/workspaces/${workspaceId}/orders/${parent.orderId}/damages`;
+  return useQuery({
+    queryKey: ['crm', 'damages', workspaceId, parent.leadId ?? parent.orderId],
+    enabled: enabled && Boolean(parent.leadId || parent.orderId),
+    queryFn: () => api.get<{ items: Damage[] }>(path),
+  });
+}
+
+export function useBodyScheme(workspaceId: string) {
+  return useQuery({
+    queryKey: ['crm', 'body-scheme', workspaceId],
+    queryFn: () =>
+      api.get<{
+        panels: { code: string; label: string; group: string; oftenAluminum: boolean }[];
+        damageTypes: { code: string; label: string; hint?: string }[];
+        sizeClasses: { code: string; label: string; hint: string }[];
+      }>(`/workspaces/${workspaceId}/body-scheme`),
+    staleTime: Infinity,
+  });
+}
+
+// -- Оценки -------------------------------------------------------------------
+
+export function useAssessments(
+  workspaceId: string,
+  parent: { leadId?: string; orderId?: string },
+  enabled = true,
+) {
+  const path = parent.leadId
+    ? `/workspaces/${workspaceId}/leads/${parent.leadId}/assessments`
+    : `/workspaces/${workspaceId}/orders/${parent.orderId}/assessments`;
+  return useQuery({
+    queryKey: ['crm', 'assessments', workspaceId, parent.leadId ?? parent.orderId],
+    enabled: enabled && Boolean(parent.leadId || parent.orderId),
+    queryFn: () => api.get<{ items: Assessment[] }>(path),
+  });
+}
+
+/** Какие способы оценки доступны: кнопка AI прячется, когда провайдер не настроен. */
+export function useAssessmentCapabilities(workspaceId: string) {
+  return useQuery({
+    queryKey: ['crm', 'assessment-capabilities', workspaceId],
+    queryFn: () =>
+      api.get<AssessmentCapabilities>(`/workspaces/${workspaceId}/assessments/capabilities`),
+    staleTime: 300_000,
+  });
+}
+
+// -- Фотографии ---------------------------------------------------------------
+
+export function useLeadPhotos(workspaceId: string, leadId: string, enabled = true) {
+  return useQuery({
+    queryKey: ['crm', 'photos', workspaceId, leadId],
+    enabled: enabled && Boolean(leadId),
+    queryFn: () =>
+      api.get<{ items: OrderPhoto[] }>(`/workspaces/${workspaceId}/leads/${leadId}/photos`),
+  });
+}
+
+/** Путь до снимков обращения или заказа: карточки фотографий общие для обоих. */
+export function photosPath(
+  workspaceId: string,
+  parent: { leadId?: string; orderId?: string },
+): string {
+  return parent.leadId
+    ? `/workspaces/${workspaceId}/leads/${parent.leadId}/photos`
+    : `/workspaces/${workspaceId}/orders/${parent.orderId}/photos`;
+}
+
+/**
+ * Снимки конкретного повреждения.
+ *
+ * Отдельного эндпоинта нет намеренно: список фотографий карточки и так
+ * приходит одним запросом, а фильтрация по повреждению на клиенте избавляет
+ * от второго обращения к серверу при каждом открытии детали.
+ */
+export function useDamagePhotos(
+  workspaceId: string,
+  parent: { leadId?: string; orderId?: string },
+  damageId: string | null,
+  enabled = true,
+): OrderPhoto[] {
+  const leadPhotos = useLeadPhotos(
+    workspaceId,
+    parent.leadId ?? '',
+    enabled && Boolean(parent.leadId),
+  );
+  const orderPhotos = useOrderPhotos(workspaceId, parent.orderId ?? '');
+  const items = parent.leadId ? (leadPhotos.data?.items ?? []) : (orderPhotos.data?.items ?? []);
+  return damageId ? items.filter((photo) => photo.damageId === damageId) : [];
 }

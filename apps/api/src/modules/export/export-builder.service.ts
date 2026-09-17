@@ -1,6 +1,7 @@
 import { Inject, Injectable } from '@nestjs/common';
 import JSZip from 'jszip';
 import type { ExportKind } from '@prisma/client';
+import { damageTypeLabel, panelLabel } from '@pdr/shared';
 import { PrismaService } from '@/infra/prisma/prisma.service';
 import { AppError } from '@/common/errors/app.error';
 import { STORAGE_PROVIDER } from '@/infra/storage/storage.module';
@@ -397,20 +398,140 @@ export class ExportBuilderService {
     };
   }
 
+  /**
+   * Обращения и повреждения.
+   *
+   * Обращение — такая же часть базы мастерской, как заказ, и в выгрузке «вся
+   * база одним архивом» его отсутствие означало бы потерю половины воронки.
+   * Повреждения отдельным файлом: они относятся и к обращениям, и к заказам.
+   */
+  private async leadsCsv(workspaceId: string): Promise<{ csv: string; rows: number }> {
+    const leads = await this.prisma.lead.findMany({
+      where: { workspaceId },
+      include: {
+        client: { select: { name: true, phone: true } },
+        convertedOrder: { select: { number: true } },
+        assignee: {
+          select: { displayName: true, user: { select: { firstName: true, lastName: true } } },
+        },
+      },
+      orderBy: { number: 'asc' },
+    });
+
+    const rows: CsvValue[][] = leads.map((lead) => [
+      lead.number,
+      lead.createdAt,
+      lead.status,
+      lead.source,
+      lead.channel ?? '',
+      lead.client?.name ?? lead.contactName,
+      lead.client?.phone ?? lead.contactPhone,
+      lead.contactExtra,
+      [lead.vehicleMake, lead.vehicleModel].filter(Boolean).join(' '),
+      lead.vehiclePlate,
+      lead.estimateMinor === null ? '' : Number(lead.estimateMinor) / 100,
+      lead.nextContactAt ?? '',
+      lead.rejectReason,
+      lead.convertedOrder?.number ?? '',
+      lead.assignee?.displayName ??
+        [lead.assignee?.user.firstName, lead.assignee?.user.lastName].filter(Boolean).join(' '),
+      lead.comment,
+    ]);
+
+    return {
+      csv: buildCsv(
+        [
+          'номер',
+          'создано',
+          'статус',
+          'источник',
+          'канал',
+          'клиент',
+          'телефон',
+          'контакт',
+          'автомобиль',
+          'госномер',
+          'предварительная оценка',
+          'следующий контакт',
+          'причина отказа',
+          'заказ',
+          'ответственный',
+          'комментарий',
+        ],
+        rows,
+      ),
+      rows: rows.length,
+    };
+  }
+
+  private async damagesCsv(workspaceId: string): Promise<{ csv: string; rows: number }> {
+    const damages = await this.prisma.damage.findMany({
+      where: { workspaceId },
+      include: {
+        lead: { select: { number: true } },
+        order: { select: { number: true } },
+      },
+      orderBy: [{ createdAt: 'asc' }],
+    });
+
+    const rows: CsvValue[][] = damages.map((damage) => [
+      damage.lead?.number ?? '',
+      damage.order?.number ?? '',
+      panelLabel(damage.panelCode) ?? damage.panelCode,
+      damageTypeLabel(damage.damageType) ?? '',
+      damage.sizeClass,
+      damage.widthMm === null ? '' : damage.widthMm / 10,
+      damage.heightMm === null ? '' : damage.heightMm / 10,
+      damage.quantity,
+      damage.material ?? '',
+      damage.accessDifficulty ?? '',
+      damage.onEdge ? 'да' : 'нет',
+      damage.priceMinor === null ? '' : Number(damage.priceMinor) / 100,
+      damage.priceSource ?? '',
+      damage.comment,
+    ]);
+
+    return {
+      csv: buildCsv(
+        [
+          'обращение',
+          'заказ',
+          'элемент кузова',
+          'тип повреждения',
+          'размер',
+          'ширина, см',
+          'высота, см',
+          'количество',
+          'материал',
+          'доступ',
+          'на ребре',
+          'стоимость',
+          'источник цены',
+          'комментарий',
+        ],
+        rows,
+      ),
+      rows: rows.length,
+    };
+  }
+
   /** Полная выгрузка мастерской одним архивом. */
   private async crmFull(
     workspaceId: string,
     params: Record<string, unknown>,
   ): Promise<BuiltExport> {
     const zip = new JSZip();
-    const [clients, vehicles, orders, payments, appointments, estimates] = await Promise.all([
-      this.clientsCsv(workspaceId),
-      this.vehiclesCsv(workspaceId),
-      this.ordersCsv(workspaceId),
-      this.paymentsCsv(workspaceId),
-      this.appointmentsCsv(workspaceId),
-      this.estimatesCsv(workspaceId),
-    ]);
+    const [clients, vehicles, orders, payments, appointments, estimates, leads, damages] =
+      await Promise.all([
+        this.clientsCsv(workspaceId),
+        this.vehiclesCsv(workspaceId),
+        this.ordersCsv(workspaceId),
+        this.paymentsCsv(workspaceId),
+        this.appointmentsCsv(workspaceId),
+        this.estimatesCsv(workspaceId),
+        this.leadsCsv(workspaceId),
+        this.damagesCsv(workspaceId),
+      ]);
 
     zip.file('clients.csv', clients.csv);
     zip.file('vehicles.csv', vehicles.csv);
@@ -419,6 +540,8 @@ export class ExportBuilderService {
     zip.file('appointments.csv', appointments.csv);
     zip.file('estimates.csv', estimates.estimates.csv);
     zip.file('estimate_items.csv', estimates.items.csv);
+    zip.file('leads.csv', leads.csv);
+    zip.file('damages.csv', damages.csv);
     zip.file(
       'README.txt',
       [
@@ -439,17 +562,22 @@ export class ExportBuilderService {
       body,
       contentType: 'application/zip',
       fileName: 'crm-export.zip',
-      rowCount: clients.rows + orders.rows + payments.rows,
+      rowCount: clients.rows + orders.rows + payments.rows + leads.rows,
     };
   }
 
-  /** Фотографии складываются по папкам заказов: так их можно смотреть без базы. */
+  /**
+   * Фотографии складываются по папкам заказов: так их можно смотреть без базы.
+   * Снимки обращений, ещё не превратившихся в заказ, лежат отдельной папкой —
+   * в выгрузке мастерской они тоже её данные.
+   */
   private async addPhotos(zip: JSZip, workspaceId: string): Promise<void> {
     const photos = await this.prisma.orderPhoto.findMany({
       where: { workspaceId },
       include: {
         file: { select: { storageKey: true, mimeType: true, status: true } },
         order: { select: { number: true } },
+        lead: { select: { number: true } },
       },
       orderBy: [{ orderId: 'asc' }, { position: 'asc' }],
       take: 2000,
@@ -457,16 +585,16 @@ export class ExportBuilderService {
 
     for (const photo of photos) {
       if (photo.file.status !== 'ready') continue;
+      const folder = photo.order
+        ? `photos/order-${photo.order.number}`
+        : `photos/lead-${photo.lead?.number ?? 'unknown'}`;
       try {
         const body = await this.storage.get(photo.file.storageKey);
         const ext = photo.file.mimeType.split('/')[1] ?? 'jpg';
-        zip.file(`photos/order-${photo.order.number}/${photo.category}-${photo.id}.${ext}`, body);
+        zip.file(`${folder}/${photo.category}-${photo.id}.${ext}`, body);
       } catch {
         // Пропавший объект не должен ронять всю выгрузку.
-        zip.file(
-          `photos/order-${photo.order.number}/MISSING-${photo.id}.txt`,
-          photo.file.storageKey,
-        );
+        zip.file(`${folder}/MISSING-${photo.id}.txt`, photo.file.storageKey);
       }
     }
   }

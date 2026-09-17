@@ -103,9 +103,8 @@ export class ClientsService {
     const client = await this.getById(workspaceId, clientId);
     const vehicles = await this.vehicles.listByClient(workspaceId, clientId);
     const orders = await this.orders.clientOrders(workspaceId, clientId);
-    const debtMinor = await this.clients.debtMinor(workspaceId, clientId);
 
-    return { client, vehicles, orders, debtMinor };
+    return { client, vehicles, orders };
   }
 
   // ── Автомобили ─────────────────────────────────────────────────────────────

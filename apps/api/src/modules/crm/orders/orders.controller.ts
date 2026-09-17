@@ -73,14 +73,6 @@ export class OrdersController {
     return this.orders.summary(ws);
   }
 
-  @Get('debts')
-  @Can('orders.read_own')
-  @AllowExpiredAccess()
-  @ApiOperation({ summary: 'Заказы с задолженностью' })
-  async debts(@Ws() ws: WorkspaceContext) {
-    return this.orders.debts(ws);
-  }
-
   @Get('orders')
   @Can('orders.read_own')
   @AllowExpiredAccess()
@@ -134,7 +126,6 @@ export class OrdersController {
       cancelledAt: order.cancelledAt?.toISOString() ?? null,
       cancelReason: order.cancelReason,
       archivedAt: order.archivedAt?.toISOString() ?? null,
-      debtMinor: Number((order.agreedTotalMinor ?? 0n) - order.paidMinor),
       allowedTransitions: allowedFrom(order.status).map((status) => ({
         status,
         label: ORDER_STATUS_LABELS[status],

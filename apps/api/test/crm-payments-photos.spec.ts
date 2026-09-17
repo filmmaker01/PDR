@@ -235,16 +235,19 @@ describe('CRM: оплаты и фотографии заказа', () => {
       expect(list.body.paidMinor).toBe(250000);
     });
 
-    it('заказ с долгом попадает в список задолженности', async () => {
+    it('частичная оплата видна в карточке заказа как остаток', async () => {
       await agreeEstimate();
       await pay({ amountMinor: 400000 }).expect(201);
 
-      const debts = await http()
-        .get(`/v1/workspaces/${workspaceId}/debts`)
+      // Отдельного показателя задолженности больше нет: остаток считается
+      // из согласованной суммы и принятых денег там, где его и смотрят.
+      const order = await http()
+        .get(`/v1/workspaces/${workspaceId}/orders/${orderId}/payments`)
         .set(...owner.authHeader)
         .expect(200);
-      expect(debts.body).toHaveLength(1);
-      expect(debts.body[0].debtMinor).toBe(600000);
+      expect(order.body.paymentStatus).toBe('partial');
+      expect(order.body.paidMinor).toBe(400000);
+      expect(order.body.remainingMinor).toBe(600000);
     });
 
     it('журнал оплат доступен владельцу и закрыт для сотрудника', async () => {

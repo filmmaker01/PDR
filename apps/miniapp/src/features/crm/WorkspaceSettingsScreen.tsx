@@ -161,9 +161,9 @@ export function WorkspaceSettingsScreen() {
       <Card flat>
         <div className="pdr-list">
           <ListItem
-            title="Задолженность"
-            subtitle="Заказы, оплаченные не полностью"
-            onClick={() => navigate(`/workspace/${workspaceId}/debts`)}
+            title="Обращения"
+            subtitle="Входящие лиды: онлайн, по телефону и лично"
+            onClick={() => navigate(`/workspace/${workspaceId}/leads`)}
           />
           <ListItem
             title="Прайс"
