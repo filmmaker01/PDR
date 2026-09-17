@@ -150,14 +150,7 @@ export type FileStatus = (typeof FILE_STATUSES)[number];
 export const LEAD_SOURCES = ['online', 'offline'] as const;
 export type LeadSource = (typeof LEAD_SOURCES)[number];
 
-export const LEAD_CHANNELS = [
-  'telegram',
-  'whatsapp',
-  'vk',
-  'call',
-  'in_person',
-  'other',
-] as const;
+export const LEAD_CHANNELS = ['telegram', 'whatsapp', 'vk', 'call', 'in_person', 'other'] as const;
 export type LeadChannel = (typeof LEAD_CHANNELS)[number];
 
 export const LEAD_STATUSES = [

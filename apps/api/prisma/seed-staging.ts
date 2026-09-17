@@ -1232,7 +1232,6 @@ async function seedWorkspace(input: {
   return workspace.id;
 }
 
-
 /**
  * Обращения: главный экран мастерской показывает счётчики по ним, поэтому в
  * демо нужны все характерные состояния — от свежего сообщения в Telegram до
@@ -1382,8 +1381,7 @@ async function seedLeads(input: {
         comment: spec.comment,
         estimateMinor: spec.estimate === null ? null : minor(spec.estimate),
         currency: 'RUB',
-        nextContactAt:
-          spec.contactInDays === undefined ? null : daysAgo(-spec.contactInDays),
+        nextContactAt: spec.contactInDays === undefined ? null : daysAgo(-spec.contactInDays),
         rejectReason: spec.rejectReason ?? null,
         assigneeMemberId: input.ownerMemberId,
         createdById: input.ownerUserId,
