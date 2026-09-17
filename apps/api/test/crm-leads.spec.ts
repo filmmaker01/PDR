@@ -270,6 +270,38 @@ describe('CRM: обращения, повреждения, оценки', () => 
         .expect(422);
     });
 
+    it('принимает повреждение ровно в том виде, в каком его шлёт форма', async () => {
+      // Карточка повреждения на схеме всегда отправляет полный набор полей,
+      // включая priceMinor и явные null. Схема обязана принимать то же самое
+      // и в отдельном маршруте, и внутри создания обращения.
+      const fromForm = {
+        panelCode: 'hood',
+        damageType: 'hail',
+        sizeClass: 'XL',
+        widthMm: 400,
+        heightMm: 400,
+        quantity: 1,
+        material: null,
+        accessDifficulty: null,
+        onEdge: false,
+        comment: null,
+        priceMinor: null,
+      };
+
+      const leadId = await createLead({ damages: [fromForm] });
+      await http()
+        .post(`/v1/workspaces/${workspaceId}/leads/${leadId}/damages`)
+        .set(...owner.authHeader)
+        .send(fromForm)
+        .expect(201);
+
+      const list = await http()
+        .get(`/v1/workspaces/${workspaceId}/leads/${leadId}/damages`)
+        .set(...owner.authHeader)
+        .expect(200);
+      expect(list.body.items).toHaveLength(2);
+    });
+
     it('создаёт повреждения вместе с обращением', async () => {
       const leadId = await createLead({
         damages: [{ panelCode: 'hood', damageType: 'hail', quantity: 12 }],

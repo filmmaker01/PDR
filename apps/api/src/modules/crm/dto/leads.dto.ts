@@ -47,6 +47,20 @@ const damageFields = {
   comment: optionalString(500),
 };
 
+/**
+ * Повреждение так, как его присылает карточка на схеме кузова.
+ *
+ * Отдельно от `damageFields`, потому что те же поля идут в позиции оценки,
+ * где цена называется иначе. Одна форма на оба входа — отдельный маршрут и
+ * массив внутри обращения: иначе форма, собранная для одного, отлетает
+ * на другом с 422.
+ */
+const damageInputFields = {
+  ...damageFields,
+  /** Мастер мог назвать цену сразу при осмотре, не дожидаясь оценки. */
+  priceMinor: z.number().int().min(0).max(100_000_000).nullable().optional(),
+};
+
 // ── Обращения ────────────────────────────────────────────────────────────────
 
 export const leadListQuerySchema = z.object({
@@ -78,7 +92,7 @@ export const createLeadSchema = z
      * Присылаются вместе с обращением, чтобы мастер не сохранял черновик
      * и не открывал вторую форму.
      */
-    damages: z.array(z.object(damageFields).strict()).max(60).optional(),
+    damages: z.array(z.object(damageInputFields).strict()).max(60).optional(),
     /** Уже загруженные снимки: привязываются к обращению в той же операции. */
     photos: z
       .array(
@@ -153,19 +167,10 @@ export const leadArchiveSchema = z.object({ archived: z.boolean() }).strict();
 
 // ── Повреждения ──────────────────────────────────────────────────────────────
 
-export const createDamageSchema = z
-  .object({
-    ...damageFields,
-    priceMinor: z.number().int().min(0).max(100_000_000).nullable().optional(),
-  })
-  .strict();
+export const createDamageSchema = z.object(damageInputFields).strict();
 
 export const updateDamageSchema = z
-  .object({
-    ...damageFields,
-    panelCode: optionalString(40),
-    priceMinor: z.number().int().min(0).max(100_000_000).nullable().optional(),
-  })
+  .object({ ...damageInputFields, panelCode: optionalString(40) })
   .strict();
 
 // ── Оценки ───────────────────────────────────────────────────────────────────
