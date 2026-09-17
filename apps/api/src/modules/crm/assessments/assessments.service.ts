@@ -219,17 +219,25 @@ export class AssessmentsService {
       rules,
     );
 
-    // Итог можно перебить целиком: мастер округляет сумму «по-человечески»,
-    // и это не должно разъезжаться со строками расчёта.
-    const totalOverride =
+    // Итог можно перебить целиком: мастер округляет сумму «по-человечески».
+    //
+    // Присланный итог принимается, только если он согласуется со строками:
+    // интерфейс подставляет его сразу после расчёта, и если потом поправить
+    // цену строки, а итог не тронуть, сохранилась бы сумма, противоречащая
+    // собственной расшифровке. В такой ситуации выигрывают строки — их
+    // мастер правил позже и осознаннее, чем автоподставленное число.
+    const requested =
       input.totalMinor === null || input.totalMinor === undefined
         ? null
         : Math.max(0, Math.trunc(input.totalMinor));
+    const linesOverridden = calc.lines.some((line) => line.overridden);
+    const totalOverride =
+      requested !== null && linesOverridden && requested === calc.suggestedMinor ? null : requested;
+
     const totalMinor = totalOverride ?? calc.totalMinor;
+    // Отступление от расчёта — это и правка итога, и правка любой строки.
     const overridden =
-      totalOverride !== null
-        ? totalOverride !== calc.suggestedMinor
-        : calc.lines.some((line) => line.overridden);
+      linesOverridden || (totalOverride !== null && totalOverride !== calc.suggestedMinor);
 
     const saved = await this.prisma.transaction(async (tx) => {
       const assessment = await this.assessments.create(

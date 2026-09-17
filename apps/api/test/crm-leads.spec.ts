@@ -463,6 +463,65 @@ describe('CRM: обращения, повреждения, оценки', () => 
       expect(card.body.status).toBe('estimated');
     });
 
+    it('правка цены строки не теряется из-за подставленного итога', async () => {
+      // Интерфейс подставляет итог сразу после расчёта. Если затем поправить
+      // цену строки, а итог не трогать, сохранённая сумма не должна
+      // противоречить собственной расшифровке.
+      await seedPriceList();
+      const leadId = await createLead();
+
+      const saved = await http()
+        .post(`/v1/workspaces/${workspaceId}/leads/${leadId}/assessments`)
+        .set(...owner.authHeader)
+        .send({
+          method: 'params',
+          items: [
+            {
+              panelCode: 'door_fl',
+              damageType: 'door_ding',
+              widthMm: 40,
+              heightMm: 40,
+              unitPriceMinor: 300000,
+            },
+          ],
+          // Итог, подставленный расчётом до правки строки.
+          totalMinor: 450000,
+        })
+        .expect(201);
+
+      expect(saved.body.suggestedMinor).toBe(450000);
+      expect(saved.body.items[0].unitPriceMinor).toBe(300000);
+      // Выигрывают строки: их правили позже, чем автоподставленное число.
+      expect(saved.body.totalMinor).toBe(300000);
+      expect(saved.body.overridden).toBe(true);
+    });
+
+    it('осознанная правка итога поверх строк сохраняется как есть', async () => {
+      await seedPriceList();
+      const leadId = await createLead();
+
+      const saved = await http()
+        .post(`/v1/workspaces/${workspaceId}/leads/${leadId}/assessments`)
+        .set(...owner.authHeader)
+        .send({
+          method: 'params',
+          items: [
+            {
+              panelCode: 'door_fl',
+              damageType: 'door_ding',
+              widthMm: 40,
+              heightMm: 40,
+              unitPriceMinor: 300000,
+            },
+          ],
+          totalMinor: 280000,
+        })
+        .expect(201);
+
+      expect(saved.body.totalMinor).toBe(280000);
+      expect(saved.body.overridden).toBe(true);
+    });
+
     it('принимает ручную оценку без позиций', async () => {
       const leadId = await createLead();
       const saved = await http()

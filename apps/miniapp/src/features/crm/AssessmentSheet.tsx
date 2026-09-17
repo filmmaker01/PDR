@@ -375,13 +375,25 @@ export function AssessmentSheet({
                               value={line.priceInput}
                               inputMode="decimal"
                               style={{ marginTop: 6 }}
-                              onChange={(e) =>
-                                setLines((current) =>
-                                  current.map((item, i) =>
-                                    i === index ? { ...item, priceInput: e.target.value } : item,
-                                  ),
-                                )
-                              }
+                              onChange={(e) => {
+                                const next = lines.map((item, i) =>
+                                  i === index ? { ...item, priceInput: e.target.value } : item,
+                                );
+                                setLines(next);
+                                // Итог идёт следом за строками: иначе в поле
+                                // осталась бы подставленная расчётом сумма,
+                                // противоречащая собственной расшифровке.
+                                if (preview) {
+                                  setTotalOverride(
+                                    String(
+                                      next.reduce(
+                                        (sum, item, i) => sum + lineTotal(item, preview.lines[i]),
+                                        0,
+                                      ) / 100,
+                                    ),
+                                  );
+                                }
+                              }}
                             />
                           ) : null}
                         </span>
