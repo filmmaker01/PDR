@@ -2,11 +2,21 @@ import { useMemo, useState } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
 import { useMutation, useQueryClient } from '@tanstack/react-query';
 import { ApiError } from '@pdr/api-client';
-import { Badge, Button, Card, EmptyState, ListItem, Sheet, SkeletonList, Tabs } from '@pdr/ui';
+import {
+  Badge,
+  Button,
+  Card,
+  EmptyState,
+  ListItem,
+  MonthCalendar,
+  Sheet,
+  SkeletonList,
+  Tabs,
+} from '@pdr/ui';
 import { todayInZone, zonedTimeToUtc } from '@pdr/shared';
 import { api } from '@/shared/api';
 import { alertDialog, haptic } from '@/shared/telegram';
-import { useAppointments, useMembers, useWorkspace } from './api';
+import { useAppointmentMonth, useAppointments, useMembers, useWorkspace } from './api';
 import { AppointmentSheet } from './AppointmentSheet';
 import { ScreenError } from './ScreenError';
 import { APPOINTMENT_STATUS_TONES, type Appointment, type AppointmentStatus } from './types';
@@ -60,6 +70,8 @@ export function CalendarScreen() {
   const [view, setView] = useState<View>('day');
   const [anchor, setAnchor] = useState(() => todayInZone(timezone));
   const [assigneeMemberId, setAssigneeMemberId] = useState<string | null>(null);
+  const [monthOpen, setMonthOpen] = useState(false);
+  const [month, setMonth] = useState(() => todayInZone(timezone).slice(0, 7));
   const [createOpen, setCreateOpen] = useState(false);
   const [selected, setSelected] = useState<Appointment | null>(null);
   const [rescheduling, setRescheduling] = useState<Appointment | null>(null);
@@ -80,6 +92,20 @@ export function CalendarScreen() {
     ...range,
     assigneeMemberId: assigneeMemberId ?? undefined,
   });
+
+  // Индикаторы месяца грузятся только когда календарь открыт: в листинге дня
+  // они не нужны, а на телефоне лишний запрос заметен.
+  const monthDays = useAppointmentMonth(
+    workspaceId,
+    month,
+    assigneeMemberId ?? undefined,
+    monthOpen,
+  );
+  const monthCounts = useMemo(() => {
+    const map: Record<string, number> = {};
+    for (const day of monthDays.data?.days ?? []) map[day.day] = day.active;
+    return map;
+  }, [monthDays.data]);
 
   const setStatus = useMutation({
     mutationFn: (input: { id: string; to: AppointmentStatus; reason?: string }) =>
@@ -133,15 +159,23 @@ export function CalendarScreen() {
         >
           ←
         </Button>
+        {/* Нажатие на дату открывает месяц целиком: листать дни по одному
+            стрелками — это не выбор даты, а перебор. */}
         <button
           type="button"
           className="pdr-grow"
           style={{ all: 'unset', flex: 1, textAlign: 'center', cursor: 'pointer', fontWeight: 600 }}
-          onClick={() => setAnchor(today)}
+          onClick={() => {
+            setMonth(anchor.slice(0, 7));
+            setMonthOpen(true);
+          }}
         >
           {view === 'day'
             ? formatDayTitle(anchor)
             : `${formatDayTitle(days[0]!)} — ${formatDayTitle(days.at(-1)!)}`}
+          <span className="pdr-hint" style={{ display: 'block', fontWeight: 400 }}>
+            выбрать дату
+          </span>
         </button>
         <Button
           variant="secondary"
@@ -235,6 +269,43 @@ export function CalendarScreen() {
           );
         })
       )}
+
+      <Sheet open={monthOpen} onClose={() => setMonthOpen(false)} title="Выбор даты">
+        <div className="pdr-stack">
+          <MonthCalendar
+            month={month}
+            selected={anchor}
+            today={today}
+            counts={monthCounts}
+            onSelect={(day) => {
+              // Выбор даты открывает именно этот день со списком записей:
+              // создать запись оттуда — один тап.
+              setAnchor(day);
+              setView('day');
+              setMonthOpen(false);
+            }}
+            onMonthChange={setMonth}
+          />
+          <div className="pdr-hint">
+            Точки под числом — записи в этот день. Отменённые и неявки не считаются.
+          </div>
+          <Button
+            variant="secondary"
+            block
+            onClick={() => {
+              setAnchor(today);
+              setView('day');
+              setMonth(today.slice(0, 7));
+              setMonthOpen(false);
+            }}
+          >
+            Сегодня
+          </Button>
+          <Button variant="ghost" block onClick={() => setMonthOpen(false)}>
+            Закрыть
+          </Button>
+        </div>
+      </Sheet>
 
       <AppointmentSheet
         open={createOpen}

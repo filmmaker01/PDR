@@ -186,6 +186,14 @@ export const appointmentStatusSchema = z
   })
   .strict();
 
+/** Месяц календаря: `YYYY-MM`. */
+export const appointmentMonthQuerySchema = z
+  .object({
+    month: z.string().regex(/^\d{4}-\d{2}$/, 'Ожидается месяц в формате 2026-05'),
+    assigneeMemberId: z.string().uuid().optional(),
+  })
+  .strict();
+
 export const availabilityQuerySchema = z
   .object({
     day: dayIso,

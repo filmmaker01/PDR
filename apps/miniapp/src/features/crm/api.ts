@@ -127,6 +127,30 @@ export function useAppointments(
   });
 }
 
+/**
+ * Индикаторы месячного календаря: сколько записей в каждом дне.
+ * Отдельно от списка записей — календарю нужны только точки под датами.
+ */
+export function useAppointmentMonth(
+  workspaceId: string,
+  month: string,
+  assigneeMemberId?: string,
+  enabled = true,
+) {
+  return useQuery({
+    queryKey: ['crm', 'appointment-month', workspaceId, month, assigneeMemberId ?? null],
+    enabled,
+    queryFn: () =>
+      api.get<{
+        month: string;
+        timezone: string;
+        days: { day: string; total: number; active: number }[];
+      }>(`/workspaces/${workspaceId}/appointments/month`, {
+        query: { month, assigneeMemberId },
+      }),
+  });
+}
+
 export function useAvailability(
   workspaceId: string,
   input: {

@@ -690,3 +690,104 @@ select {
   height: 100%;
   pointer-events: none;
 }
+
+/* ── Месячный календарь ───────────────────────────────────────────────────── */
+
+.pdr-month {
+  display: flex;
+  flex-direction: column;
+  gap: var(--pdr-gap-sm);
+}
+.pdr-month__head {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+}
+.pdr-month__nav {
+  min-width: 44px;
+  min-height: 44px;
+  border: 1px solid var(--pdr-separator);
+  border-radius: var(--pdr-radius-sm);
+  background: var(--pdr-section-bg);
+  color: inherit;
+  font-size: 20px;
+  line-height: 1;
+  cursor: pointer;
+}
+.pdr-month__title {
+  flex: 1;
+  min-height: 44px;
+  border: none;
+  background: transparent;
+  color: inherit;
+  font: inherit;
+  font-weight: 600;
+  text-transform: capitalize;
+  cursor: pointer;
+}
+.pdr-month__grid {
+  display: grid;
+  grid-template-columns: repeat(7, 1fr);
+  gap: 2px;
+}
+.pdr-month__weekday {
+  text-align: center;
+  font-size: 12px;
+  color: var(--pdr-hint);
+  padding-bottom: 2px;
+}
+.pdr-month__cell {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 3px;
+  /* Палец, а не курсор: клетка меньше 40 px на телефоне не нажимается. */
+  min-height: 44px;
+  padding: 4px 0;
+  border: 1px solid transparent;
+  border-radius: var(--pdr-radius-sm);
+  background: var(--pdr-section-bg);
+  color: inherit;
+  font: inherit;
+  font-variant-numeric: tabular-nums;
+  cursor: pointer;
+}
+.pdr-month__cell--other {
+  color: var(--pdr-hint);
+  background: transparent;
+}
+.pdr-month__cell--today {
+  border-color: var(--pdr-button);
+  font-weight: 700;
+}
+.pdr-month__cell--selected {
+  background: var(--pdr-button);
+  color: var(--pdr-button-text);
+  border-color: var(--pdr-button);
+}
+.pdr-month__marks {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 2px;
+  /* Высота под индикатор держится всегда: иначе числа прыгают по строкам. */
+  height: 6px;
+}
+.pdr-month__dot {
+  width: 4px;
+  height: 4px;
+  border-radius: 50%;
+  background: var(--pdr-button);
+}
+.pdr-month__cell--selected .pdr-month__dot {
+  background: var(--pdr-button-text);
+}
+.pdr-month__count {
+  font-size: 10px;
+  line-height: 1;
+  color: var(--pdr-button);
+}
+.pdr-month__cell--selected .pdr-month__count {
+  color: var(--pdr-button-text);
+}

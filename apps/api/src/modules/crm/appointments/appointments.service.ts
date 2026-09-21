@@ -80,6 +80,50 @@ export class AppointmentsService {
     return this.appointments.listRange(ctx.workspaceId, { from, to, assigneeMemberId });
   }
 
+  /**
+   * Сколько записей в каждом дне месяца.
+   *
+   * Отдельно от списка записей: месячному календарю нужны только индикаторы,
+   * и тащить на телефон полные карточки за месяц ради точек под датами — лишний
+   * трафик. Дни считаются в часовом поясе мастерской, а не сервера.
+   */
+  async monthDays(
+    ctx: WorkspaceContext,
+    month: string,
+    assigneeMemberId?: string,
+  ): Promise<{ month: string; timezone: string; days: { day: string; total: number; active: number }[] }> {
+    const timezone = ctx.workspace.timezone;
+    const [year, monthNo] = month.split('-').map(Number) as [number, number];
+    if (!year || !monthNo || monthNo < 1 || monthNo > 12) {
+      throw AppError.validation('Ожидается месяц в формате 2026-05');
+    }
+
+    const from = zonedTimeToUtc(`${month}-01T00:00:00`, timezone);
+    const nextMonth = monthNo === 12 ? `${year + 1}-01` : `${year}-${String(monthNo + 1).padStart(2, '0')}`;
+    const to = zonedTimeToUtc(`${nextMonth}-01T00:00:00`, timezone);
+
+    const items = await this.appointments.listRange(ctx.workspaceId, { from, to, assigneeMemberId });
+
+    const byDay = new Map<string, { total: number; active: number }>();
+    for (const item of items) {
+      const day = utcToZonedString(item.startsAt, timezone).slice(0, 10);
+      const current = byDay.get(day) ?? { total: 0, active: 0 };
+      current.total += 1;
+      // Отменённая запись и неявка день не занимают: индикатор «есть записи»
+      // должен означать работу, а не историю отмен.
+      if (item.status !== 'cancelled' && item.status !== 'no_show') current.active += 1;
+      byDay.set(day, current);
+    }
+
+    return {
+      month,
+      timezone,
+      days: [...byDay.entries()]
+        .map(([day, counts]) => ({ day, ...counts }))
+        .sort((a, b) => a.day.localeCompare(b.day)),
+    };
+  }
+
   async getById(ctx: WorkspaceContext, id: string): Promise<AppointmentWithRelations> {
     const appointment = await this.appointments.findById(ctx.workspaceId, id);
     if (!appointment) throw AppError.notFound('Запись не найдена');

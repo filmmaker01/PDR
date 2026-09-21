@@ -15,6 +15,7 @@ import {
 } from './appointment-rules';
 import type { AppointmentWithRelations } from '../repositories/appointments.repository';
 import {
+  appointmentMonthQuerySchema,
   appointmentRangeQuerySchema,
   appointmentStatusSchema,
   availabilityQuerySchema,
@@ -109,6 +110,15 @@ export class AppointmentsController {
       timezone: ws.workspace.timezone,
       items: items.map((item) => serialize(item, ws.workspace.timezone)),
     };
+  }
+
+  @Get('month')
+  @Can('appointments.read')
+  @AllowExpiredAccess()
+  @ApiOperation({ summary: 'Записи по дням месяца: индикаторы для календаря' })
+  async month(@Ws() ws: WorkspaceContext, @Query() query: Record<string, string>) {
+    const parsed = appointmentMonthQuerySchema.parse(query);
+    return this.appointments.monthDays(ws, parsed.month, parsed.assigneeMemberId);
   }
 
   @Get('availability')
