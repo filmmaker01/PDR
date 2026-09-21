@@ -24,6 +24,7 @@ import { AnalyticsService } from './analytics/analytics.service';
 import { LeadsService } from './leads/leads.service';
 import { DamagesService } from './damages/damages.service';
 import { AssessmentsService } from './assessments/assessments.service';
+import { DocumentsService } from './documents/documents.service';
 import { ClientsController } from './clients/clients.controller';
 import { OrdersController } from './orders/orders.controller';
 import { AppointmentsController } from './appointments/appointments.controller';
@@ -34,6 +35,7 @@ import { AnalyticsController } from './analytics/analytics.controller';
 import { LeadsController } from './leads/leads.controller';
 import { DamagesController } from './damages/damages.controller';
 import { AssessmentsController } from './assessments/assessments.controller';
+import { DocumentsController } from './documents/documents.controller';
 import { AppointmentRemindersHandler } from './appointments/jobs/appointment-reminders.handler';
 import { CrmWiring } from './crm.wiring';
 
@@ -49,6 +51,7 @@ import { CrmWiring } from './crm.wiring';
     LeadsController,
     DamagesController,
     AssessmentsController,
+    DocumentsController,
   ],
   providers: [
     ClientsRepository,
@@ -76,6 +79,7 @@ import { CrmWiring } from './crm.wiring';
     LeadsService,
     DamagesService,
     AssessmentsService,
+    DocumentsService,
     AppointmentRemindersHandler,
     CrmWiring,
   ],
@@ -91,6 +95,7 @@ import { CrmWiring } from './crm.wiring';
     LeadsService,
     DamagesService,
     AssessmentsService,
+    DocumentsService,
     ClientsRepository,
     VehiclesRepository,
     OrdersRepository,

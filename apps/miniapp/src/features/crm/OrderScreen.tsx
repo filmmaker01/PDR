@@ -19,13 +19,14 @@ import { alertDialog, confirmDialog, haptic } from '@/shared/telegram';
 import { useMembers, useOrder, useWorkspace } from './api';
 import { AssessmentSheet } from './AssessmentSheet';
 import { DamagesTab } from './DamagesTab';
+import { DocumentsTab } from './DocumentsTab';
 import { AppointmentSheet } from './AppointmentSheet';
 import { EstimatesTab } from './EstimatesTab';
 import { PaymentsTab } from './PaymentsTab';
 import { PhotosTab } from './PhotosTab';
 import { APPOINTMENT_STATUS_TONES, PAYMENT_LABELS, STATUS_TONES, type OrderStatus } from './types';
 
-type Tab = 'work' | 'photos' | 'damages' | 'estimate' | 'payments';
+type Tab = 'work' | 'photos' | 'damages' | 'estimate' | 'payments' | 'documents';
 
 export function OrderScreen() {
   const { workspaceId = '', orderId = '' } = useParams();
@@ -147,9 +148,11 @@ export function OrderScreen() {
           { value: 'damages', label: 'Повреждения' },
           { value: 'estimate', label: 'Расчёт' },
           { value: 'payments', label: 'Оплаты' },
+          { value: 'documents', label: 'Документы' },
         ]}
         value={tab}
         onChange={(v) => setTab(v as Tab)}
+        wrap
       />
 
       {tab === 'work' ? (
@@ -314,6 +317,9 @@ export function OrderScreen() {
         <EstimatesTab workspaceId={workspaceId} orderId={orderId} canEdit={canEdit} />
       ) : null}
       {tab === 'payments' ? <PaymentsTab workspaceId={workspaceId} orderId={orderId} /> : null}
+      {tab === 'documents' ? (
+        <DocumentsTab workspaceId={workspaceId} orderId={orderId} />
+      ) : null}
 
       <AssessmentSheet
         open={assessmentSheet}

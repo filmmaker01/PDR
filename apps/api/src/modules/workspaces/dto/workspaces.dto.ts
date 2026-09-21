@@ -29,6 +29,8 @@ export const workspaceSettingsSchema = z
     default_appointment_minutes: z.number().int().min(15).max(600),
     reminder_lead_minutes: z.number().int().min(0).max(1440),
     default_price_coefficient: priceCoefficientSchema,
+    document_legal_name: z.string().trim().max(200),
+    document_requisites: z.string().trim().max(1000),
   })
   .partial()
   .strict();

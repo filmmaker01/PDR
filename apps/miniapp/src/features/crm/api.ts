@@ -179,6 +179,18 @@ export function usePriceList(workspaceId: string, includeInactive = false) {
   });
 }
 
+/** Какие документы можно распечатать по заказу. Перечень задаёт сервер. */
+export function useOrderDocuments(workspaceId: string) {
+  return useQuery({
+    queryKey: ['crm', 'order-documents', workspaceId],
+    queryFn: () =>
+      api.get<{ items: { kind: string; title: string; description: string }[] }>(
+        `/workspaces/${workspaceId}/order-documents`,
+      ),
+    staleTime: Infinity,
+  });
+}
+
 export function useDictionaries(workspaceId: string) {
   return useQuery({
     queryKey: ['crm', 'dictionaries', workspaceId],

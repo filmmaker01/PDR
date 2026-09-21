@@ -180,13 +180,19 @@ export function Tabs<T extends string>({
   tabs,
   value,
   onChange,
+  wrap,
 }: {
   tabs: { value: T; label: string }[];
   value: T;
   onChange: (v: T) => void;
+  /**
+   * Переносить вкладки на вторую строку вместо прокрутки. Нужно, когда их
+   * больше пяти: при прокрутке последние выглядят обрезанными и теряются.
+   */
+  wrap?: boolean;
 }) {
   return (
-    <div className="pdr-tabs" role="tablist">
+    <div className={clsx('pdr-tabs', wrap && 'pdr-tabs--wrap')} role="tablist">
       {tabs.map((t) => (
         <button
           key={t.value}

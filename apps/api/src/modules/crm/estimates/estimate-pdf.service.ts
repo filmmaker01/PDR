@@ -1,28 +1,14 @@
-import { existsSync } from 'node:fs';
-import { Injectable, Logger } from '@nestjs/common';
+import { Injectable } from '@nestjs/common';
 import PDFDocument from 'pdfkit';
-import { ESTIMATE_ITEM_KIND_LABELS, formatMinor, panelLabel, damageTypeLabel } from '@pdr/shared';
-import { AppError } from '@/common/errors/app.error';
+import {
+  ESTIMATE_ITEM_KIND_LABELS,
+  formatMinor,
+  panelLabel,
+  damageTypeLabel,
+  sizeClassLabel,
+} from '@pdr/shared';
+import { resolvePdfFonts } from '../documents/pdf-document';
 import type { EstimateWithItems } from '../repositories/estimates.repository';
-
-/**
- * Кириллица во встроенных шрифтах PDF не поддерживается, поэтому
- * подставляем системный TrueType. Путь можно задать переменной окружения,
- * в образе API ставится пакет fonts-dejavu-core.
- */
-const FONT_CANDIDATES = [
-  process.env.PDF_FONT_PATH,
-  '/usr/share/fonts/truetype/dejavu/DejaVuSans.ttf',
-  '/usr/share/fonts/truetype/liberation/LiberationSans-Regular.ttf',
-  '/usr/share/fonts/truetype/freefont/FreeSans.ttf',
-].filter((path): path is string => Boolean(path));
-
-const BOLD_CANDIDATES = [
-  process.env.PDF_FONT_BOLD_PATH,
-  '/usr/share/fonts/truetype/dejavu/DejaVuSans-Bold.ttf',
-  '/usr/share/fonts/truetype/liberation/LiberationSans-Bold.ttf',
-  '/usr/share/fonts/truetype/freefont/FreeSansBold.ttf',
-].filter((path): path is string => Boolean(path));
 
 export interface EstimatePdfContext {
   workspace: { name: string; phone: string | null; address: string | null };
@@ -33,28 +19,15 @@ export interface EstimatePdfContext {
 
 @Injectable()
 export class EstimatePdfService {
-  private readonly logger = new Logger(EstimatePdfService.name);
-
-  private resolveFont(candidates: string[]): string {
-    const found = candidates.find((path) => existsSync(path));
-    if (!found) {
-      this.logger.error({ candidates }, 'Не найден шрифт для печати сметы');
-      throw new AppError(
-        'service_unavailable',
-        'На сервере не установлен шрифт для печати сметы. Сообщите администратору.',
-      );
-    }
-    return found;
-  }
-
   /** Печатная форма сметы одним PDF-файлом. */
   async render(estimate: EstimateWithItems, ctx: EstimatePdfContext): Promise<Buffer> {
-    const regular = this.resolveFont(FONT_CANDIDATES);
-    const bold = this.resolveFont(BOLD_CANDIDATES);
+    // Шрифты общие с документами заказа: подстановка кириллического TrueType
+    // живёт в одном месте, иначе смета и акты расходились бы по оформлению.
+    const fonts = resolvePdfFonts();
 
     const doc = new PDFDocument({ size: 'A4', margin: 40, info: { Title: 'Смета' } });
-    doc.registerFont('regular', regular);
-    doc.registerFont('bold', bold);
+    doc.registerFont('regular', fonts.regular);
+    doc.registerFont('bold', fonts.bold);
 
     const chunks: Buffer[] = [];
     doc.on('data', (chunk: Buffer) => chunks.push(chunk));
@@ -139,7 +112,7 @@ export class EstimatePdfService {
         ESTIMATE_ITEM_KIND_LABELS[item.kind] ?? item.kind,
         panelLabel(item.panelCode),
         damageTypeLabel(item.damageType),
-        item.sizeClass,
+        sizeClassLabel(item.sizeClass),
         item.onEdge ? 'на ребре' : null,
         item.comment,
       ]

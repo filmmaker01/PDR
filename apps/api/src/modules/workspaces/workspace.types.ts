@@ -32,6 +32,13 @@ export interface WorkspaceSettings extends WorkspacePermissionSettings {
    * мастерской, а не запрет.
    */
   default_price_coefficient: number;
+  /**
+   * Реквизиты для печатных документов. Название и строки реквизитов правятся
+   * в настройках, чтобы менять их без правки шаблонов: юридическое лицо,
+   * ИНН, расчётный счёт у мастерских разные и со временем меняются.
+   */
+  document_legal_name?: string;
+  document_requisites?: string;
 }
 
 export const DEFAULT_WORKSPACE_SETTINGS: WorkspaceSettings = {
