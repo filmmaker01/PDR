@@ -291,8 +291,9 @@ export function NewLeadScreen() {
           onRemove={uploads.remove}
           accept="image/*"
           capture
-          label="Добавить фото"
-          hint="Снимите повреждение прямо сейчас или выберите фото, которое прислал клиент."
+          cameraLabel="📷 Снять фото"
+          galleryLabel="🖼 Выбрать из галереи"
+          hint="Снимите повреждение камерой или выберите из галереи фото, которое прислал клиент."
         />
       </Card>
 

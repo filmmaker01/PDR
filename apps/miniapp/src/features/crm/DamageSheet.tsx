@@ -1,7 +1,14 @@
 import { useEffect, useState } from 'react';
 import { useMutation, useQueryClient } from '@tanstack/react-query';
 import { ApiError } from '@pdr/api-client';
-import { DAMAGE_TYPES, panelLabel, sizeClassForDimensions } from '@pdr/shared';
+import {
+  DAMAGE_TYPES,
+  SIZE_ZONE_CLASSES,
+  panelLabel,
+  sizeClassForDimensions,
+  sizeClassLabel,
+  sizeClassOption,
+} from '@pdr/shared';
 import {
   Button,
   Card,
@@ -196,6 +203,26 @@ export function DamageSheet({
         </Field>
 
         <Card flat>
+          {/* Готовые зоны: мастер выбирает 40×40 одним нажатием и сразу видит,
+              как меняется стоимость. Точные габариты можно ввести и руками. */}
+          <Field label="Размер зоны">
+            <div className="pdr-chips">
+              {SIZE_ZONE_CLASSES.map((zone) => (
+                <button
+                  key={zone.code}
+                  type="button"
+                  disabled={!canEdit}
+                  className={`pdr-chip${sizeClass === zone.code ? ' pdr-chip--active' : ''}`}
+                  onClick={() => {
+                    setWidthCm(String(zone.widthCm));
+                    setHeightCm(String(zone.heightCm));
+                  }}
+                >
+                  {zone.label}
+                </button>
+              ))}
+            </div>
+          </Field>
           <div className="pdr-row">
             <Field label="Ширина, см">
               <Input
@@ -218,7 +245,9 @@ export function DamageSheet({
           </div>
           <div className="pdr-hint">
             {sizeClass
-              ? `Размерный класс: ${sizeClass}`
+              ? `Размерный класс: ${sizeClassLabel(sizeClass)}${
+                  sizeClassOption(sizeClass) ? ` · ${sizeClassOption(sizeClass)!.hint}` : ''
+                }`
               : 'Размерный класс определится по габаритам'}
           </div>
         </Card>
@@ -336,8 +365,9 @@ export function DamageSheet({
                 onRemove={uploads.remove}
                 accept="image/*"
                 capture
-                label="Добавить фото детали"
-                hint="Разметить вмятину на снимке можно на вкладке «Фото»."
+                cameraLabel="📷 Снять фото"
+                galleryLabel="🖼 Выбрать из галереи"
+                hint="Снимок привяжется к этому повреждению. Разметить вмятину можно на вкладке «Фото»."
               />
             ) : null}
           </>

@@ -12,6 +12,7 @@ import {
   ListItem,
   Sheet,
   SkeletonList,
+  Tabs,
 } from '@pdr/ui';
 import { api } from '@/shared/api';
 import { formatMinor, parseMajorToMinor } from '@/shared/format';
@@ -42,6 +43,17 @@ const EMPTY: FormState = {
   unit: 'per_item',
 };
 
+/**
+ * Разделы прайса. Арматурные работы — отдельный справочник для мастера, но
+ * те же позиции прайса: вид позиции решает, где она предлагается.
+ */
+type Section = 'damage' | 'disassembly';
+
+const SECTION_KINDS: Record<Section, EstimateItemKind[]> = {
+  damage: ['damage'],
+  disassembly: ['disassembly', 'extra'],
+};
+
 /** Прайс мастерской: справочник цен для быстрого набора сметы. */
 export function PriceListScreen() {
   const { workspaceId = '' } = useParams();
@@ -55,6 +67,7 @@ export function PriceListScreen() {
 
   const [sheet, setSheet] = useState(false);
   const [form, setForm] = useState<FormState>(EMPTY);
+  const [section, setSection] = useState<Section>('damage');
 
   const canManage = workspace.data?.permissions.includes('price_list.manage') ?? false;
 
@@ -123,6 +136,10 @@ export function PriceListScreen() {
   };
 
   const currency = workspace.data?.currency ?? 'RUB';
+  const shown = (priceList.data ?? []).filter((item) =>
+    SECTION_KINDS[section].includes(item.kind),
+  );
+  const isExtraWork = form.kind !== 'damage';
 
   if (priceList.isError) {
     return (
@@ -137,34 +154,49 @@ export function PriceListScreen() {
   return (
     <div className="pdr-stack">
       <h1 className="pdr-title">Прайс</h1>
+
+      <Tabs
+        tabs={[
+          { value: 'damage', label: 'Повреждения' },
+          { value: 'disassembly', label: 'Арматурные работы' },
+        ]}
+        value={section}
+        onChange={(value) => setSection(value as Section)}
+      />
+
       <div className="pdr-hint">
-        Цены из прайса подставляются в смету одним тапом. Изменение прайса не меняет уже
-        составленные сметы.
+        {section === 'damage'
+          ? 'Цены по размерной сетке и элементам кузова. Расчёт оценки берёт их как базу, дальше применяется коэффициент. Изменение прайса не меняет уже составленные сметы и оценки.'
+          : 'Снятие обшивки, разбор двери, снятие фары. Добавляются к повреждению при оценке и суммируются с ремонтом. Коэффициент цены к ним не применяется.'}
       </div>
 
       {canManage ? (
         <Button
           block
           onClick={() => {
-            setForm(EMPTY);
+            setForm({ ...EMPTY, kind: section === 'damage' ? 'damage' : 'disassembly' });
             setSheet(true);
           }}
         >
-          + Позиция прайса
+          {section === 'damage' ? '+ Позиция прайса' : '+ Арматурная работа'}
         </Button>
       ) : null}
 
       {priceList.isLoading ? (
         <SkeletonList rows={4} />
-      ) : (priceList.data?.length ?? 0) === 0 ? (
+      ) : shown.length === 0 ? (
         <EmptyState
-          title="Прайс пуст"
-          description="Добавьте типовые работы: капот S, крыша M, снятие потолка."
+          title={section === 'damage' ? 'Прайс пуст' : 'Арматурных работ нет'}
+          description={
+            section === 'damage'
+              ? 'Добавьте цены по размерам: S, M, L, зона 40×40, и по элементам кузова.'
+              : 'Добавьте работы: снятие обшивки двери, разбор двери, снятие бампера.'
+          }
         />
       ) : (
         <Card flat>
           <div className="pdr-list">
-            {priceList.data!.map((item) => (
+            {shown.map((item) => (
               <ListItem
                 key={item.id}
                 title={item.title}
@@ -210,13 +242,21 @@ export function PriceListScreen() {
       <Sheet
         open={sheet}
         onClose={() => setSheet(false)}
-        title={form.id ? 'Позиция прайса' : 'Новая позиция'}
+        title={
+          form.id
+            ? isExtraWork
+              ? 'Арматурная работа'
+              : 'Позиция прайса'
+            : isExtraWork
+              ? 'Новая арматурная работа'
+              : 'Новая позиция'
+        }
       >
         <div className="pdr-stack">
           <Field label="Название">
             <Input
               value={form.title}
-              placeholder="Капот, град, S"
+              placeholder={isExtraWork ? 'Разбор двери' : 'Капот, град, S'}
               onChange={(e) => setForm({ ...form, title: e.target.value })}
             />
           </Field>
@@ -251,6 +291,8 @@ export function PriceListScreen() {
             </div>
           </Field>
 
+          {isExtraWork ? null : (
+            <>
           <Field label="Элемент кузова">
             <select
               className="pdr-select"
@@ -285,6 +327,8 @@ export function PriceListScreen() {
               ))}
             </div>
           </Field>
+            </>
+          )}
 
           <Button block loading={save.isPending} onClick={() => save.mutate(form)}>
             Сохранить

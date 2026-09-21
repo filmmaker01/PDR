@@ -198,7 +198,8 @@ export function SubmissionEditorScreen() {
           onRemove={uploads.remove}
           accept="image/*,video/mp4,video/quicktime"
           capture
-          label="Добавить"
+          cameraLabel="📷 Снять"
+          galleryLabel="🖼 Выбрать из галереи"
           hint={
             missing.length > 0
               ? `Для отправки нужно: ${missing.join(', ')}`

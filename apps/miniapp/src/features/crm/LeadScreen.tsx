@@ -331,9 +331,20 @@ export function LeadScreen() {
                     ) : null}
                   </div>
                 ) : null}
+                {assessment.baseMinor > 0 ? (
+                  <div className="pdr-formula" style={{ marginBottom: 6 }}>
+                    {assessment.formula}
+                  </div>
+                ) : null}
+                {assessment.extrasMinor > 0 ? (
+                  <div className="pdr-hint">
+                    Арматурные работы: {formatMinor(assessment.extrasMinor, assessment.currency)}
+                  </div>
+                ) : null}
                 {assessment.suggestedMinor !== assessment.totalMinor ? (
                   <div className="pdr-hint">
-                    Расчёт по прайсу: {formatMinor(assessment.suggestedMinor, assessment.currency)}
+                    Расчёт по прайсу: {formatMinor(assessment.suggestedMinor, assessment.currency)} ·
+                    итог назначен мастером
                   </div>
                 ) : null}
                 {assessment.explanation ? (

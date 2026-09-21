@@ -2,6 +2,11 @@ import { useEffect, useState } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
 import { useMutation, useQueryClient } from '@tanstack/react-query';
 import { ApiError } from '@pdr/api-client';
+import {
+  PRICE_COEFFICIENT_MAX,
+  PRICE_COEFFICIENT_MIN,
+  PRICE_COEFFICIENT_STEP,
+} from '@pdr/shared';
 import { Badge, Button, Card, EmptyState, Field, Input, ListItem, SkeletonList } from '@pdr/ui';
 import { api } from '@/shared/api';
 import { alertDialog, haptic } from '@/shared/telegram';
@@ -21,6 +26,7 @@ export function WorkspaceSettingsScreen() {
   const [dayEnd, setDayEnd] = useState('20:00');
   const [defaultMinutes, setDefaultMinutes] = useState(60);
   const [reminderMinutes, setReminderMinutes] = useState(60);
+  const [priceCoefficient, setPriceCoefficient] = useState(100);
 
   useEffect(() => {
     if (!workspace.data) return;
@@ -28,6 +34,7 @@ export function WorkspaceSettingsScreen() {
     setDayEnd(String(settings.work_day_end ?? '20:00'));
     setDefaultMinutes(Number(settings.default_appointment_minutes ?? 60));
     setReminderMinutes(Number(settings.reminder_lead_minutes ?? 60));
+    setPriceCoefficient(Number(settings.default_price_coefficient ?? 100));
     // settings — часть workspace.data, отдельная зависимость не нужна.
   }, [workspace.data, settings]);
 
@@ -39,6 +46,7 @@ export function WorkspaceSettingsScreen() {
           work_day_end: dayEnd,
           default_appointment_minutes: defaultMinutes,
           reminder_lead_minutes: reminderMinutes,
+          default_price_coefficient: priceCoefficient,
         },
       }),
     onSuccess: async () => {
@@ -112,6 +120,30 @@ export function WorkspaceSettingsScreen() {
                   onChange={(e) => setReminderMinutes(Number(e.target.value))}
                 />
               </Field>
+            </div>
+          </Card>
+
+          <h2 className="pdr-subtitle">Оценка</h2>
+          <Card>
+            <div className="pdr-stack">
+              <Field
+                label={`Коэффициент цены по умолчанию: ${priceCoefficient} %`}
+                hint="Подставляется в новую оценку. В самой оценке его можно изменить для конкретного случая — настройка задаёт привычку, а не запрет."
+              >
+                <input
+                  type="range"
+                  className="pdr-range"
+                  min={PRICE_COEFFICIENT_MIN}
+                  max={PRICE_COEFFICIENT_MAX}
+                  step={PRICE_COEFFICIENT_STEP}
+                  value={priceCoefficient}
+                  onChange={(e) => setPriceCoefficient(Number(e.target.value))}
+                />
+              </Field>
+              <div className="pdr-hint">
+                Базовый расчёт по прайсу остаётся неизменным: коэффициент применяется поверх него и
+                всегда виден формулой. Арматурные работы считаются по своим ценам.
+              </div>
               <Button block loading={saveSettings.isPending} onClick={() => saveSettings.mutate()}>
                 Сохранить
               </Button>

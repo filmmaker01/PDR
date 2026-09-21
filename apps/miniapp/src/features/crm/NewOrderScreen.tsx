@@ -333,8 +333,9 @@ export function NewOrderScreen() {
           onRemove={uploads.remove}
           accept="image/*"
           capture
-          label="Добавить фото"
-          hint="Снимите повреждение с камеры или выберите готовую фотографию."
+          cameraLabel="📷 Снять фото"
+          galleryLabel="🖼 Выбрать из галереи"
+          hint="Снимите повреждение камерой или выберите готовую фотографию из галереи."
         />
       </Card>
 

@@ -320,7 +320,7 @@ export interface PriceListItem {
 export interface PdrDictionaries {
   panels: { code: string; label: string; group: string }[];
   damageTypes: { code: string; label: string; hint?: string }[];
-  sizeClasses: { code: string; label: string; hint: string }[];
+  sizeClasses: { code: string; label: string; hint: string; widthCm?: number; heightCm?: number }[];
   itemKinds: Record<string, string>;
   materials: Record<string, string>;
   accessDifficulties: Record<string, string>;
@@ -547,6 +547,10 @@ export interface Damage {
 export interface AssessmentItem {
   id: string;
   damageId: string | null;
+  /** PDR-ремонт или арматурная работа. */
+  kind: EstimateItemKind;
+  /** Название арматурной работы; у PDR-строк собирается из детали и размера. */
+  title: string | null;
   position: number;
   panelCode: string | null;
   damageType: string | null;
@@ -573,6 +577,16 @@ export interface Assessment {
   methodLabel: string;
   currency: string;
   suggestedMinor: number;
+  /** Базовый расчёт PDR до коэффициента: остаётся видимым всегда. */
+  baseMinor: number;
+  /** Коэффициент цены в процентах. */
+  priceCoefficient: number;
+  /** PDR после коэффициента. */
+  pdrMinor: number;
+  /** Арматурные работы. */
+  extrasMinor: number;
+  /** Готовая подпись расчёта: «База 4 000 ₽ × 1.20 = 4 800 ₽». */
+  formula: string;
   totalMinor: number;
   overridden: boolean;
   explanation: string | null;
@@ -603,11 +617,34 @@ export interface AssessmentLine {
   comment: string | null;
 }
 
+/** Строка арматурной работы в расчёте, который пришёл с сервера. */
+export interface AssessmentExtraLine {
+  priceListItemId: string | null;
+  damageId: string | null;
+  position: number;
+  title: string;
+  quantity: number;
+  suggestedUnitPriceMinor: number;
+  unitPriceMinor: number;
+  lineTotalMinor: number;
+  overridden: boolean;
+  comment: string | null;
+}
+
 export interface AssessmentPreview {
   suggestedMinor: number;
+  /** База PDR до коэффициента. */
+  baseMinor: number;
+  priceCoefficient: number;
+  /** PDR после коэффициента. */
+  pdrMinor: number;
+  extrasMinor: number;
   totalMinor: number;
   explanation: string;
+  /** Формула расчёта одной строкой — приходит с сервера, а не собирается здесь. */
+  formula: string;
   lines: AssessmentLine[];
+  extras: AssessmentExtraLine[];
   currency: string;
 }
 
@@ -625,6 +662,8 @@ export interface AssessmentAnalysis extends AssessmentPreview {
 }
 
 export interface AssessmentCapabilities {
+  /** Границы ползунка коэффициента приходят с сервера. */
+  priceCoefficient: { min: number; max: number; step: number };
   methods: { value: AssessmentMethod; label: string; available: boolean; provider?: string }[];
 }
 

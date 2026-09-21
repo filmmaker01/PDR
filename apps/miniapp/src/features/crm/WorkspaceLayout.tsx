@@ -6,11 +6,15 @@ import { rememberWorkspace } from '@/features/workspace/lastWorkspace';
 import { useEffect } from 'react';
 import { useWorkspace } from './api';
 
+/**
+ * Порядок разделов мастерской: сначала то, что открывают каждый день.
+ * Остальное живёт в «Ещё» — прайс, оплаты, аналитика, журналы, выгрузки.
+ */
 const TABS = [
   { to: 'today', label: 'Сегодня' },
+  { to: 'orders', label: 'Заказы' },
   { to: 'calendar', label: 'Календарь' },
   { to: 'leads', label: 'Обращения' },
-  { to: 'orders', label: 'Заказы' },
   { to: 'clients', label: 'Клиенты' },
   { to: 'settings', label: 'Ещё' },
 ];
@@ -64,7 +68,7 @@ export function WorkspaceLayout() {
         </Card>
       ) : null}
 
-      <nav className="pdr-tabs">
+      <nav className="pdr-tabs pdr-tabs--wrap">
         {TABS.map((tab) => (
           <NavLink
             key={tab.to}

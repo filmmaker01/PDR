@@ -75,8 +75,9 @@ export function PhotosTab({
             onRemove={uploads.remove}
             accept="image/*"
             capture
-            label={`Добавить фото · ${PHOTO_CATEGORY_OPTIONS.find((o) => o.value === category)?.label}`}
-            hint="Снимки загружаются в фоне: можно продолжать работу, не дожидаясь конца загрузки."
+            cameraLabel="📷 Снять фото"
+            galleryLabel="🖼 Выбрать из галереи"
+            hint={`Раздел «${PHOTO_CATEGORY_OPTIONS.find((o) => o.value === category)?.label}». Снимки загружаются в фоне: можно продолжать работу, не дожидаясь конца загрузки.`}
           />
         </Card>
       ) : null}

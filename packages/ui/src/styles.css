@@ -230,6 +230,30 @@ select {
 .pdr-list__item--static {
   cursor: default;
 }
+/* Строка-кнопка: шрифт и цвет у <button> свои, из-за чего список позиций
+   выглядел бы набором системных кнопок. */
+.pdr-list__item--button {
+  font: inherit;
+  color: inherit;
+}
+
+/* ── Коэффициент цены и формула расчёта ───────────────────────────────────── */
+
+.pdr-range {
+  width: 100%;
+  /* Палец, а не курсор: дорожка ползунка на телефоне должна быть достаточной. */
+  height: 32px;
+  accent-color: var(--pdr-button);
+}
+
+/* Формула всегда рядом с итогом: «База 4 000 ₽ × 1.20 = 4 800 ₽». */
+.pdr-formula {
+  padding: 8px 10px;
+  border-radius: var(--pdr-radius-sm);
+  background: var(--pdr-secondary-bg);
+  font-size: 14px;
+  font-variant-numeric: tabular-nums;
+}
 
 .pdr-skeleton {
   background: linear-gradient(
@@ -369,6 +393,23 @@ select {
   font-weight: 600;
 }
 
+/* Меню мастерской переносится на вторую строку, а не прокручивается.
+   Шесть разделов в один ряд на телефоне не помещаются, и при прокрутке
+   последние выглядят обрезанными — их просто не замечают. */
+.pdr-tabs--wrap {
+  flex-wrap: wrap;
+  overflow-x: visible;
+}
+.pdr-tabs--wrap .pdr-tab {
+  flex: 1 1 auto;
+  min-width: calc(33.333% - 6px);
+}
+@media (max-width: 380px) {
+  .pdr-tabs--wrap .pdr-tab {
+    min-width: calc(50% - 5px);
+  }
+}
+
 .pdr-tabbar {
   position: fixed;
   left: 0;
@@ -465,21 +506,26 @@ select {
   line-height: 1;
   cursor: pointer;
 }
-.pdr-uploader__add {
-  aspect-ratio: 1;
+/* Две операции с фотографиями, каждая своей кнопкой: снять и выбрать.
+   На узком экране встают друг под друга, палец не промахивается. */
+.pdr-uploader__actions {
   display: flex;
-  flex-direction: column;
-  align-items: center;
-  justify-content: center;
-  gap: 4px;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+.pdr-uploader__action {
+  flex: 1 1 140px;
+  min-height: 44px;
+  padding: 10px 12px;
   border: 1px dashed var(--pdr-separator);
   border-radius: var(--pdr-radius-sm);
   background: var(--pdr-section-bg);
-  color: var(--pdr-hint);
-  font-size: 12px;
+  color: inherit;
+  font: inherit;
+  font-size: 14px;
   cursor: pointer;
 }
-.pdr-uploader__add:disabled {
+.pdr-uploader__action:disabled {
   opacity: 0.5;
   cursor: default;
 }

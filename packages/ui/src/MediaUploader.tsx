@@ -8,9 +8,18 @@ export interface MediaUploaderProps {
   onRetry: (localId: string) => void;
   onRemove: (localId: string) => void;
   accept?: string;
-  /** Съёмка сразу с камеры: важнее всего для фото «до/после». */
+  /**
+   * Предлагать съёмку с камеры отдельной кнопкой.
+   *
+   * Атрибут `capture` на одном поле — это выбор «или камера, или галерея»:
+   * в Telegram Mini App на iOS он открывает сразу камеру, и снимки, которые
+   * клиент уже прислал в переписке, приложить нечем. Поэтому операций две,
+   * и каждая названа своим словом.
+   */
   capture?: boolean;
   label?: string;
+  cameraLabel?: string;
+  galleryLabel?: string;
   hint?: string;
   disabled?: boolean;
   maxFiles?: number;
@@ -24,12 +33,21 @@ export function MediaUploader({
   accept = 'image/*',
   capture,
   label = 'Добавить фото',
+  cameraLabel = '📷 Снять фото',
+  galleryLabel = '🖼 Выбрать из галереи',
   hint,
   disabled,
   maxFiles,
 }: MediaUploaderProps) {
-  const inputRef = useRef<HTMLInputElement>(null);
+  const cameraRef = useRef<HTMLInputElement>(null);
+  const galleryRef = useRef<HTMLInputElement>(null);
   const full = maxFiles !== undefined && items.length >= maxFiles;
+
+  const pick = (files: FileList | null, input: HTMLInputElement): void => {
+    if (files?.length) onAdd(files);
+    // Сброс значения: иначе повторный выбор того же файла не даёт события.
+    input.value = '';
+  };
 
   return (
     <div className="pdr-uploader">
@@ -72,33 +90,60 @@ export function MediaUploader({
             </button>
           </div>
         ))}
-
-        {!full ? (
-          <button
-            type="button"
-            className="pdr-uploader__add"
-            disabled={disabled}
-            onClick={() => inputRef.current?.click()}
-          >
-            <span style={{ fontSize: 24, lineHeight: 1 }}>＋</span>
-            <span>{label}</span>
-          </button>
-        ) : null}
       </div>
+
+      {!full ? (
+        <div className="pdr-uploader__actions">
+          {capture ? (
+            <>
+              <button
+                type="button"
+                className="pdr-uploader__action"
+                disabled={disabled}
+                onClick={() => cameraRef.current?.click()}
+              >
+                {cameraLabel}
+              </button>
+              <button
+                type="button"
+                className="pdr-uploader__action"
+                disabled={disabled}
+                onClick={() => galleryRef.current?.click()}
+              >
+                {galleryLabel}
+              </button>
+            </>
+          ) : (
+            <button
+              type="button"
+              className="pdr-uploader__action"
+              disabled={disabled}
+              onClick={() => galleryRef.current?.click()}
+            >
+              {label}
+            </button>
+          )}
+        </div>
+      ) : null}
 
       {hint ? <div className="pdr-hint">{hint}</div> : null}
 
+      {/* Съёмка: одно поле с capture. Галерея — второе, без него и с multiple. */}
       <input
-        ref={inputRef}
+        ref={cameraRef}
+        type="file"
+        accept={accept}
+        capture="environment"
+        hidden
+        onChange={(e) => pick(e.target.files, e.target)}
+      />
+      <input
+        ref={galleryRef}
         type="file"
         accept={accept}
         multiple
-        {...(capture ? { capture: 'environment' as const } : {})}
         hidden
-        onChange={(e) => {
-          if (e.target.files?.length) onAdd(e.target.files);
-          e.target.value = '';
-        }}
+        onChange={(e) => pick(e.target.files, e.target)}
       />
     </div>
   );
