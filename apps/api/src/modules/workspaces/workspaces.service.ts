@@ -1,6 +1,6 @@
 import { Injectable } from '@nestjs/common';
 import type { Prisma, Workspace, WorkspaceMember, WorkspaceRole } from '@prisma/client';
-import { isValidTimeZone, permissionsFor } from '@pdr/shared';
+import { DEFAULT_EXTRA_WORKS, isValidTimeZone, permissionsFor } from '@pdr/shared';
 import { PrismaService } from '@/infra/prisma/prisma.service';
 import { AppError } from '@/common/errors/app.error';
 import { AccessService } from '@/modules/access/access.service';
@@ -104,6 +104,19 @@ export class WorkspacesService {
       });
       await tx.workspaceMember.create({
         data: { workspaceId: workspace.id, userId: input.ownerUserId, role: 'owner' },
+      });
+      // Стартовый справочник арматурных работ: позиции обычные, мастер правит
+      // цены и архивирует ненужные. Без него раздел в оценке открывался бы
+      // пустым, и «добавить арматурную работу» было бы нечем.
+      await tx.priceListItem.createMany({
+        data: DEFAULT_EXTRA_WORKS.map((work, index) => ({
+          workspaceId: workspace.id,
+          kind: 'disassembly' as const,
+          title: work.title,
+          unitPriceMinor: BigInt(work.priceMinor),
+          unit: 'per_item' as const,
+          position: 1000 + index,
+        })),
       });
       return workspace;
     });

@@ -3,11 +3,13 @@ import {
   BODY_PANELS,
   DAMAGE_TYPES,
   SIZE_CLASSES,
+  SIZE_ZONE_CLASSES,
   damageTypeLabel,
   defaultItemTitle,
   isKnownDamageType,
   isKnownPanel,
   panelLabel,
+  sizeClassLabel,
 } from './pdr';
 
 describe('справочники PDR', () => {
@@ -21,8 +23,38 @@ describe('справочники PDR', () => {
     expect(new Set(codes).size).toBe(codes.length);
   });
 
-  it('размерная сетка описана от S до XL', () => {
-    expect(SIZE_CLASSES.map((s) => s.code)).toEqual(['S', 'M', 'L', 'XL']);
+  it('размерная сетка: мелкие классы и крупные зоны', () => {
+    expect(SIZE_CLASSES.map((s) => s.code)).toEqual([
+      'S',
+      'M',
+      'L',
+      'XL',
+      '20x40',
+      '40x40',
+      '40x60',
+      '60x60',
+      '60x100',
+      '100x100',
+    ]);
+  });
+
+  it('у зон есть габариты, у классов вмятин — нет', () => {
+    expect(SIZE_ZONE_CLASSES.map((s) => s.code)).toEqual([
+      '20x40',
+      '40x40',
+      '40x60',
+      '60x60',
+      '60x100',
+      '100x100',
+    ]);
+    expect(SIZE_ZONE_CLASSES.every((s) => s.widthCm && s.heightCm)).toBe(true);
+    expect(SIZE_CLASSES.find((s) => s.code === 'M')?.widthCm).toBeUndefined();
+  });
+
+  it('код зоны читается как размер', () => {
+    expect(sizeClassLabel('40x60')).toBe('40×60');
+    expect(sizeClassLabel('M')).toBe('M');
+    expect(sizeClassLabel(null)).toBeNull();
   });
 
   it('переводит коды в названия', () => {

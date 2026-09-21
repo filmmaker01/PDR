@@ -1,5 +1,12 @@
 import { Body, Controller, Get, Param, Patch, Post } from '@nestjs/common';
 import { ApiOperation, ApiTags } from '@nestjs/swagger';
+import {
+  PRICE_COEFFICIENT_MAX,
+  PRICE_COEFFICIENT_MIN,
+  PRICE_COEFFICIENT_STEP,
+  applyPriceCoefficient,
+  priceFormula,
+} from '@pdr/shared';
 import { Idempotent } from '@/common/interceptors/idempotency.interceptor';
 import { zodBody } from '@/common/pipes/zod-validation.pipe';
 import { CurrentAuth, type AuthContext } from '@/modules/auth/decorators/auth.decorators';
@@ -8,6 +15,7 @@ import { AllowExpiredAccess, Can, Workspace } from '@/modules/workspaces/guards/
 import { Ws } from '@/modules/workspaces/decorators/workspace.decorators';
 import type { WorkspaceContext } from '@/modules/workspaces/workspace.types';
 import { AssessmentsService } from './assessments.service';
+import type { AssessmentResult } from '@pdr/shared';
 import type { AssessmentWithItems } from '../repositories/assessments.repository';
 import type { CrmParent } from '../access/crm-parent.access';
 import {
@@ -26,6 +34,10 @@ const METHOD_LABELS: Record<string, string> = {
 };
 
 function serializeAssessment(assessment: AssessmentWithItems): Record<string, unknown> {
+  const baseMinor = Number(assessment.baseMinor);
+  const extrasMinor = Number(assessment.extrasMinor);
+  const pdrMinor = applyPriceCoefficient(baseMinor, assessment.priceCoefficient);
+
   return {
     id: assessment.id,
     leadId: assessment.leadId,
@@ -34,6 +46,20 @@ function serializeAssessment(assessment: AssessmentWithItems): Record<string, un
     methodLabel: METHOD_LABELS[assessment.method] ?? assessment.method,
     currency: assessment.currency,
     suggestedMinor: Number(assessment.suggestedMinor),
+    /** Базовый расчёт до коэффициента: он остаётся видимым всегда. */
+    baseMinor,
+    priceCoefficient: assessment.priceCoefficient,
+    pdrMinor,
+    extrasMinor,
+    formula: priceFormula(
+      {
+        pdrBaseMinor: baseMinor,
+        coefficientPercent: assessment.priceCoefficient,
+        pdrMinor,
+        extrasMinor,
+      },
+      assessment.currency,
+    ),
     totalMinor: Number(assessment.totalMinor),
     overridden: assessment.overridden,
     explanation: assessment.explanation,
@@ -52,6 +78,8 @@ function serializeAssessment(assessment: AssessmentWithItems): Record<string, un
     items: assessment.items.map((item) => ({
       id: item.id,
       damageId: item.damageId,
+      kind: item.kind,
+      title: item.title,
       position: item.position,
       panelCode: item.panelCode,
       damageType: item.damageType,
@@ -72,6 +100,26 @@ function serializeAssessment(assessment: AssessmentWithItems): Record<string, un
   };
 }
 
+/**
+ * Расчёт до сохранения. Отдаётся с готовой формулой: мастер должен видеть,
+ * из чего сложилась сумма, а не собирать подпись в интерфейсе по частям.
+ */
+function serializeCalc(calc: AssessmentResult, currency: string): Record<string, unknown> {
+  return {
+    suggestedMinor: calc.suggestedMinor,
+    baseMinor: calc.pdrBaseMinor,
+    priceCoefficient: calc.coefficientPercent,
+    pdrMinor: calc.pdrMinor,
+    extrasMinor: calc.extrasMinor,
+    totalMinor: calc.totalMinor,
+    explanation: calc.explanation,
+    formula: calc.formula,
+    lines: calc.lines,
+    extras: calc.extras,
+    currency,
+  };
+}
+
 @ApiTags('crm')
 @Controller('workspaces/:workspaceId')
 @Workspace()
@@ -84,6 +132,12 @@ export class AssessmentsController {
   @ApiOperation({ summary: 'Какие способы оценки доступны в этой установке' })
   capabilities() {
     return {
+      /** Границы ползунка коэффициента: интерфейс не придумывает их сам. */
+      priceCoefficient: {
+        min: PRICE_COEFFICIENT_MIN,
+        max: PRICE_COEFFICIENT_MAX,
+        step: PRICE_COEFFICIENT_STEP,
+      },
       methods: [
         { value: 'manual', label: METHOD_LABELS.manual, available: true },
         { value: 'params', label: METHOD_LABELS.params, available: true },
@@ -104,16 +158,10 @@ export class AssessmentsController {
   @ApiOperation({ summary: 'Расчёт по параметрам повреждения без сохранения' })
   async preview(
     @Ws() ws: WorkspaceContext,
-    @Body(zodBody(assessmentPreviewSchema)) body: { items: never[] },
+    @Body(zodBody(assessmentPreviewSchema)) body: Record<string, never>,
   ) {
-    const calc = await this.assessments.preview(ws, body.items);
-    return {
-      suggestedMinor: calc.suggestedMinor,
-      totalMinor: calc.totalMinor,
-      explanation: calc.explanation,
-      lines: calc.lines,
-      currency: ws.workspace.currency,
-    };
+    const input = body as unknown as Parameters<AssessmentsService['preview']>[1];
+    return serializeCalc(await this.assessments.preview(ws, input), ws.workspace.currency);
   }
 
   // ── Обращение ─────────────────────────────────────────────────────────────
@@ -246,10 +294,7 @@ export class AssessmentsController {
         raw: result.vision.raw,
       },
       items: result.items,
-      suggestedMinor: result.calc.suggestedMinor,
-      totalMinor: result.calc.totalMinor,
-      lines: result.calc.lines,
-      currency: ws.workspace.currency,
+      ...serializeCalc(result.calc, ws.workspace.currency),
     };
   }
 }

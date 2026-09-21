@@ -19,6 +19,7 @@ import {
   ACCESS_DIFFICULTY_LABELS,
   BODY_PANELS,
   DAMAGE_TYPES,
+  ESTIMATE_ITEM_KINDS,
   ESTIMATE_ITEM_KIND_LABELS,
   MATERIAL_LABELS,
   PRICE_UNIT_LABELS,
@@ -128,8 +129,13 @@ export class EstimatesController {
   @Can('price_list.read')
   @AllowExpiredAccess()
   @ApiOperation({ summary: 'Прайс мастерской' })
-  async listPrices(@Ws() ws: WorkspaceContext, @Query('all') all?: string) {
-    const items = await this.priceList.list(ws, all === 'true');
+  async listPrices(
+    @Ws() ws: WorkspaceContext,
+    @Query('all') all?: string,
+    @Query('kind') kind?: string,
+  ) {
+    const parsedKind = ESTIMATE_ITEM_KINDS.find((value) => value === kind);
+    const items = await this.priceList.list(ws, all === 'true', parsedKind);
     return items.map((item) => ({
       id: item.id,
       kind: item.kind,

@@ -10,8 +10,8 @@
  * не «портит» расчёт: предложение и утверждённая сумма хранятся отдельно.
  */
 
-import { SIZE_CLASSES, type SizeClassOption } from '../pdr.js';
-import { lineTotal, roundHalfUp, type Minor } from './money.js';
+import { SIZE_CLASSES, sizeClassLabel, type SizeClassOption } from '../pdr.js';
+import { formatMinor, lineTotal, roundHalfUp, type Minor } from './money.js';
 
 /** Позиция прайса в том виде, в каком её знает расчёт. */
 export interface PriceRule {
@@ -50,16 +50,34 @@ export const ASSESSMENT_MULTIPLIERS = {
   onEdge: 1.25,
 } as const;
 
-/** Верхние границы размерных классов в миллиметрах: S ≤ 20, M ≤ 50, L ≤ 100. */
-const SIZE_CLASS_LIMITS_MM: readonly { code: string; maxMm: number }[] = [
-  { code: 'S', maxMm: 20 },
-  { code: 'M', maxMm: 50 },
-  { code: 'L', maxMm: 100 },
+/**
+ * Границы размерных классов: наибольшая сторона и площадь области, обе в
+ * миллиметрах. Класс подходит, когда повреждение не выходит за обе границы.
+ *
+ * Только по большой стороне зоны 40×60 и 60×60 не отличить, только по площади
+ * узкая вмятина 10×60 мм попала бы в класс мелочи. Поэтому проверяются оба
+ * признака сразу, а сетка идёт по возрастанию.
+ */
+const SIZE_CLASS_LIMITS: readonly { code: string; maxLongestMm: number; maxAreaMm2: number }[] = [
+  { code: 'S', maxLongestMm: 20, maxAreaMm2: 400 },
+  { code: 'M', maxLongestMm: 50, maxAreaMm2: 2_500 },
+  { code: 'L', maxLongestMm: 100, maxAreaMm2: 10_000 },
+  { code: 'XL', maxLongestMm: 200, maxAreaMm2: 40_000 },
+  { code: '20x40', maxLongestMm: 400, maxAreaMm2: 80_000 },
+  { code: '40x40', maxLongestMm: 400, maxAreaMm2: 160_000 },
+  { code: '40x60', maxLongestMm: 600, maxAreaMm2: 240_000 },
+  { code: '60x60', maxLongestMm: 600, maxAreaMm2: 360_000 },
+  { code: '60x100', maxLongestMm: 1_000, maxAreaMm2: 600_000 },
+  { code: '100x100', maxLongestMm: 1_000, maxAreaMm2: 1_000_000 },
 ];
+
+/** Самый крупный класс сетки: всё, что больше, считается по нему. */
+const LARGEST_SIZE_CLASS = SIZE_CLASS_LIMITS[SIZE_CLASS_LIMITS.length - 1]!.code;
 
 /**
  * Размерный класс по габаритам области повреждения.
- * Берётся большая сторона: вмятина 10×60 мм по трудоёмкости ближе к L, чем к S.
+ *
+ * Одна сторона — повреждение считается круглым: 60 мм это 60×60 мм.
  */
 export function sizeClassForDimensions(
   widthMm: number | null | undefined,
@@ -70,8 +88,11 @@ export function sizeClassForDimensions(
   );
   if (values.length === 0) return null;
   const longest = Math.max(...values);
-  const found = SIZE_CLASS_LIMITS_MM.find((limit) => longest <= limit.maxMm);
-  return found?.code ?? 'XL';
+  const areaMm2 = values.length === 2 ? values[0]! * values[1]! : longest * longest;
+  const found = SIZE_CLASS_LIMITS.find(
+    (limit) => longest <= limit.maxLongestMm && areaMm2 <= limit.maxAreaMm2,
+  );
+  return found?.code ?? LARGEST_SIZE_CLASS;
 }
 
 /** Подсказка по размерному классу для интерфейса. */
@@ -200,7 +221,7 @@ export function suggestDamagePrice(
   const tail = multipliers.length
     ? ` + ${multipliers.map((m) => `${m.reason} ×${m.factor}`).join(', ')}`
     : '';
-  const size = sizeClass ? `, размер ${sizeClass}` : '';
+  const size = sizeClass ? `, размер ${sizeClassLabel(sizeClass)}` : '';
   const count = quantity > 1 ? ` × ${quantity}` : '';
 
   return {
@@ -235,19 +256,146 @@ export interface AssessmentLineResult extends AssessmentSuggestion {
   comment: string | null;
 }
 
+// ── Коэффициент стоимости ────────────────────────────────────────────────────
+
+/**
+ * Коэффициент цены в процентах: 100 — расчёт по прайсу без изменений,
+ * 50 — минус половина, 200 — вдвое дороже. Это поправка мастера под регион и
+ * рынок, а не признак повреждения: размер, материал, доступ и ребро уже учтены
+ * в базовом расчёте и коэффициентом не заменяются.
+ */
+export const PRICE_COEFFICIENT_MIN = 50;
+export const PRICE_COEFFICIENT_MAX = 200;
+export const PRICE_COEFFICIENT_STEP = 5;
+export const DEFAULT_PRICE_COEFFICIENT = 100;
+
+/** Коэффициент к сохранению: шаг 5 %, границы −50 %…+100 %. */
+export function normalizePriceCoefficient(value: number | null | undefined): number {
+  if (typeof value !== 'number' || !Number.isFinite(value)) return DEFAULT_PRICE_COEFFICIENT;
+  const stepped = Math.round(value / PRICE_COEFFICIENT_STEP) * PRICE_COEFFICIENT_STEP;
+  return Math.min(Math.max(stepped, PRICE_COEFFICIENT_MIN), PRICE_COEFFICIENT_MAX);
+}
+
+/** Коэффициент множителем: 120 % → 1.2. */
+export function priceCoefficientFactor(percent: number): number {
+  return normalizePriceCoefficient(percent) / 100;
+}
+
+export function applyPriceCoefficient(baseMinor: Minor, percent: number): Minor {
+  return roundHalfUp((baseMinor * normalizePriceCoefficient(percent)) / 100);
+}
+
+// ── Арматурные работы ────────────────────────────────────────────────────────
+
+/**
+ * Арматурная работа к повреждению: снятие обшивки, разбор двери, снятие фары.
+ *
+ * Это не повреждение и не надбавка за сложность, а отдельная работа со своей
+ * ценой из справочника мастерской. Коэффициент цены к ней не применяется:
+ * поправка под рынок относится к самому PDR-ремонту, а разбор двери стоит
+ * столько, сколько мастерская за него берёт.
+ */
+export interface AssessmentExtraInput {
+  /** Позиция справочника арматурных работ, если выбрана из него. */
+  priceListItemId?: string | null;
+  /** Повреждение, к которому относится работа: итог по детали считается по нему. */
+  damageId?: string | null;
+  title: string;
+  quantity?: number | null;
+  /** Цена из справочника. */
+  suggestedUnitPriceMinor?: Minor | null;
+  /** Цена, введённая мастером. Перебивает справочник. */
+  unitPriceMinor?: Minor | null;
+  comment?: string | null;
+}
+
+export interface AssessmentExtraResult {
+  priceListItemId: string | null;
+  damageId: string | null;
+  position: number;
+  title: string;
+  quantity: number;
+  suggestedUnitPriceMinor: Minor;
+  unitPriceMinor: Minor;
+  lineTotalMinor: Minor;
+  overridden: boolean;
+  comment: string | null;
+}
+
+/**
+ * Цена арматурной работы: из справочника, если позиция найдена, иначе ноль
+ * с ручным вводом. Название тоже берётся из справочника — интерфейс не должен
+ * уметь подписать своей работой чужую цену.
+ */
+export function resolveExtra(
+  input: AssessmentExtraInput,
+  rules: readonly PriceRule[],
+  position: number,
+): AssessmentExtraResult {
+  const rule = input.priceListItemId
+    ? (rules.find((r) => r.id === input.priceListItemId && r.kind !== 'damage') ?? null)
+    : null;
+
+  const quantity = Math.max(1, Math.trunc(input.quantity ?? 1));
+  const suggestedUnitPriceMinor = Math.max(
+    0,
+    Math.trunc(rule?.unitPriceMinor ?? input.suggestedUnitPriceMinor ?? 0),
+  );
+  const overridden =
+    typeof input.unitPriceMinor === 'number' && input.unitPriceMinor !== suggestedUnitPriceMinor;
+  const unitPriceMinor = overridden
+    ? Math.max(0, Math.trunc(input.unitPriceMinor as number))
+    : suggestedUnitPriceMinor;
+
+  return {
+    priceListItemId: rule?.id ?? null,
+    damageId: input.damageId ?? null,
+    position,
+    title: (rule?.title ?? input.title).trim() || 'Арматурная работа',
+    quantity,
+    suggestedUnitPriceMinor,
+    unitPriceMinor,
+    lineTotalMinor: lineTotal(quantity, unitPriceMinor),
+    overridden,
+    comment: input.comment ?? null,
+  };
+}
+
+// ── Итог оценки ──────────────────────────────────────────────────────────────
+
 export interface AssessmentResult {
   lines: AssessmentLineResult[];
-  /** Сумма по расчёту, до правок мастера. */
+  /** Арматурные работы: считаются по своим ценам и суммируются с PDR. */
+  extras: AssessmentExtraResult[];
+  /** Сумма PDR по прайсу и правкам строк — база, к которой применяется коэффициент. */
+  pdrBaseMinor: Minor;
+  /** Та же база, но без правок мастера: видно, от чего он отступил. */
+  pdrSuggestedBaseMinor: Minor;
+  coefficientPercent: number;
+  /** PDR после коэффициента. */
+  pdrMinor: Minor;
+  extrasMinor: Minor;
+  /** Сумма, которую предложил расчёт: прайс × коэффициент + арматурные работы. */
   suggestedMinor: Minor;
-  /** Сумма с учётом введённых вручную цен строк. */
+  /** То же с учётом цен, введённых мастером по строкам. */
   totalMinor: Minor;
   explanation: string;
+  /** Формула для интерфейса: «База 4 000 ₽ × 1.20 = 4 800 ₽». */
+  formula: string;
+}
+
+export interface AssessmentOptions {
+  extras?: readonly AssessmentExtraInput[];
+  coefficientPercent?: number | null;
+  /** Валюта для подписи формулы. */
+  currency?: string;
 }
 
 /** Полный расчёт оценки по списку повреждений. */
 export function calcAssessment(
   lines: readonly AssessmentLineInput[],
   rules: readonly PriceRule[],
+  options: AssessmentOptions = {},
 ): AssessmentResult {
   const results = lines.map((line, index): AssessmentLineResult => {
     const suggestion = suggestDamagePrice(line, rules);
@@ -271,13 +419,73 @@ export function calcAssessment(
     };
   });
 
+  const extras = (options.extras ?? []).map((extra, index) => resolveExtra(extra, rules, index + 1));
+
+  const coefficientPercent = normalizePriceCoefficient(
+    options.coefficientPercent ?? DEFAULT_PRICE_COEFFICIENT,
+  );
+
+  const pdrSuggestedBaseMinor = results.reduce(
+    (sum, line) => sum + lineTotal(line.quantity, line.suggestedUnitPriceMinor),
+    0,
+  );
+  const pdrBaseMinor = results.reduce((sum, line) => sum + line.lineTotalMinor, 0);
+  const pdrMinor = applyPriceCoefficient(pdrBaseMinor, coefficientPercent);
+  const extrasMinor = extras.reduce((sum, extra) => sum + extra.lineTotalMinor, 0);
+  const extrasSuggestedMinor = extras.reduce(
+    (sum, extra) => sum + lineTotal(extra.quantity, extra.suggestedUnitPriceMinor),
+    0,
+  );
+
+  const explanationParts = [
+    ...results.map((line) => line.explanation),
+    ...extras.map((extra) =>
+      extra.quantity > 1 ? `${extra.title} × ${extra.quantity}` : extra.title,
+    ),
+  ];
+
   return {
     lines: results,
-    suggestedMinor: results.reduce(
-      (sum, line) => sum + lineTotal(line.quantity, line.suggestedUnitPriceMinor),
-      0,
+    extras,
+    pdrBaseMinor,
+    pdrSuggestedBaseMinor,
+    coefficientPercent,
+    pdrMinor,
+    extrasMinor,
+    suggestedMinor:
+      applyPriceCoefficient(pdrSuggestedBaseMinor, coefficientPercent) + extrasSuggestedMinor,
+    totalMinor: pdrMinor + extrasMinor,
+    explanation: explanationParts.join('; '),
+    formula: priceFormula(
+      { pdrBaseMinor, coefficientPercent, pdrMinor, extrasMinor },
+      options.currency,
     ),
-    totalMinor: results.reduce((sum, line) => sum + line.lineTotalMinor, 0),
-    explanation: results.map((line) => line.explanation).join('; '),
   };
+}
+
+/**
+ * Формула расчёта одной строкой. Она всегда на экране рядом с итогом: мастер
+ * должен видеть, из чего сложилась сумма, а не только результат.
+ */
+export function priceFormula(
+  input: {
+    pdrBaseMinor: Minor;
+    coefficientPercent: number;
+    pdrMinor: Minor;
+    extrasMinor: Minor;
+  },
+  currency = 'RUB',
+): string {
+  const money = (value: Minor): string => formatMinor(value, currency);
+  const coefficient = normalizePriceCoefficient(input.coefficientPercent);
+
+  const pdr =
+    coefficient === 100
+      ? `База ${money(input.pdrBaseMinor)}`
+      : `База ${money(input.pdrBaseMinor)} × ${(coefficient / 100).toFixed(2)} = ${money(input.pdrMinor)}`;
+
+  if (input.extrasMinor === 0) return pdr;
+  return `${pdr} + арматурные работы ${money(input.extrasMinor)} = ${money(
+    input.pdrMinor + input.extrasMinor,
+  )}`;
 }

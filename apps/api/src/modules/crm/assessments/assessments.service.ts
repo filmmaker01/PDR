@@ -3,9 +3,14 @@ import type { AccessDifficulty, AssessmentMethod, Material, Prisma, User } from 
 import {
   BODY_PANELS,
   DAMAGE_TYPES,
+  DEFAULT_PRICE_COEFFICIENT,
   SIZE_CLASSES,
+  applyPriceCoefficient,
   calcAssessment,
+  normalizePriceCoefficient,
+  type AssessmentExtraInput,
   type AssessmentLineInput,
+  type AssessmentResult,
   type PriceRule,
 } from '@pdr/shared';
 import { AppError } from '@/common/errors/app.error';
@@ -39,9 +44,28 @@ export interface AssessmentItemInput {
   comment?: string | null;
 }
 
+/**
+ * Арматурная работа к повреждению: снятие обшивки, разбор двери, снятие фары.
+ * Берётся из справочника мастерской — того же прайса, но позициями не для
+ * повреждений: второго справочника и второго расчёта не появляется.
+ */
+export interface AssessmentExtraWorkInput {
+  priceListItemId?: string | null;
+  damageId?: string | null;
+  title?: string | null;
+  quantity?: number;
+  /** Цена, введённая мастером. Перебивает справочник. */
+  unitPriceMinor?: number | null;
+  comment?: string | null;
+}
+
 export interface CreateAssessmentInput {
   method: AssessmentMethod;
   items?: AssessmentItemInput[];
+  /** Арматурные работы: суммируются с PDR в общий итог. */
+  extras?: AssessmentExtraWorkInput[];
+  /** Коэффициент цены этой оценки. Без него берётся настройка мастерской. */
+  priceCoefficient?: number;
   /** Итог вручную: способ manual, когда мастер просто называет сумму. */
   totalMinor?: number | null;
   note?: string | null;
@@ -114,12 +138,22 @@ export class AssessmentsService {
    */
   async preview(
     ctx: WorkspaceContext,
-    items: AssessmentItemInput[],
-  ): Promise<ReturnType<typeof calcAssessment>> {
+    input: {
+      items?: AssessmentItemInput[];
+      extras?: AssessmentExtraWorkInput[];
+      priceCoefficient?: number;
+    },
+  ): Promise<AssessmentResult> {
     const rules = await this.priceRules(ctx);
+    this.assertExtrasKnown(input.extras ?? [], rules);
     return calcAssessment(
-      items.map((item) => this.toLine(item)),
+      (input.items ?? []).map((item) => this.toLine(item)),
       rules,
+      {
+        extras: (input.extras ?? []).map((extra) => this.toExtra(extra)),
+        coefficientPercent: this.coefficientOf(ctx, input.priceCoefficient),
+        currency: ctx.workspace.currency,
+      },
     );
   }
 
@@ -137,7 +171,7 @@ export class AssessmentsService {
     auth: { user: User; platformRoles: string[] },
   ): Promise<{
     vision: DamageVisionResult;
-    calc: ReturnType<typeof calcAssessment>;
+    calc: AssessmentResult;
     items: AssessmentItemInput[];
   }> {
     await this.access.assertWritable(ctx, parent);
@@ -182,10 +216,12 @@ export class AssessmentsService {
     const rules = await this.priceRules(ctx);
     return {
       vision,
-      calc: calcAssessment(
-        items.map((i) => this.toLine(i)),
-        rules,
-      ),
+      // Разбор фотографии проходит тот же путь, что и ручной ввод параметров:
+      // базовый расчёт по прайсу, затем коэффициент, затем правка мастером.
+      calc: calcAssessment(items.map((i) => this.toLine(i)), rules, {
+        coefficientPercent: this.coefficientOf(ctx),
+        currency: ctx.workspace.currency,
+      }),
       items,
     };
   }
@@ -202,21 +238,30 @@ export class AssessmentsService {
 
     const currency = await this.access.currencyOf(ctx, parent);
     const items = input.items ?? [];
+    const extras = input.extras ?? [];
 
-    if (input.method === 'manual' && items.length === 0) {
+    if (input.method === 'manual' && items.length === 0 && extras.length === 0) {
       return this.createManual(ctx, parent, currency, input);
     }
-    if (items.length === 0) {
+    if (items.length === 0 && extras.length === 0) {
       throw AppError.validation('Добавьте хотя бы одно повреждение или укажите сумму вручную');
     }
     if (items.length > 60) throw AppError.validation('Слишком много позиций в оценке');
+    if (extras.length > 30) throw AppError.validation('Слишком много арматурных работ в оценке');
 
-    await this.assertDamagesBelong(ctx, parent, items);
+    await this.assertDamagesBelong(ctx, parent, [...items, ...extras]);
 
     const rules = await this.priceRules(ctx);
+    this.assertExtrasKnown(extras, rules);
+    const coefficientPercent = this.coefficientOf(ctx, input.priceCoefficient);
     const calc = calcAssessment(
       items.map((item) => this.toLine(item)),
       rules,
+      {
+        extras: extras.map((extra) => this.toExtra(extra)),
+        coefficientPercent,
+        currency,
+      },
     );
 
     // Итог можно перебить целиком: мастер округляет сумму «по-человечески».
@@ -230,7 +275,8 @@ export class AssessmentsService {
       input.totalMinor === null || input.totalMinor === undefined
         ? null
         : Math.max(0, Math.trunc(input.totalMinor));
-    const linesOverridden = calc.lines.some((line) => line.overridden);
+    const linesOverridden =
+      calc.lines.some((line) => line.overridden) || calc.extras.some((extra) => extra.overridden);
     const totalOverride =
       requested !== null && linesOverridden && requested === calc.suggestedMinor ? null : requested;
 
@@ -247,6 +293,9 @@ export class AssessmentsService {
           method: input.method,
           currency,
           suggestedMinor: BigInt(calc.suggestedMinor),
+          baseMinor: BigInt(calc.pdrBaseMinor),
+          priceCoefficient: calc.coefficientPercent,
+          extrasMinor: BigInt(calc.extrasMinor),
           totalMinor: BigInt(totalMinor),
           overridden,
           explanation: ai?.explanation ?? calc.explanation,
@@ -257,30 +306,12 @@ export class AssessmentsService {
           aiConfidence: ai?.confidence ?? null,
           createdById: ctx.userId,
         },
-        calc.lines.map((line, index) => ({
-          damageId: line.damageId,
-          position: line.position,
-          panelCode: line.panelCode,
-          damageType: line.damageType,
-          sizeClass: line.sizeClass,
-          widthMm: items[index]?.widthMm ?? null,
-          heightMm: items[index]?.heightMm ?? null,
-          quantity: line.quantity,
-          material: items[index]?.material ?? null,
-          accessDifficulty: items[index]?.accessDifficulty ?? null,
-          onEdge: items[index]?.onEdge ?? false,
-          suggestedUnitPriceMinor: BigInt(line.suggestedUnitPriceMinor),
-          unitPriceMinor: BigInt(line.unitPriceMinor),
-          lineTotalMinor: BigInt(line.lineTotalMinor),
-          priceListItemId: line.priceListItemId,
-          confidence: null,
-          comment: line.comment,
-        })),
+        this.itemRows(calc, items),
         tx,
       );
 
       if (input.applyToDamages !== false) {
-        await this.applyToDamages(ctx, calc.lines, input.method, tx);
+        await this.applyToDamages(ctx, calc, input.method, tx);
       }
       await this.syncLeadEstimate(ctx, parent, totalMinor, tx);
 
@@ -310,6 +341,10 @@ export class AssessmentsService {
           method: 'manual',
           currency,
           suggestedMinor: BigInt(0),
+          // Названную сумму коэффициент не трогает: мастер уже сказал цену.
+          baseMinor: BigInt(0),
+          priceCoefficient: DEFAULT_PRICE_COEFFICIENT,
+          extrasMinor: BigInt(0),
           totalMinor: BigInt(totalMinor),
           overridden: true,
           explanation: 'Стоимость назначена мастером',
@@ -333,78 +368,76 @@ export class AssessmentsService {
   async update(
     ctx: WorkspaceContext,
     assessmentId: string,
-    input: { items?: AssessmentItemInput[]; totalMinor?: number | null; note?: string | null },
+    input: {
+      items?: AssessmentItemInput[];
+      extras?: AssessmentExtraWorkInput[];
+      priceCoefficient?: number;
+      totalMinor?: number | null;
+      note?: string | null;
+    },
   ): Promise<AssessmentWithItems> {
     const assessment = await this.getById(ctx, assessmentId);
     const parent = this.parentOf(assessment);
     await this.access.assertWritable(ctx, parent);
 
-    const items =
-      input.items ??
-      assessment.items.map((item): AssessmentItemInput => ({
-        damageId: item.damageId,
-        panelCode: item.panelCode ?? 'other',
-        damageType: item.damageType,
-        sizeClass: item.sizeClass,
-        widthMm: item.widthMm,
-        heightMm: item.heightMm,
-        quantity: item.quantity,
-        material: item.material,
-        accessDifficulty: item.accessDifficulty,
-        onEdge: item.onEdge,
-        unitPriceMinor: Number(item.unitPriceMinor),
-        comment: item.comment,
-      }));
+    // Позиции и работы перечитываются из сохранённой оценки, когда их не
+    // присылали: правка одного коэффициента не должна обнулять состав.
+    const items = input.items ?? this.savedLines(assessment);
+    const extras = input.extras ?? this.savedExtras(assessment);
+    const rewritesComposition = Boolean(input.items || input.extras);
 
-    if (items.length > 0) await this.assertDamagesBelong(ctx, parent, items);
+    if (items.length > 0 || extras.length > 0) {
+      await this.assertDamagesBelong(ctx, parent, [...items, ...extras]);
+    }
 
     const rules = await this.priceRules(ctx);
+    this.assertExtrasKnown(extras, rules);
     const calc = calcAssessment(
       items.map((item) => this.toLine(item)),
       rules,
+      {
+        extras: extras.map((extra) => this.toExtra(extra)),
+        coefficientPercent:
+          input.priceCoefficient === undefined
+            ? assessment.priceCoefficient
+            : normalizePriceCoefficient(input.priceCoefficient),
+        currency: assessment.currency,
+      },
     );
 
     const totalOverride =
       input.totalMinor === null || input.totalMinor === undefined
         ? null
         : Math.max(0, Math.trunc(input.totalMinor));
+    const hasComposition = items.length > 0 || extras.length > 0;
     const totalMinor =
-      totalOverride ?? (items.length > 0 ? calc.totalMinor : Number(assessment.totalMinor));
+      totalOverride ?? (hasComposition ? calc.totalMinor : Number(assessment.totalMinor));
 
     await this.prisma.transaction(async (tx) => {
-      if (input.items) {
+      if (rewritesComposition) {
         await this.assessments.replaceItems(
           ctx.workspaceId,
           assessmentId,
-          calc.lines.map((line, index) => ({
-            damageId: line.damageId,
-            position: line.position,
-            panelCode: line.panelCode,
-            damageType: line.damageType,
-            sizeClass: line.sizeClass,
-            widthMm: items[index]?.widthMm ?? null,
-            heightMm: items[index]?.heightMm ?? null,
-            quantity: line.quantity,
-            material: items[index]?.material ?? null,
-            accessDifficulty: items[index]?.accessDifficulty ?? null,
-            onEdge: items[index]?.onEdge ?? false,
-            suggestedUnitPriceMinor: BigInt(line.suggestedUnitPriceMinor),
-            unitPriceMinor: BigInt(line.unitPriceMinor),
-            lineTotalMinor: BigInt(line.lineTotalMinor),
-            priceListItemId: line.priceListItemId,
-            confidence: null,
-            comment: line.comment,
-          })),
+          this.itemRows(calc, items),
           tx,
         );
-        await this.applyToDamages(ctx, calc.lines, assessment.method, tx);
+      }
+      if (hasComposition) {
+        await this.applyToDamages(ctx, calc, assessment.method, tx);
       }
 
       await this.assessments.update(
         ctx.workspaceId,
         assessmentId,
         {
-          ...(input.items ? { suggestedMinor: BigInt(calc.suggestedMinor) } : {}),
+          ...(hasComposition
+            ? {
+                suggestedMinor: BigInt(calc.suggestedMinor),
+                baseMinor: BigInt(calc.pdrBaseMinor),
+                extrasMinor: BigInt(calc.extrasMinor),
+              }
+            : {}),
+          priceCoefficient: calc.coefficientPercent,
           totalMinor: BigInt(totalMinor),
           // Любая ручная правка — это отступление от расчёта. Отметка нужна,
           // чтобы в интерфейсе не выдавать её за «предварительную AI-оценку».
@@ -426,6 +459,132 @@ export class AssessmentsService {
     if (assessment.leadId) return { leadId: assessment.leadId };
     if (assessment.orderId) return { orderId: assessment.orderId };
     throw AppError.notFound('Оценка не найдена');
+  }
+
+  /** Коэффициент оценки: присланный или привычный для мастерской. */
+  private coefficientOf(ctx: WorkspaceContext, requested?: number | null): number {
+    if (requested !== undefined && requested !== null) return normalizePriceCoefficient(requested);
+    return normalizePriceCoefficient(
+      ctx.settings.default_price_coefficient ?? DEFAULT_PRICE_COEFFICIENT,
+    );
+  }
+
+  /** Позиции сохранённой оценки как вход расчёта: PDR-строки. */
+  private savedLines(assessment: AssessmentWithItems): AssessmentItemInput[] {
+    return assessment.items
+      .filter((item) => item.kind === 'damage')
+      .map((item) => ({
+        damageId: item.damageId,
+        panelCode: item.panelCode ?? 'other',
+        damageType: item.damageType,
+        sizeClass: item.sizeClass,
+        widthMm: item.widthMm,
+        heightMm: item.heightMm,
+        quantity: item.quantity,
+        material: item.material,
+        accessDifficulty: item.accessDifficulty,
+        onEdge: item.onEdge,
+        unitPriceMinor: Number(item.unitPriceMinor),
+        comment: item.comment,
+      }));
+  }
+
+  /** Позиции сохранённой оценки как вход расчёта: арматурные работы. */
+  private savedExtras(assessment: AssessmentWithItems): AssessmentExtraWorkInput[] {
+    return assessment.items
+      .filter((item) => item.kind !== 'damage')
+      .map((item) => ({
+        priceListItemId: item.priceListItemId,
+        damageId: item.damageId,
+        title: item.title,
+        quantity: item.quantity,
+        unitPriceMinor: Number(item.unitPriceMinor),
+        comment: item.comment,
+      }));
+  }
+
+  private toExtra(extra: AssessmentExtraWorkInput): AssessmentExtraInput {
+    return {
+      priceListItemId: extra.priceListItemId ?? null,
+      damageId: extra.damageId ?? null,
+      title: extra.title ?? '',
+      quantity: extra.quantity ?? 1,
+      unitPriceMinor: extra.unitPriceMinor ?? null,
+      comment: extra.comment ?? null,
+    };
+  }
+
+  /**
+   * Позиция справочника обязана существовать и не быть позицией повреждения:
+   * иначе «арматурная работа» молча получила бы цену ремонта вмятины.
+   */
+  private assertExtrasKnown(
+    extras: readonly AssessmentExtraWorkInput[],
+    rules: readonly PriceRule[],
+  ): void {
+    for (const extra of extras) {
+      if (!extra.priceListItemId) {
+        if (!extra.title?.trim()) {
+          throw AppError.validation('Назовите арматурную работу или выберите её из справочника');
+        }
+        continue;
+      }
+      const rule = rules.find((r) => r.id === extra.priceListItemId);
+      if (!rule || rule.kind === 'damage') {
+        throw AppError.validation('Арматурная работа не найдена в справочнике мастерской');
+      }
+    }
+  }
+
+  /** Строки оценки для базы: сначала PDR, затем арматурные работы. */
+  private itemRows(
+    calc: AssessmentResult,
+    items: readonly AssessmentItemInput[],
+  ): Parameters<AssessmentsRepository['create']>[2] {
+    return [
+      ...calc.lines.map((line, index) => ({
+        damageId: line.damageId,
+        kind: 'damage' as const,
+        title: null,
+        position: line.position,
+        panelCode: line.panelCode,
+        damageType: line.damageType,
+        sizeClass: line.sizeClass,
+        widthMm: items[index]?.widthMm ?? null,
+        heightMm: items[index]?.heightMm ?? null,
+        quantity: line.quantity,
+        material: items[index]?.material ?? null,
+        accessDifficulty: items[index]?.accessDifficulty ?? null,
+        onEdge: items[index]?.onEdge ?? false,
+        suggestedUnitPriceMinor: BigInt(line.suggestedUnitPriceMinor),
+        unitPriceMinor: BigInt(line.unitPriceMinor),
+        lineTotalMinor: BigInt(line.lineTotalMinor),
+        priceListItemId: line.priceListItemId,
+        confidence: null,
+        comment: line.comment,
+      })),
+      ...calc.extras.map((extra) => ({
+        damageId: extra.damageId,
+        kind: 'disassembly' as const,
+        title: extra.title,
+        position: calc.lines.length + extra.position,
+        panelCode: null,
+        damageType: null,
+        sizeClass: null,
+        widthMm: null,
+        heightMm: null,
+        quantity: extra.quantity,
+        material: null,
+        accessDifficulty: null,
+        onEdge: false,
+        suggestedUnitPriceMinor: BigInt(extra.suggestedUnitPriceMinor),
+        unitPriceMinor: BigInt(extra.unitPriceMinor),
+        lineTotalMinor: BigInt(extra.lineTotalMinor),
+        priceListItemId: extra.priceListItemId,
+        confidence: null,
+        comment: extra.comment,
+      })),
+    ];
   }
 
   private toLine(item: AssessmentItemInput): AssessmentLineInput {
@@ -464,7 +623,7 @@ export class AssessmentsService {
   private async assertDamagesBelong(
     ctx: WorkspaceContext,
     parent: CrmParent,
-    items: AssessmentItemInput[],
+    items: readonly { damageId?: string | null }[],
   ): Promise<void> {
     const ids = items.map((item) => item.damageId).filter((id): id is string => Boolean(id));
     if (ids.length === 0) return;
@@ -481,17 +640,19 @@ export class AssessmentsService {
   /** Утверждённые цены переезжают в повреждения на схеме: там их и смотрят. */
   private async applyToDamages(
     ctx: WorkspaceContext,
-    lines: ReturnType<typeof calcAssessment>['lines'],
+    calc: AssessmentResult,
     method: AssessmentMethod,
     tx: Prisma.TransactionClient,
   ): Promise<void> {
-    for (const line of lines) {
+    for (const line of calc.lines) {
       if (!line.damageId) continue;
       await this.damages.update(
         ctx.workspaceId,
         line.damageId,
         {
-          priceMinor: BigInt(line.lineTotalMinor),
+          // Цена повреждения — уже с коэффициентом: иначе сумма по схеме
+          // кузова не сходилась бы с итогом оценки.
+          priceMinor: BigInt(applyPriceCoefficient(line.lineTotalMinor, calc.coefficientPercent)),
           // Правка мастера делает цену ручной, чем бы её ни предложили:
           // «предварительная AI-оценка» не должна оставаться подписью
           // под суммой, которую человек уже поменял.

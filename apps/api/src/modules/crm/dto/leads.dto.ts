@@ -3,11 +3,15 @@ import {
   ACCESS_DIFFICULTIES,
   APPOINTMENT_KINDS,
   ASSESSMENT_METHODS,
+  isKnownSizeClass,
   LEAD_CHANNELS,
   LEAD_SOURCES,
   LEAD_STATUSES,
   MATERIALS,
   PHOTO_CATEGORIES,
+  PRICE_COEFFICIENT_MAX,
+  PRICE_COEFFICIENT_MIN,
+  PRICE_COEFFICIENT_STEP,
   nonEmptyString,
   optionalString,
 } from '@pdr/shared';
@@ -33,11 +37,20 @@ const vehicleFields = {
   vehicleColor: optionalString(40),
 };
 
+/**
+ * Размерный класс: код из сетки мастерской. Именно код, а не свободная строка —
+ * к нему привязаны цены прайса, и опечатка означала бы нулевую цену.
+ */
+export const sizeClassSchema = z
+  .string()
+  .max(20)
+  .refine(isKnownSizeClass, { message: 'Неизвестный размерный класс' });
+
 /** Габариты области повреждения в миллиметрах: 40×40 см — это 400×400. */
 const damageFields = {
   panelCode: nonEmptyString(40),
   damageType: optionalString(40),
-  sizeClass: z.enum(['S', 'M', 'L', 'XL']).nullable().optional(),
+  sizeClass: sizeClassSchema.nullable().optional(),
   widthMm: z.number().int().min(1).max(5000).nullable().optional(),
   heightMm: z.number().int().min(1).max(5000).nullable().optional(),
   quantity: z.number().int().min(1).max(500).optional(),
@@ -184,9 +197,46 @@ const assessmentItemSchema = z
   })
   .strict();
 
+/**
+ * Арматурная работа в оценке: снятие обшивки, разбор двери, снятие фары.
+ * Цена берётся из справочника мастерской, но правится вручную для конкретного
+ * случая — как и цена самого PDR-ремонта.
+ */
+const assessmentExtraSchema = z
+  .object({
+    priceListItemId: z.string().uuid().nullable().optional(),
+    /** Повреждение, к которому относится работа: по нему считается итог по детали. */
+    damageId: z.string().uuid().nullable().optional(),
+    title: optionalString(200),
+    quantity: z.number().int().min(1).max(100).optional(),
+    unitPriceMinor: z.number().int().min(0).max(100_000_000).nullable().optional(),
+    comment: optionalString(500),
+  })
+  .strict()
+  .refine((v) => Boolean(v.priceListItemId || v.title), {
+    message: 'Выберите арматурную работу из справочника или назовите свою',
+  });
+
+/** Коэффициент цены в процентах: проценты шагом 5 в границах −50 %…+100 %. */
+const priceCoefficientField = z
+  .number()
+  .int()
+  .min(PRICE_COEFFICIENT_MIN)
+  .max(PRICE_COEFFICIENT_MAX)
+  .refine((value) => value % PRICE_COEFFICIENT_STEP === 0, {
+    message: 'Коэффициент задаётся шагом 5 %',
+  });
+
 export const assessmentPreviewSchema = z
-  .object({ items: z.array(assessmentItemSchema).min(1).max(60) })
-  .strict();
+  .object({
+    items: z.array(assessmentItemSchema).max(60).default([]),
+    extras: z.array(assessmentExtraSchema).max(30).optional(),
+    priceCoefficient: priceCoefficientField.optional(),
+  })
+  .strict()
+  .refine((v) => v.items.length > 0 || (v.extras?.length ?? 0) > 0, {
+    message: 'Добавьте повреждение или арматурную работу',
+  });
 
 export const assessmentAnalyzeSchema = z
   .object({
@@ -199,6 +249,9 @@ export const createAssessmentSchema = z
   .object({
     method: z.enum(ASSESSMENT_METHODS),
     items: z.array(assessmentItemSchema).max(60).optional(),
+    extras: z.array(assessmentExtraSchema).max(30).optional(),
+    /** Коэффициент этой оценки. Без него берётся настройка мастерской. */
+    priceCoefficient: priceCoefficientField.optional(),
     /** Итог вручную: для способа manual — единственное, что нужно. */
     totalMinor: z.number().int().min(0).max(1_000_000_000).nullable().optional(),
     note: optionalString(1000),
@@ -224,6 +277,8 @@ export const createAssessmentSchema = z
 export const updateAssessmentSchema = z
   .object({
     items: z.array(assessmentItemSchema).max(60).optional(),
+    extras: z.array(assessmentExtraSchema).max(30).optional(),
+    priceCoefficient: priceCoefficientField.optional(),
     totalMinor: z.number().int().min(0).max(1_000_000_000).nullable().optional(),
     note: optionalString(1000),
   })

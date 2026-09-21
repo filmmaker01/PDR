@@ -20,8 +20,12 @@ export interface PriceListItemInput {
 export class PriceListService {
   constructor(private readonly priceList: PriceListRepository) {}
 
-  async list(ctx: WorkspaceContext, includeInactive = false): Promise<PriceListItem[]> {
-    return this.priceList.list(ctx.workspaceId, includeInactive);
+  async list(
+    ctx: WorkspaceContext,
+    includeInactive = false,
+    kind?: EstimateItemKind,
+  ): Promise<PriceListItem[]> {
+    return this.priceList.list(ctx.workspaceId, includeInactive, kind);
   }
 
   async create(ctx: WorkspaceContext, input: PriceListItemInput): Promise<PriceListItem> {

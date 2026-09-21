@@ -12,7 +12,7 @@ import { randomUUID } from 'node:crypto';
 import { mkdir, rm, writeFile } from 'node:fs/promises';
 import { dirname, join, resolve } from 'node:path';
 import { PrismaClient, type Prisma } from '@prisma/client';
-import { todayInZone, zonedTimeToUtc } from '@pdr/shared';
+import { DEFAULT_EXTRA_WORKS, todayInZone, zonedTimeToUtc } from '@pdr/shared';
 import sharp from 'sharp';
 
 const prisma = new PrismaClient();
@@ -671,15 +671,47 @@ const VEHICLES = [
   { make: 'Mercedes-Benz', model: 'E-class', year: 2020, color: 'белый', plate: 'С741ЕК777' },
 ];
 
-const PRICE_LIST = [
-  { title: 'Вмятина S (до 2 см), открытый доступ', price: 1500, panel: null, size: 'S' },
-  { title: 'Вмятина M (2–5 см), открытый доступ', price: 2500, panel: null, size: 'M' },
-  { title: 'Вмятина L (5–10 см), открытый доступ', price: 4000, panel: null, size: 'L' },
-  { title: 'Вмятина на ребре, любой размер', price: 5000, panel: null, size: null },
-  { title: 'Капот, град (за элемент)', price: 12000, panel: 'hood', size: null },
-  { title: 'Крыша, град (за элемент)', price: 15000, panel: 'roof', size: null },
-  { title: 'Снятие/установка потолка', price: 6000, panel: null, size: null },
-  { title: 'Полировка элемента после ремонта', price: 2000, panel: null, size: null },
+/**
+ * Тестовый прайс для настройки формулы клиентом.
+ *
+ * Размерная сетка заполнена целиком: мастер выбирает 40×40, 40×60, 60×60 и
+ * сразу видит, как меняется стоимость. Значения условные — это заготовка под
+ * обкатку расчёта, а не коммерческий прайс мастерской.
+ *
+ * Позиции без размера привязаны к типу повреждения: град считается за элемент,
+ * а не за зону, и размер на него не влияет. Какая строка прайса сработала,
+ * видно в расчёте — расчёт не должен быть чёрным ящиком.
+ */
+type PriceSpec = {
+  title: string;
+  price: number;
+  panel: string | null;
+  size: string | null;
+  type?: string | null;
+  kind?: 'damage' | 'disassembly' | 'extra';
+};
+
+const PRICE_LIST: PriceSpec[] = [
+  { title: 'Вмятина S — до 2 см', price: 1500, panel: null, size: 'S' },
+  { title: 'Вмятина M — 2–5 см', price: 2500, panel: null, size: 'M' },
+  { title: 'Вмятина L — 5–10 см', price: 4000, panel: null, size: 'L' },
+  { title: 'Вмятина XL — 10–20 см', price: 6000, panel: null, size: 'XL' },
+  { title: 'Зона 20×40 см', price: 7000, panel: null, size: '20x40' },
+  { title: 'Зона 40×40 см', price: 9000, panel: null, size: '40x40' },
+  { title: 'Зона 40×60 см', price: 12000, panel: null, size: '40x60' },
+  { title: 'Зона 60×60 см', price: 15000, panel: null, size: '60x60' },
+  { title: 'Зона 60×100 см', price: 22000, panel: null, size: '60x100' },
+  { title: 'Зона 100×100 см', price: 30000, panel: null, size: '100x100' },
+  { title: 'Капот, град (за элемент)', price: 12000, panel: 'hood', size: null, type: 'hail' },
+  { title: 'Крыша, град (за элемент)', price: 15000, panel: 'roof', size: null, type: 'hail' },
+  {
+    title: 'Крышка багажника, град (за элемент)',
+    price: 10000,
+    panel: 'trunk_lid',
+    size: null,
+    type: 'hail',
+  },
+  { title: 'Полировка элемента после ремонта', price: 2000, panel: null, size: null, kind: 'extra' },
 ];
 
 interface OrderSpec {
@@ -865,13 +897,29 @@ async function seedWorkspace(input: {
     await prisma.priceListItem.create({
       data: {
         workspaceId: workspace.id,
-        kind: 'damage',
+        kind: item.kind ?? 'damage',
         title: item.title,
         panelCode: item.panel,
+        damageType: item.type ?? null,
         sizeClass: item.size,
         unitPriceMinor: minor(item.price),
         unit: 'per_item',
         position: index + 1,
+      },
+    });
+  }
+
+  // Справочник арматурных работ мастерской: те же позиции прайса, только
+  // не для повреждений. Мастер правит цены и архивирует ненужные.
+  for (const [index, work] of DEFAULT_EXTRA_WORKS.entries()) {
+    await prisma.priceListItem.create({
+      data: {
+        workspaceId: workspace.id,
+        kind: 'disassembly',
+        title: work.title,
+        unitPriceMinor: BigInt(work.priceMinor),
+        unit: 'per_item',
+        position: 100 + index,
       },
     });
   }
@@ -1254,7 +1302,18 @@ interface LeadSpec {
   contactInDays?: number;
   rejectReason?: string;
   withPhoto?: boolean;
-  damages?: { panel: string; type: string; size: string; widthMm: number; price: number }[];
+  damages?: {
+    panel: string;
+    type: string;
+    size: string;
+    widthMm: number;
+    heightMm?: number;
+    price: number;
+  }[];
+  /** Коэффициент цены этой оценки в процентах. */
+  coefficient?: number;
+  /** Арматурные работы к оценке: название из справочника и цена. */
+  extras?: { title: string; price: number }[];
 }
 
 const LEADS: LeadSpec[] = [
@@ -1292,6 +1351,26 @@ const LEADS: LeadSpec[] = [
       { panel: 'hood', type: 'hail', size: 'S', widthMm: 15, price: 18_000 },
       { panel: 'roof', type: 'hail', size: 'S', widthMm: 15, price: 14_000 },
     ],
+  },
+  {
+    contactName: 'Николай',
+    contactPhone: '+79087776655',
+    contactExtra: null,
+    vehicleMake: 'Skoda',
+    vehicleModel: 'Octavia',
+    vehiclePlate: 'Х123ХХ96',
+    source: 'offline',
+    channel: 'in_person',
+    status: 'estimated',
+    comment: 'Приехал сам: вмятина на передней левой двери, зона 40×40. Нужна разборка двери.',
+    // База 9 000 (зона 40×40) × 1.20 = 10 800, плюс разбор двери 2 000.
+    estimate: 12_800,
+    createdDaysAgo: 1,
+    coefficient: 120,
+    damages: [
+      { panel: 'door_fl', type: 'dent', size: '40x40', widthMm: 400, heightMm: 400, price: 10_800 },
+    ],
+    extras: [{ title: 'Разбор двери', price: 2000 }],
   },
   {
     contactName: 'Сергей',
@@ -1424,7 +1503,7 @@ async function seedLeads(input: {
           damageType: damage.type,
           sizeClass: damage.size,
           widthMm: damage.widthMm,
-          heightMm: damage.widthMm,
+          heightMm: damage.heightMm ?? damage.widthMm,
           quantity: 1,
           priceMinor: minor(damage.price),
           priceSource: 'params',
@@ -1460,6 +1539,13 @@ async function seedLeads(input: {
 
     // Сохранённая оценка: в карточке обращения видно, откуда взялась сумма.
     if (spec.estimate !== null) {
+      const coefficient = spec.coefficient ?? 100;
+      // Цены повреждений в спецификации уже с коэффициентом: база считается
+      // обратно, чтобы формула «база × коэффициент» сходилась с итогом.
+      const pdrMinor = (spec.damages ?? []).reduce((sum, d) => sum + minor(d.price), 0n);
+      const baseMinor = minor(Number(pdrMinor) / 100 / (coefficient / 100));
+      const extrasMinor = (spec.extras ?? []).reduce((sum, e) => sum + minor(e.price), 0n);
+
       const assessment = await prisma.assessment.create({
         data: {
           workspaceId: input.workspaceId,
@@ -1467,6 +1553,9 @@ async function seedLeads(input: {
           method: damageIds.length > 0 ? 'params' : 'manual',
           currency: 'RUB',
           suggestedMinor: minor(spec.estimate),
+          baseMinor,
+          priceCoefficient: coefficient,
+          extrasMinor,
           totalMinor: minor(spec.estimate),
           overridden: damageIds.length === 0,
           explanation:
@@ -1484,16 +1573,38 @@ async function seedLeads(input: {
             workspaceId: input.workspaceId,
             assessmentId: assessment.id,
             damageId: damageIds[index] ?? null,
+            kind: 'damage',
             position: index + 1,
             panelCode: damage.panel,
             damageType: damage.type,
             sizeClass: damage.size,
             widthMm: damage.widthMm,
-            heightMm: damage.widthMm,
+            heightMm: damage.heightMm ?? damage.widthMm,
             quantity: 1,
             suggestedUnitPriceMinor: minor(damage.price),
             unitPriceMinor: minor(damage.price),
             lineTotalMinor: minor(damage.price),
+          },
+        });
+      }
+
+      for (const [index, extra] of (spec.extras ?? []).entries()) {
+        const fromCatalog = await prisma.priceListItem.findFirst({
+          where: { workspaceId: input.workspaceId, kind: 'disassembly', title: extra.title },
+        });
+        await prisma.assessmentItem.create({
+          data: {
+            workspaceId: input.workspaceId,
+            assessmentId: assessment.id,
+            damageId: damageIds[0] ?? null,
+            kind: 'disassembly',
+            title: extra.title,
+            position: (spec.damages?.length ?? 0) + index + 1,
+            quantity: 1,
+            suggestedUnitPriceMinor: fromCatalog?.unitPriceMinor ?? minor(extra.price),
+            unitPriceMinor: minor(extra.price),
+            lineTotalMinor: minor(extra.price),
+            priceListItemId: fromCatalog?.id ?? null,
           },
         });
       }

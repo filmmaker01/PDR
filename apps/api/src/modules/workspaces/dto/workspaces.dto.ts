@@ -1,5 +1,22 @@
 import { z } from 'zod';
-import { nonEmptyString, optionalString, timezoneSchema } from '@pdr/shared';
+import {
+  PRICE_COEFFICIENT_MAX,
+  PRICE_COEFFICIENT_MIN,
+  PRICE_COEFFICIENT_STEP,
+  nonEmptyString,
+  optionalString,
+  timezoneSchema,
+} from '@pdr/shared';
+
+/** Коэффициент цены: проценты шагом 5 в границах −50 %…+100 %. */
+export const priceCoefficientSchema = z
+  .number()
+  .int()
+  .min(PRICE_COEFFICIENT_MIN)
+  .max(PRICE_COEFFICIENT_MAX)
+  .refine((value) => value % PRICE_COEFFICIENT_STEP === 0, {
+    message: 'Коэффициент задаётся шагом 5 %',
+  });
 
 export const workspaceSettingsSchema = z
   .object({
@@ -11,6 +28,7 @@ export const workspaceSettingsSchema = z
     work_day_end: z.string().regex(/^\d{2}:\d{2}$/),
     default_appointment_minutes: z.number().int().min(15).max(600),
     reminder_lead_minutes: z.number().int().min(0).max(1440),
+    default_price_coefficient: priceCoefficientSchema,
   })
   .partial()
   .strict();

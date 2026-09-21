@@ -1782,6 +1782,13 @@ model Assessment {
   currency       String           @db.Char(3)
   /// Сумма, которую предложил расчёт или разбор фотографии.
   suggestedMinor BigInt           @default(0) @map("suggested_minor")
+  /// Базовый расчёт PDR по прайсу до коэффициента: он всегда остаётся видимым.
+  baseMinor      BigInt           @default(0) @map("base_minor")
+  /// Коэффициент цены в процентах: поправка мастера под регион и рынок.
+  /// 100 — расчёт по прайсу без изменений.
+  priceCoefficient Int            @default(100) @map("price_coefficient")
+  /// Арматурные работы: считаются по своим ценам, коэффициент к ним не применяется.
+  extrasMinor    BigInt           @default(0) @map("extras_minor")
   /// Итог, который утвердил мастер. Именно он уходит в обращение и смету.
   totalMinor     BigInt           @default(0) @map("total_minor")
   /// Правил ли мастер итог руками.
@@ -1816,7 +1823,13 @@ model AssessmentItem {
   workspaceId             String            @map("workspace_id") @db.Uuid
   assessmentId            String            @map("assessment_id") @db.Uuid
   /// Повреждение на схеме кузова, если оценка сделана по нему.
+  /// У арматурной работы это деталь, к которой она относится.
   damageId                String?           @map("damage_id") @db.Uuid
+  /// PDR-ремонт или арматурная работа. Одна таблица на оба вида: итог оценки
+  /// складывается из них вместе, а второй механизм расчёта не нужен.
+  kind                    EstimateItemKind  @default(damage)
+  /// Название арматурной работы. У PDR-строк собирается из детали и размера.
+  title                   String?
   position                Int
   panelCode               String?           @map("panel_code")
   damageType              String?           @map("damage_type")

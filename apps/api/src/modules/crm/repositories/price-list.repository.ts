@@ -1,6 +1,6 @@
 import { Injectable } from '@nestjs/common';
 import { AppError } from '@/common/errors/app.error';
-import { Prisma, type PriceListItem } from '@prisma/client';
+import { Prisma, type EstimateItemKind, type PriceListItem } from '@prisma/client';
 import { PrismaService } from '@/infra/prisma/prisma.service';
 import { WorkspaceScopedRepository } from '@/modules/workspaces/repositories/workspace-scoped.repository';
 
@@ -10,9 +10,17 @@ export class PriceListRepository extends WorkspaceScopedRepository {
     super(prisma);
   }
 
-  async list(workspaceId: string, includeInactive = false): Promise<PriceListItem[]> {
+  async list(
+    workspaceId: string,
+    includeInactive = false,
+    kind?: EstimateItemKind,
+  ): Promise<PriceListItem[]> {
     return this.prisma.priceListItem.findMany({
-      where: { workspaceId, ...(includeInactive ? {} : { isActive: true }) },
+      where: {
+        workspaceId,
+        ...(includeInactive ? {} : { isActive: true }),
+        ...(kind ? { kind } : {}),
+      },
       orderBy: [{ position: 'asc' }, { title: 'asc' }],
     });
   }
@@ -66,9 +74,18 @@ export class PriceListRepository extends WorkspaceScopedRepository {
     await this.prisma.priceListItem.deleteMany({ where: { id: itemId, workspaceId } });
   }
 
-  /** Сколько раз позиция прайса использована в сметах. */
+  /**
+   * Сколько раз позиция прайса использована — в сметах и в оценках.
+   *
+   * Оценки считаются наравне со сметами: арматурная работа попадает сначала
+   * в оценку, и удаление позиции оборвало бы ссылку в уже посчитанной сумме.
+   */
   async usageCount(workspaceId: string, itemId: string): Promise<number> {
-    return this.prisma.estimateItem.count({ where: { workspaceId, priceListItemId: itemId } });
+    const [inEstimates, inAssessments] = await Promise.all([
+      this.prisma.estimateItem.count({ where: { workspaceId, priceListItemId: itemId } }),
+      this.prisma.assessmentItem.count({ where: { workspaceId, priceListItemId: itemId } }),
+    ]);
+    return inEstimates + inAssessments;
   }
 
   async reorder(workspaceId: string, orderedIds: string[]): Promise<void> {

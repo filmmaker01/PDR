@@ -15,6 +15,7 @@ import {
   nonEmptyString,
   optionalString,
 } from '@pdr/shared';
+import { sizeClassSchema } from './leads.dto';
 
 /** Локальное время мастерской: `YYYY-MM-DDTHH:mm`. */
 const localDateTime = z
@@ -203,7 +204,7 @@ export const priceListItemSchema = z
     title: nonEmptyString(200),
     panelCode: optionalString(40),
     damageType: optionalString(40),
-    sizeClass: z.enum(['S', 'M', 'L', 'XL']).nullable().optional(),
+    sizeClass: sizeClassSchema.nullable().optional(),
     unitPriceMinor: z.number().int().min(0).max(100_000_000),
     unit: z.enum(PRICE_UNITS).default('per_item'),
     isActive: z.boolean().optional(),
@@ -239,7 +240,7 @@ export const estimateItemsSchema = z
             title: optionalString(200),
             panelCode: optionalString(40),
             damageType: optionalString(40),
-            sizeClass: z.enum(['S', 'M', 'L', 'XL']).nullable().optional(),
+            sizeClass: sizeClassSchema.nullable().optional(),
             quantity: z.number().int().min(1).max(1000).default(1),
             material: z.enum(MATERIALS).nullable().optional(),
             accessDifficulty: z.enum(ACCESS_DIFFICULTIES).nullable().optional(),

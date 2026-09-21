@@ -1,4 +1,5 @@
 import type { Workspace, WorkspaceMember, WorkspaceRole } from '@prisma/client';
+import { DEFAULT_PRICE_COEFFICIENT } from '@pdr/shared';
 import type { WorkspacePermission, WorkspacePermissionSettings } from '@pdr/shared';
 
 /**
@@ -11,7 +12,7 @@ export interface WorkspaceContext {
   member: WorkspaceMember;
   role: WorkspaceRole;
   userId: string;
-  settings: WorkspacePermissionSettings;
+  settings: WorkspaceSettings;
   permissions: Set<WorkspacePermission>;
   /** Доступ к CRM действует: при false разрешено только чтение и экспорт. */
   hasActiveAccess: boolean;
@@ -25,6 +26,12 @@ export interface WorkspaceSettings extends WorkspacePermissionSettings {
   default_appointment_minutes: number;
   /** За сколько минут напоминать о записи. */
   reminder_lead_minutes: number;
+  /**
+   * Коэффициент стоимости по умолчанию, в процентах. Подставляется в новую
+   * оценку и меняется в ней для конкретного случая: настройка задаёт привычку
+   * мастерской, а не запрет.
+   */
+  default_price_coefficient: number;
 }
 
 export const DEFAULT_WORKSPACE_SETTINGS: WorkspaceSettings = {
@@ -36,4 +43,5 @@ export const DEFAULT_WORKSPACE_SETTINGS: WorkspaceSettings = {
   work_day_end: '20:00',
   default_appointment_minutes: 60,
   reminder_lead_minutes: 60,
+  default_price_coefficient: DEFAULT_PRICE_COEFFICIENT,
 };
