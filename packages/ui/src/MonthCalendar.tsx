@@ -38,9 +38,12 @@ function shiftMonth(month: string, delta: number): string {
 }
 
 function monthTitle(month: string): string {
-  return new Intl.DateTimeFormat('ru-RU', { month: 'long', year: 'numeric' }).format(
+  const text = new Intl.DateTimeFormat('ru-RU', { month: 'long', year: 'numeric' }).format(
     toDate(`${month}-01`),
   );
+  // Заглавной делается только первая буква: text-transform: capitalize поднял
+  // бы и сокращение года — «Сентябрь 2026 Г.».
+  return text.charAt(0).toUpperCase() + text.slice(1);
 }
 
 /** Сетка месяца от понедельника: шесть недель максимум. */

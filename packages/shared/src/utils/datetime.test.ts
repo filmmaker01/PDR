@@ -73,3 +73,18 @@ describe('addDays / isValidTimeZone', () => {
     expect(isValidTimeZone('Mars/Olympus')).toBe(false);
   });
 });
+
+describe('24-е число не превращается в нулевое', () => {
+  it('день 24 остаётся 24 в любом поясе', () => {
+    const at = new Date('2026-09-24T06:30:00.000Z');
+    expect(utcToZonedString(at, 'Europe/Moscow')).toBe('2026-09-24T09:30:00');
+    expect(utcToZonedString(at, 'Asia/Krasnoyarsk')).toBe('2026-09-24T13:30:00');
+    expect(todayInZone('Europe/Moscow', at)).toBe('2026-09-24');
+  });
+
+  it('полночь остаётся началом суток, а не концом', () => {
+    const midnight = new Date('2026-09-23T21:00:00.000Z');
+    expect(utcToZonedString(midnight, 'Europe/Moscow')).toBe('2026-09-24T00:00:00');
+    expect(todayInZone('Europe/Moscow', midnight)).toBe('2026-09-24');
+  });
+});

@@ -722,7 +722,6 @@ select {
   color: inherit;
   font: inherit;
   font-weight: 600;
-  text-transform: capitalize;
   cursor: pointer;
 }
 .pdr-month__grid {

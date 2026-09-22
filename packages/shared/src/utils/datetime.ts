@@ -38,7 +38,11 @@ export function getZonedParts(date: Date, timeZone: IanaTimeZone): ZonedParts {
   const parts = formatter(timeZone).formatToParts(date);
   const pick = (type: Intl.DateTimeFormatPartTypes): number => {
     const v = parts.find((p) => p.type === type)?.value ?? '0';
-    return Number(v === '24' ? '0' : v);
+    // Полночь в hour12: false некоторые среды отдают как 24 — это час, а не
+    // сутки. Правило касается только часа: иначе 24-е число любого месяца
+    // превращалось в нулевое, и записи этого дня терялись в календаре.
+    if (type === 'hour' && v === '24') return 0;
+    return Number(v);
   };
   return {
     year: pick('year'),
