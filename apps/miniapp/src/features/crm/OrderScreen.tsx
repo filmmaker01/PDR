@@ -317,9 +317,7 @@ export function OrderScreen() {
         <EstimatesTab workspaceId={workspaceId} orderId={orderId} canEdit={canEdit} />
       ) : null}
       {tab === 'payments' ? <PaymentsTab workspaceId={workspaceId} orderId={orderId} /> : null}
-      {tab === 'documents' ? (
-        <DocumentsTab workspaceId={workspaceId} orderId={orderId} />
-      ) : null}
+      {tab === 'documents' ? <DocumentsTab workspaceId={workspaceId} orderId={orderId} /> : null}
 
       <AssessmentSheet
         open={assessmentSheet}

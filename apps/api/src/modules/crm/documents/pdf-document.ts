@@ -181,7 +181,11 @@ export class PdfDocumentBuilder {
         });
       });
       this.doc.moveDown(0.3);
-      this.doc.moveTo(this.left, this.doc.y).lineTo(this.right, this.doc.y).strokeColor('#ccc').stroke();
+      this.doc
+        .moveTo(this.left, this.doc.y)
+        .lineTo(this.right, this.doc.y)
+        .strokeColor('#ccc')
+        .stroke();
       this.doc.moveDown(0.4);
       this.doc.font('regular');
     };
@@ -220,7 +224,11 @@ export class PdfDocumentBuilder {
     });
 
     this.doc.moveDown(0.2);
-    this.doc.moveTo(this.left, this.doc.y).lineTo(this.right, this.doc.y).strokeColor('#ccc').stroke();
+    this.doc
+      .moveTo(this.left, this.doc.y)
+      .lineTo(this.right, this.doc.y)
+      .strokeColor('#ccc')
+      .stroke();
     this.doc.moveDown(0.5);
     return this;
   }
@@ -229,7 +237,11 @@ export class PdfDocumentBuilder {
   totalLine(label: string, value: string, strong = false): this {
     const y = this.doc.y;
     this.doc.font(strong ? 'bold' : 'regular').fontSize(strong ? 12 : 10);
-    this.doc.text(label, this.left, y, { width: this.width - 90, align: 'right', lineBreak: false });
+    this.doc.text(label, this.left, y, {
+      width: this.width - 90,
+      align: 'right',
+      lineBreak: false,
+    });
     this.doc.text(value, this.right - 85, y, { width: 85, align: 'right' });
     this.doc.moveDown(0.2);
     this.doc.font('regular');
@@ -251,7 +263,10 @@ export class PdfDocumentBuilder {
         .stroke();
       this.doc.y = lineY + 4;
       if (row.hint) {
-        this.doc.fontSize(8).fillColor('#777').text(row.hint, this.left + 200, this.doc.y);
+        this.doc
+          .fontSize(8)
+          .fillColor('#777')
+          .text(row.hint, this.left + 200, this.doc.y);
         this.doc.fillColor('#000');
       }
       this.doc.moveDown(1);

@@ -711,7 +711,13 @@ const PRICE_LIST: PriceSpec[] = [
     size: null,
     type: 'hail',
   },
-  { title: 'Полировка элемента после ремонта', price: 2000, panel: null, size: null, kind: 'extra' },
+  {
+    title: 'Полировка элемента после ремонта',
+    price: 2000,
+    panel: null,
+    size: null,
+    kind: 'extra',
+  },
 ];
 
 interface OrderSpec {

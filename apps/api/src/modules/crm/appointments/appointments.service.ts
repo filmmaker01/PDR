@@ -91,7 +91,11 @@ export class AppointmentsService {
     ctx: WorkspaceContext,
     month: string,
     assigneeMemberId?: string,
-  ): Promise<{ month: string; timezone: string; days: { day: string; total: number; active: number }[] }> {
+  ): Promise<{
+    month: string;
+    timezone: string;
+    days: { day: string; total: number; active: number }[];
+  }> {
     const timezone = ctx.workspace.timezone;
     const [year, monthNo] = month.split('-').map(Number) as [number, number];
     if (!year || !monthNo || monthNo < 1 || monthNo > 12) {
@@ -99,10 +103,15 @@ export class AppointmentsService {
     }
 
     const from = zonedTimeToUtc(`${month}-01T00:00:00`, timezone);
-    const nextMonth = monthNo === 12 ? `${year + 1}-01` : `${year}-${String(monthNo + 1).padStart(2, '0')}`;
+    const nextMonth =
+      monthNo === 12 ? `${year + 1}-01` : `${year}-${String(monthNo + 1).padStart(2, '0')}`;
     const to = zonedTimeToUtc(`${nextMonth}-01T00:00:00`, timezone);
 
-    const items = await this.appointments.listRange(ctx.workspaceId, { from, to, assigneeMemberId });
+    const items = await this.appointments.listRange(ctx.workspaceId, {
+      from,
+      to,
+      assigneeMemberId,
+    });
 
     const byDay = new Map<string, { total: number; active: number }>();
     for (const item of items) {

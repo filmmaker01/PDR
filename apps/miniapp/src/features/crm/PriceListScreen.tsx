@@ -136,9 +136,7 @@ export function PriceListScreen() {
   };
 
   const currency = workspace.data?.currency ?? 'RUB';
-  const shown = (priceList.data ?? []).filter((item) =>
-    SECTION_KINDS[section].includes(item.kind),
-  );
+  const shown = (priceList.data ?? []).filter((item) => SECTION_KINDS[section].includes(item.kind));
   const isExtraWork = form.kind !== 'damage';
 
   if (priceList.isError) {
@@ -293,40 +291,40 @@ export function PriceListScreen() {
 
           {isExtraWork ? null : (
             <>
-          <Field label="Элемент кузова">
-            <select
-              className="pdr-select"
-              value={form.panelCode ?? ''}
-              onChange={(e) => setForm({ ...form, panelCode: e.target.value || null })}
-            >
-              <option value="">Любой</option>
-              {(dictionaries.data?.panels ?? []).map((panel) => (
-                <option key={panel.code} value={panel.code}>
-                  {panel.label}
-                </option>
-              ))}
-            </select>
-          </Field>
-
-          <Field label="Размер">
-            <div className="pdr-chips">
-              {(dictionaries.data?.sizeClasses ?? []).map((size) => (
-                <button
-                  key={size.code}
-                  type="button"
-                  className={`pdr-chip${form.sizeClass === size.code ? ' pdr-chip--active' : ''}`}
-                  onClick={() =>
-                    setForm({
-                      ...form,
-                      sizeClass: form.sizeClass === size.code ? null : size.code,
-                    })
-                  }
+              <Field label="Элемент кузова">
+                <select
+                  className="pdr-select"
+                  value={form.panelCode ?? ''}
+                  onChange={(e) => setForm({ ...form, panelCode: e.target.value || null })}
                 >
-                  {size.label}
-                </button>
-              ))}
-            </div>
-          </Field>
+                  <option value="">Любой</option>
+                  {(dictionaries.data?.panels ?? []).map((panel) => (
+                    <option key={panel.code} value={panel.code}>
+                      {panel.label}
+                    </option>
+                  ))}
+                </select>
+              </Field>
+
+              <Field label="Размер">
+                <div className="pdr-chips">
+                  {(dictionaries.data?.sizeClasses ?? []).map((size) => (
+                    <button
+                      key={size.code}
+                      type="button"
+                      className={`pdr-chip${form.sizeClass === size.code ? ' pdr-chip--active' : ''}`}
+                      onClick={() =>
+                        setForm({
+                          ...form,
+                          sizeClass: form.sizeClass === size.code ? null : size.code,
+                        })
+                      }
+                    >
+                      {size.label}
+                    </button>
+                  ))}
+                </div>
+              </Field>
             </>
           )}
 

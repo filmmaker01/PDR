@@ -173,9 +173,10 @@ const INSPECTION_ACT: OrderDocumentTemplate = {
           damage.size ?? '—',
           damage.priceMinor === null ? '—' : pdf.money(damage.priceMinor),
         ],
-        details: [damage.onEdge ? 'на ребре жёсткости' : null, damage.comment]
-          .filter(Boolean)
-          .join(' · ') || null,
+        details:
+          [damage.onEdge ? 'на ребре жёсткости' : null, damage.comment]
+            .filter(Boolean)
+            .join(' · ') || null,
       })),
       { empty: 'Повреждения на схеме кузова не отмечены.' },
     );

@@ -111,16 +111,17 @@ export class DocumentsService {
       works = agreed.items.map((item) => ({
         kind: item.kind,
         title: item.title,
-        details: [
-          item.kind === 'damage' ? null : ESTIMATE_ITEM_KIND_LABELS[item.kind],
-          panelLabel(item.panelCode),
-          damageTypeLabel(item.damageType),
-          sizeClassLabel(item.sizeClass),
-          item.onEdge ? 'на ребре' : null,
-          item.comment,
-        ]
-          .filter(Boolean)
-          .join(' · ') || null,
+        details:
+          [
+            item.kind === 'damage' ? null : ESTIMATE_ITEM_KIND_LABELS[item.kind],
+            panelLabel(item.panelCode),
+            damageTypeLabel(item.damageType),
+            sizeClassLabel(item.sizeClass),
+            item.onEdge ? 'на ребре' : null,
+            item.comment,
+          ]
+            .filter(Boolean)
+            .join(' · ') || null,
         quantity: item.quantity,
         unitPriceMinor: Number(item.unitPriceMinor),
         lineTotalMinor: Number(item.lineTotalMinor),

@@ -13,13 +13,7 @@ import { useOrderDocuments } from './api';
  * в Telegram WebView собственного диалога печати нет, а системный просмотр
  * умеет и печать, и отправку клиенту.
  */
-export function DocumentsTab({
-  workspaceId,
-  orderId,
-}: {
-  workspaceId: string;
-  orderId: string;
-}) {
+export function DocumentsTab({ workspaceId, orderId }: { workspaceId: string; orderId: string }) {
   const documents = useOrderDocuments(workspaceId);
 
   const open = useMutation({
@@ -66,14 +60,18 @@ export function DocumentsTab({
           <div className="pdr-row" style={{ gap: 8 }}>
             <Button
               className="pdr-grow"
-              loading={open.isPending && open.variables?.kind === item.kind && !open.variables.download}
+              loading={
+                open.isPending && open.variables?.kind === item.kind && !open.variables.download
+              }
               onClick={() => open.mutate({ kind: item.kind, download: false, title: item.title })}
             >
               Открыть и распечатать
             </Button>
             <Button
               variant="secondary"
-              loading={open.isPending && open.variables?.kind === item.kind && open.variables.download}
+              loading={
+                open.isPending && open.variables?.kind === item.kind && open.variables.download
+              }
               onClick={() => open.mutate({ kind: item.kind, download: true, title: item.title })}
             >
               Скачать

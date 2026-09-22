@@ -2,11 +2,7 @@ import { useEffect, useState } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
 import { useMutation, useQueryClient } from '@tanstack/react-query';
 import { ApiError } from '@pdr/api-client';
-import {
-  PRICE_COEFFICIENT_MAX,
-  PRICE_COEFFICIENT_MIN,
-  PRICE_COEFFICIENT_STEP,
-} from '@pdr/shared';
+import { PRICE_COEFFICIENT_MAX, PRICE_COEFFICIENT_MIN, PRICE_COEFFICIENT_STEP } from '@pdr/shared';
 import { Badge, Button, Card, EmptyState, Field, Input, ListItem, SkeletonList } from '@pdr/ui';
 import { api } from '@/shared/api';
 import { alertDialog, haptic } from '@/shared/telegram';

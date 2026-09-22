@@ -185,9 +185,12 @@ export function AssessmentSheet({
     calcTimer.current = setTimeout(() => calc.mutate(next), 300);
   };
 
-  useEffect(() => () => {
-    if (calcTimer.current) clearTimeout(calcTimer.current);
-  }, []);
+  useEffect(
+    () => () => {
+      if (calcTimer.current) clearTimeout(calcTimer.current);
+    },
+    [],
+  );
 
   const analyze = useMutation({
     mutationFn: () =>

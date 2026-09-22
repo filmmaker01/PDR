@@ -252,7 +252,10 @@ describe('коэффициент стоимости', () => {
   });
 
   it('при 100 % формула не врёт про умножение', () => {
-    const result = calcAssessment([{ panelCode: 'hood', damageType: 'dent', sizeClass: 'M' }], PRICE_LIST);
+    const result = calcAssessment(
+      [{ panelCode: 'hood', damageType: 'dent', sizeClass: 'M' }],
+      PRICE_LIST,
+    );
     expect(result.pdrMinor).toBe(400_000);
     expect(result.formula).not.toContain('×');
   });

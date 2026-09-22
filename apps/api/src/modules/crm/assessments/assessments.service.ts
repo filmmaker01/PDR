@@ -218,10 +218,14 @@ export class AssessmentsService {
       vision,
       // Разбор фотографии проходит тот же путь, что и ручной ввод параметров:
       // базовый расчёт по прайсу, затем коэффициент, затем правка мастером.
-      calc: calcAssessment(items.map((i) => this.toLine(i)), rules, {
-        coefficientPercent: this.coefficientOf(ctx),
-        currency: ctx.workspace.currency,
-      }),
+      calc: calcAssessment(
+        items.map((i) => this.toLine(i)),
+        rules,
+        {
+          coefficientPercent: this.coefficientOf(ctx),
+          currency: ctx.workspace.currency,
+        },
+      ),
       items,
     };
   }

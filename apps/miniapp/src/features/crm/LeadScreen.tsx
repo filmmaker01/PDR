@@ -343,8 +343,8 @@ export function LeadScreen() {
                 ) : null}
                 {assessment.suggestedMinor !== assessment.totalMinor ? (
                   <div className="pdr-hint">
-                    Расчёт по прайсу: {formatMinor(assessment.suggestedMinor, assessment.currency)} ·
-                    итог назначен мастером
+                    Расчёт по прайсу: {formatMinor(assessment.suggestedMinor, assessment.currency)}{' '}
+                    · итог назначен мастером
                   </div>
                 ) : null}
                 {assessment.explanation ? (

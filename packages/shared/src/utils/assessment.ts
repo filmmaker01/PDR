@@ -419,7 +419,9 @@ export function calcAssessment(
     };
   });
 
-  const extras = (options.extras ?? []).map((extra, index) => resolveExtra(extra, rules, index + 1));
+  const extras = (options.extras ?? []).map((extra, index) =>
+    resolveExtra(extra, rules, index + 1),
+  );
 
   const coefficientPercent = normalizePriceCoefficient(
     options.coefficientPercent ?? DEFAULT_PRICE_COEFFICIENT,
