@@ -30,6 +30,8 @@ interface FormState {
   sizeClass: string | null;
   price: string;
   unit: 'per_item' | 'per_dent' | 'per_hour';
+  /** Позиция предлагается при наборе. Снятая галочка — архив. */
+  isActive: boolean;
 }
 
 const EMPTY: FormState = {
@@ -41,6 +43,7 @@ const EMPTY: FormState = {
   sizeClass: null,
   price: '',
   unit: 'per_item',
+  isActive: true,
 };
 
 /**
@@ -89,6 +92,7 @@ export function PriceListScreen() {
         sizeClass: state.sizeClass,
         unitPriceMinor,
         unit: state.unit,
+        isActive: state.isActive,
       };
       return state.id
         ? api.patch(`/workspaces/${workspaceId}/price-list/${state.id}`, body)
@@ -131,6 +135,7 @@ export function PriceListScreen() {
       sizeClass: item.sizeClass,
       price: String(item.unitPriceMinor / 100),
       unit: item.unit,
+      isActive: item.isActive,
     });
     setSheet(true);
   };
@@ -327,6 +332,23 @@ export function PriceListScreen() {
               </Field>
             </>
           )}
+
+          {form.id ? (
+            <label className="pdr-row" style={{ cursor: 'pointer' }}>
+              <input
+                type="checkbox"
+                checked={form.isActive}
+                onChange={(e) => setForm({ ...form, isActive: e.target.checked })}
+              />
+              <span className="pdr-grow">
+                Предлагать при наборе
+                <span className="pdr-hint" style={{ display: 'block' }}>
+                  Снимите, чтобы убрать позицию из справочника. Цены в уже составленных сметах и
+                  оценках не изменятся.
+                </span>
+              </span>
+            </label>
+          ) : null}
 
           <Button block loading={save.isPending} onClick={() => save.mutate(form)}>
             Сохранить
