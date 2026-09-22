@@ -120,7 +120,11 @@ describe('CRM: прайс и сметы', () => {
         .expect(200);
       expect(res.body.panels.some((p: { code: string }) => p.code === 'hood')).toBe(true);
       expect(res.body.damageTypes.some((d: { code: string }) => d.code === 'hail')).toBe(true);
-      expect(res.body.sizeClasses).toHaveLength(4);
+      // Сетка размеров: мелкие классы вмятин и крупные зоны.
+      const sizeCodes = res.body.sizeClasses.map((size: { code: string }) => size.code);
+      expect(sizeCodes).toContain('M');
+      expect(sizeCodes).toContain('40x40');
+      expect(sizeCodes).toContain('60x60');
     });
   });
 

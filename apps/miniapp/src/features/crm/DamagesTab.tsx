@@ -1,6 +1,6 @@
 import { useMemo, useState } from 'react';
 import { CarScheme, Card, EmptyState, ListItem, SkeletonList } from '@pdr/ui';
-import { damageTypeLabel, panelLabel } from '@pdr/shared';
+import { damageTypeLabel, panelLabel, sizeClassLabel } from '@pdr/shared';
 import { formatMinor } from '@/shared/format';
 import { useDamages } from './api';
 import { DamageSheet, type DamageParent } from './DamageSheet';
@@ -83,7 +83,7 @@ export function DamagesTab({
                 title={panelLabel(damage.panelCode) ?? damage.panelCode}
                 subtitle={[
                   damageTypeLabel(damage.damageType),
-                  damage.sizeClass ? `размер ${damage.sizeClass}` : null,
+                  damage.sizeClass ? `размер ${sizeClassLabel(damage.sizeClass)}` : null,
                   damage.widthMm && damage.heightMm
                     ? `${Math.round(damage.widthMm / 10)}×${Math.round(damage.heightMm / 10)} см`
                     : null,

@@ -14,7 +14,7 @@ import {
   Textarea,
   useUploadQueue,
 } from '@pdr/ui';
-import { damageTypeLabel, panelLabel } from '@pdr/shared';
+import { damageTypeLabel, panelLabel, sizeClassLabel } from '@pdr/shared';
 import { api } from '@/shared/api';
 import { createUploadTransport } from '@/shared/uploads';
 import { formatPhoneRu } from '@/shared/format';
@@ -360,7 +360,7 @@ export function NewOrderScreen() {
                 title={panelLabel(damage.panelCode) ?? damage.panelCode}
                 subtitle={[
                   damageTypeLabel(damage.damageType),
-                  damage.sizeClass ? `размер ${damage.sizeClass}` : null,
+                  damage.sizeClass ? `размер ${sizeClassLabel(damage.sizeClass)}` : null,
                 ]
                   .filter(Boolean)
                   .join(' · ')}

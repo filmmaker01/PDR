@@ -145,6 +145,14 @@ function totals(pdf: PdfDocumentBuilder, ctx: OrderDocumentContext): void {
   }
   if (t.extrasMinor > 0) pdf.totalLine('Арматурные работы', pdf.money(t.extrasMinor));
   if (t.discountMinor > 0) pdf.totalLine('Скидка', `−${pdf.money(t.discountMinor)}`);
+
+  // Мастер вправе назвать окончательную цену. Тогда расчёт и итог расходятся,
+  // и умолчать об этом нельзя: документ выглядел бы как ошибка в арифметике.
+  const calculated = t.pdrMinor + t.extrasMinor - t.discountMinor;
+  if (calculated > 0 && calculated !== t.totalMinor) {
+    pdf.totalLine('По расчёту', pdf.money(calculated));
+    pdf.totalLine('Цена согласована мастером', pdf.money(t.totalMinor));
+  }
   pdf.totalLine('Итого', pdf.money(t.totalMinor), true);
 }
 
