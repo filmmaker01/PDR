@@ -1521,6 +1521,26 @@ async function seedLeads(input: {
       damageIds.push(created.id);
     }
 
+    // Арматурные работы мастер добавляет в карточке повреждения, поэтому в
+    // демо-данных они висят на детали, а не только в оценке.
+    for (const [index, extra] of (spec.extras ?? []).entries()) {
+      if (damageIds.length === 0) break;
+      const fromCatalog = await prisma.priceListItem.findFirst({
+        where: { workspaceId: input.workspaceId, kind: 'disassembly', title: extra.title },
+      });
+      await prisma.damageExtraWork.create({
+        data: {
+          workspaceId: input.workspaceId,
+          damageId: damageIds[0]!,
+          priceListItemId: fromCatalog?.id ?? null,
+          title: extra.title,
+          quantity: 1,
+          unitPriceMinor: minor(extra.price),
+          position: index + 1,
+        },
+      });
+    }
+
     if (spec.withPhoto) {
       const fileId = await createPhotoFile({
         ownerUserId: input.ownerUserId,

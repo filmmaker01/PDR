@@ -12,6 +12,7 @@ import {
   calcEstimateTotals,
   calcPaymentStatus,
   defaultItemTitle,
+  describeDamageSize,
   lineTotal,
   ownsRecord,
   type DiscountInput,
@@ -216,7 +217,13 @@ export class EstimatesService {
       const title =
         item.title?.trim() ||
         source?.title ||
-        defaultItemTitle({ panelCode, damageType, quantity, sizeClass });
+        defaultItemTitle({
+          panelCode,
+          damageType,
+          quantity,
+          sizeClass,
+          sizeText: describeDamageSize(item.widthMm, item.heightMm, sizeClass).actual,
+        });
 
       return {
         position: index + 1,

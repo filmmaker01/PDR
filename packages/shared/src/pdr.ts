@@ -185,19 +185,26 @@ export function isKnownSizeClass(code: string): boolean {
   return SIZE_CLASSES.some((size) => size.code === code);
 }
 
-/** Название позиции сметы по умолчанию: «Капот — град, 12 шт, S». */
+/**
+ * Название позиции сметы по умолчанию: «Капот — град, 12 шт, 40×40».
+ *
+ * Если известен измеренный размер, он и попадает в название: тарифная зона —
+ * дело калькулятора, а в документе клиент должен узнать своё повреждение.
+ */
 export function defaultItemTitle(input: {
   panelCode?: string | null;
   damageType?: string | null;
   quantity?: number | null;
   sizeClass?: string | null;
+  /** Готовая подпись измеренного размера, например «300 × 300 см». */
+  sizeText?: string | null;
 }): string {
   const panel = panelLabel(input.panelCode);
   const damage = damageTypeLabel(input.damageType)?.toLowerCase();
   const parts: string[] = [];
   if (damage) parts.push(damage);
   if (input.quantity && input.quantity > 1) parts.push(`${input.quantity} шт`);
-  const size = sizeClassLabel(input.sizeClass);
+  const size = input.sizeText ?? sizeClassLabel(input.sizeClass);
   if (size) parts.push(size);
   const tail = parts.join(', ');
   if (panel && tail) return `${panel} — ${tail}`;

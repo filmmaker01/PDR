@@ -7,6 +7,7 @@ import {
   HttpStatus,
   Param,
   Post,
+  Put,
   Query,
   Req,
   Res,
@@ -59,13 +60,35 @@ export class FilesController {
     res.send(body);
   }
 
-  @Post('local')
+  /**
+   * Приём файла локальным хранилищем.
+   *
+   * Ссылка подписывается методом `PUT` — им и отправляет браузер. Маршрут
+   * отвечал только на POST, и в локальном и staging-окружении не загружалась
+   * ни одна фотография: очередь получала 404, повторяла и сдавалась.
+   * POST оставлен: им пользуются интеграционные тесты.
+   */
+  @Put('local')
   @Public()
   @ApiExcludeEndpoint()
   async localPut(
     @Query() query: Record<string, string>,
     @Req() req: Request,
   ): Promise<{ ok: true }> {
+    return this.storeLocal(query, req);
+  }
+
+  @Post('local')
+  @Public()
+  @ApiExcludeEndpoint()
+  async localPost(
+    @Query() query: Record<string, string>,
+    @Req() req: Request,
+  ): Promise<{ ok: true }> {
+    return this.storeLocal(query, req);
+  }
+
+  private async storeLocal(query: Record<string, string>, req: Request): Promise<{ ok: true }> {
     this.assertLocalDriver();
     const { key, op, expires, sig } = query;
     if (!key || op !== 'put' || !expires || !sig) throw AppError.notFound('Не найдено');

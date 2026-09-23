@@ -168,6 +168,7 @@ export class DocumentsService {
                 damageType: item.damageType,
                 quantity: item.quantity,
                 sizeClass: item.sizeClass,
+                sizeText: describeDamageSize(item.widthMm, item.heightMm, item.sizeClass).actual,
               })
             : (item.title ?? 'Арматурная работа'),
         details:
@@ -242,11 +243,12 @@ export class DocumentsService {
               damageType: damage.damageType,
               quantity: damage.quantity,
               sizeClass: damage.sizeClass,
+              sizeText: row.size,
             }),
+            // Размер уже в названии строки: повторять его подписью незачем.
             details:
-              [row.size, damage.onEdge ? 'на ребре' : null, damage.comment]
-                .filter(Boolean)
-                .join(' · ') || null,
+              [damage.onEdge ? 'на ребре' : null, damage.comment].filter(Boolean).join(' · ') ||
+              null,
             quantity: 1,
             unitPriceMinor: price,
             lineTotalMinor: price,
