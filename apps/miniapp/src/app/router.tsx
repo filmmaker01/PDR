@@ -1,4 +1,5 @@
-import { createBrowserRouter } from 'react-router-dom';
+import { createBrowserRouter, type Params } from 'react-router-dom';
+import type { BackHandle } from '@/shared/navigation';
 import { RootLayout } from './RootLayout';
 import { PlaceholderScreen } from './PlaceholderScreen';
 import { ProfileScreen } from '@/features/profile/ProfileScreen';
@@ -35,6 +36,14 @@ import { AttemptScreen } from '@/features/learning/AttemptScreen';
 import { AttemptResultScreen } from '@/features/learning/AttemptResultScreen';
 import { ReviewQueueScreen } from '@/features/curator/ReviewQueueScreen';
 import { ReviewScreen } from '@/features/curator/ReviewScreen';
+
+/**
+ * Внутренний экран мастерской: у него есть «← Назад», а если истории нет
+ * (открыли по ссылке), возврат ведёт в соответствующий раздел.
+ */
+function backTo(section: string): BackHandle {
+  return { back: (params: Params<string>) => `/workspace/${params.workspaceId}/${section}` };
+}
 
 export const router = createBrowserRouter([
   {
@@ -76,19 +85,71 @@ export const router = createBrowserRouter([
           { path: 'settings', element: <WorkspaceSettingsScreen /> },
         ],
       },
-      { path: 'workspace/:workspaceId/orders/new', element: <NewOrderScreen /> },
-      { path: 'workspace/:workspaceId/leads/new', element: <NewLeadScreen /> },
-      { path: 'workspace/:workspaceId/leads/:leadId', element: <LeadScreen /> },
-      { path: 'workspace/:workspaceId/orders/:orderId', element: <OrderScreen /> },
-      { path: 'workspace/:workspaceId/clients/:clientId', element: <ClientScreen /> },
-      { path: 'workspace/:workspaceId/vehicles/:vehicleId', element: <VehicleScreen /> },
-      { path: 'workspace/:workspaceId/price-list', element: <PriceListScreen /> },
-      { path: 'workspace/:workspaceId/payments', element: <PaymentJournalScreen /> },
-      { path: 'workspace/:workspaceId/analytics', element: <AnalyticsScreen /> },
-      { path: 'workspace/:workspaceId/members', element: <EmployeesScreen /> },
-      { path: 'workspace/:workspaceId/audit', element: <WorkspaceAuditScreen /> },
-      { path: 'workspace/:workspaceId/export', element: <ExportScreen /> },
-      { path: 'workspace/:workspaceId/estimates/:estimateId', element: <EstimateEditorScreen /> },
+      {
+        path: 'workspace/:workspaceId/orders/new',
+        element: <NewOrderScreen />,
+        handle: backTo('orders'),
+      },
+      {
+        path: 'workspace/:workspaceId/leads/new',
+        element: <NewLeadScreen />,
+        handle: backTo('leads'),
+      },
+      {
+        path: 'workspace/:workspaceId/leads/:leadId',
+        element: <LeadScreen />,
+        handle: backTo('leads'),
+      },
+      {
+        path: 'workspace/:workspaceId/orders/:orderId',
+        element: <OrderScreen />,
+        handle: backTo('orders'),
+      },
+      {
+        path: 'workspace/:workspaceId/clients/:clientId',
+        element: <ClientScreen />,
+        handle: backTo('clients'),
+      },
+      {
+        path: 'workspace/:workspaceId/vehicles/:vehicleId',
+        element: <VehicleScreen />,
+        handle: backTo('clients'),
+      },
+      {
+        path: 'workspace/:workspaceId/price-list',
+        element: <PriceListScreen />,
+        handle: backTo('settings'),
+      },
+      {
+        path: 'workspace/:workspaceId/payments',
+        element: <PaymentJournalScreen />,
+        handle: backTo('settings'),
+      },
+      {
+        path: 'workspace/:workspaceId/analytics',
+        element: <AnalyticsScreen />,
+        handle: backTo('settings'),
+      },
+      {
+        path: 'workspace/:workspaceId/members',
+        element: <EmployeesScreen />,
+        handle: backTo('settings'),
+      },
+      {
+        path: 'workspace/:workspaceId/audit',
+        element: <WorkspaceAuditScreen />,
+        handle: backTo('settings'),
+      },
+      {
+        path: 'workspace/:workspaceId/export',
+        element: <ExportScreen />,
+        handle: backTo('settings'),
+      },
+      {
+        path: 'workspace/:workspaceId/estimates/:estimateId',
+        element: <EstimateEditorScreen />,
+        handle: backTo('orders'),
+      },
       { path: 'club', element: <ClubScreen /> },
       { path: 'profile', element: <ProfileScreen /> },
       { path: 'profile/notifications', element: <NotificationsScreen /> },

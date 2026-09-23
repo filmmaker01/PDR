@@ -1,8 +1,8 @@
-import { useState } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
 import { LEAD_STATUS_LABELS } from '@pdr/shared';
 import { Badge, Button, Card, EmptyState, ListItem, SkeletonList } from '@pdr/ui';
 import { formatDateTime, formatMinor, formatPhoneRu } from '@/shared/format';
+import { useStickyState } from '@/shared/navigation';
 import { useLeads, useLeadsSummary } from './api';
 import { ScreenError } from './ScreenError';
 import { LEAD_STATUS_TONES, type LeadListItem, type LeadStatus } from './types';
@@ -27,8 +27,11 @@ function title(lead: LeadListItem): string {
 export function LeadsScreen() {
   const { workspaceId = '' } = useParams();
   const navigate = useNavigate();
-  const [filter, setFilter] = useState<LeadStatus | 'all' | 'due'>('all');
-  const [search, setSearch] = useState('');
+  const [filter, setFilter] = useStickyState<LeadStatus | 'all' | 'due'>(
+    `${workspaceId}.leads.filter`,
+    'all',
+  );
+  const [search, setSearch] = useStickyState(`${workspaceId}.leads.search`, '');
 
   const summary = useLeadsSummary(workspaceId);
   const leads = useLeads(workspaceId, {

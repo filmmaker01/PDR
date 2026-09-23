@@ -1,7 +1,7 @@
-import { useState } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
 import { Badge, Button, Card, Chips, EmptyState, Input, ListItem, SkeletonList } from '@pdr/ui';
 import { formatMinor } from '@/shared/format';
+import { useStickyState } from '@/shared/navigation';
 import { useMembers, useOrders } from './api';
 import { ScreenError } from './ScreenError';
 import { STATUS_TONES, type OrderStatus } from './types';
@@ -19,10 +19,16 @@ const STATUS_FILTERS: { value: OrderStatus; label: string }[] = [
 export function OrdersScreen() {
   const { workspaceId = '' } = useParams();
   const navigate = useNavigate();
-  const [status, setStatus] = useState<OrderStatus | null>(null);
-  const [assigneeMemberId, setAssigneeMemberId] = useState<string | null>(null);
-  const [search, setSearch] = useState('');
-  const [query, setQuery] = useState('');
+  const [status, setStatus] = useStickyState<OrderStatus | null>(
+    `${workspaceId}.orders.status`,
+    null,
+  );
+  const [assigneeMemberId, setAssigneeMemberId] = useStickyState<string | null>(
+    `${workspaceId}.orders.assignee`,
+    null,
+  );
+  const [search, setSearch] = useStickyState(`${workspaceId}.orders.search`, '');
+  const [query, setQuery] = useStickyState(`${workspaceId}.orders.query`, '');
 
   const members = useMembers(workspaceId);
   const orders = useOrders(workspaceId, {

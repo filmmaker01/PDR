@@ -1,6 +1,7 @@
-import { NavLink, Outlet } from 'react-router-dom';
+import { NavLink, Outlet, ScrollRestoration, useMatches } from 'react-router-dom';
 import clsx from 'clsx';
 import { AuthGate } from '@/features/auth/AuthGate';
+import { BackBar, isBackHandle } from '@/shared/navigation';
 
 const TABS = [
   { to: '/learning', label: 'Обучение', icon: '🎓' },
@@ -9,10 +10,16 @@ const TABS = [
 ];
 
 export function RootLayout() {
+  // Самый глубокий маршрут с обработчиком «назад» — текущий внутренний экран.
+  const matches = useMatches();
+  const inner = [...matches].reverse().find((match) => isBackHandle(match.handle));
+  const fallback = inner && isBackHandle(inner.handle) ? inner.handle.back(inner.params) : null;
+
   return (
     <AuthGate>
       <div className="app-shell">
         <main className="app-content pdr-page">
+          {fallback ? <BackBar fallback={fallback} /> : null}
           <Outlet />
         </main>
         <nav className="pdr-tabbar">
@@ -32,6 +39,8 @@ export function RootLayout() {
           ))}
         </nav>
       </div>
+      {/* Вернувшись «Назад» в список, мастер оказывается там же, где был. */}
+      <ScrollRestoration />
     </AuthGate>
   );
 }

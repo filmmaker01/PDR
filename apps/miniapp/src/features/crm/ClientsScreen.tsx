@@ -16,6 +16,7 @@ import {
 import { api } from '@/shared/api';
 import { formatMinor, formatPhoneRu } from '@/shared/format';
 import { alertDialog, confirmDialog, haptic } from '@/shared/telegram';
+import { useStickyState } from '@/shared/navigation';
 import { useClient, useClients, useVehicle, useWorkspace } from './api';
 import { ScreenError } from './ScreenError';
 import { STATUS_TONES } from './types';
@@ -24,8 +25,8 @@ export function ClientsScreen() {
   const { workspaceId = '' } = useParams();
   const navigate = useNavigate();
   const queryClient = useQueryClient();
-  const [search, setSearch] = useState('');
-  const [query, setQuery] = useState('');
+  const [search, setSearch] = useStickyState(`${workspaceId}.clients.search`, '');
+  const [query, setQuery] = useStickyState(`${workspaceId}.clients.query`, '');
   const [sheet, setSheet] = useState(false);
   const [name, setName] = useState('');
   const [phone, setPhone] = useState('');

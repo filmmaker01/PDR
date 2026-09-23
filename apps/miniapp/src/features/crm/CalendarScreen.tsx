@@ -16,6 +16,7 @@ import {
 import { todayInZone, zonedTimeToUtc } from '@pdr/shared';
 import { api } from '@/shared/api';
 import { alertDialog, haptic } from '@/shared/telegram';
+import { useStickyState } from '@/shared/navigation';
 import { useAppointmentMonth, useAppointments, useMembers, useWorkspace } from './api';
 import { AppointmentSheet } from './AppointmentSheet';
 import { ScreenError } from './ScreenError';
@@ -67,9 +68,14 @@ export function CalendarScreen() {
   const members = useMembers(workspaceId);
   const timezone = workspace.data?.timezone ?? 'Europe/Moscow';
 
-  const [view, setView] = useState<View>('day');
-  const [anchor, setAnchor] = useState(() => todayInZone(timezone));
-  const [assigneeMemberId, setAssigneeMemberId] = useState<string | null>(null);
+  const [view, setView] = useStickyState<View>(`${workspaceId}.calendar.view`, 'day');
+  const [anchor, setAnchor] = useStickyState(`${workspaceId}.calendar.anchor`, () =>
+    todayInZone(timezone),
+  );
+  const [assigneeMemberId, setAssigneeMemberId] = useStickyState<string | null>(
+    `${workspaceId}.calendar.assignee`,
+    null,
+  );
   const [monthOpen, setMonthOpen] = useState(false);
   const [month, setMonth] = useState(() => todayInZone(timezone).slice(0, 7));
   const [createOpen, setCreateOpen] = useState(false);

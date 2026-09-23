@@ -16,6 +16,7 @@ import {
 import { api } from '@/shared/api';
 import { formatDateTime, formatMinor, formatPhoneRu } from '@/shared/format';
 import { alertDialog, confirmDialog, haptic } from '@/shared/telegram';
+import { useStickyState } from '@/shared/navigation';
 import { useMembers, useOrder, useWorkspace } from './api';
 import { AssessmentSheet } from './AssessmentSheet';
 import { DamagesTab } from './DamagesTab';
@@ -32,7 +33,7 @@ export function OrderScreen() {
   const { workspaceId = '', orderId = '' } = useParams();
   const navigate = useNavigate();
   const queryClient = useQueryClient();
-  const [tab, setTab] = useState<Tab>('work');
+  const [tab, setTab] = useStickyState<Tab>(`order.${orderId}.tab`, 'work');
   const [statusSheet, setStatusSheet] = useState(false);
   const [appointmentSheet, setAppointmentSheet] = useState(false);
   const [assessmentSheet, setAssessmentSheet] = useState(false);

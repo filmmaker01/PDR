@@ -21,3 +21,26 @@
   padding: 24px;
   text-align: center;
 }
+
+/* Внутренняя навигация: «Назад» возвращает на прошлый экран приложения,
+   а не закрывает Mini App, как кнопка «Закрыть» в шапке Telegram. */
+.pdr-backbar {
+  display: flex;
+  margin: -4px 0 8px;
+}
+.pdr-backbar__button {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  min-height: 36px;
+  padding: 6px 12px 6px 8px;
+  border: 0;
+  border-radius: 999px;
+  background: var(--pdr-section-bg);
+  color: var(--pdr-link);
+  font: 500 15px var(--pdr-font);
+  cursor: pointer;
+}
+.pdr-backbar__button:active {
+  opacity: 0.7;
+}

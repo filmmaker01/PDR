@@ -18,6 +18,7 @@ import {
 import { api } from '@/shared/api';
 import { formatDateTime, formatMinor, formatPhoneRu } from '@/shared/format';
 import { alertDialog, confirmDialog, haptic } from '@/shared/telegram';
+import { useStickyState } from '@/shared/navigation';
 import { useAssessments, useLead, useWorkspace } from './api';
 import { AssessmentSheet } from './AssessmentSheet';
 import { DamagesTab } from './DamagesTab';
@@ -41,7 +42,7 @@ export function LeadScreen() {
   const navigate = useNavigate();
   const queryClient = useQueryClient();
 
-  const [tab, setTab] = useState<Tab>('about');
+  const [tab, setTab] = useStickyState<Tab>(`lead.${leadId}.tab`, 'about');
   const [statusSheet, setStatusSheet] = useState(false);
   const [pendingStatus, setPendingStatus] = useState<LeadStatus | null>(null);
   const [comment, setComment] = useState('');
