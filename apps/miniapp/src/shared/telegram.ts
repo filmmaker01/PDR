@@ -110,8 +110,22 @@ export function requestWriteAccess(): Promise<boolean> {
   });
 }
 
+/**
+ * Диалоги Telegram доступны, только когда приложение действительно открыто
+ * внутри клиента.
+ *
+ * Скрипт telegram-web-app.js подключён всегда, поэтому в обычном браузере
+ * `window.Telegram.WebApp` существует, но отвечает версией 6.0 и на
+ * `showConfirm` не вызывает колбэк вовсе. Промис в этом случае не
+ * разрешается никогда: в демо-входе на staging кнопки «Создать заказ» и
+ * «Удалить» молча не срабатывали. Признак настоящего Telegram — initData.
+ */
+function telegramDialogs(): TelegramWebApp | null {
+  return isInsideTelegram() ? getWebApp() : null;
+}
+
 export function confirmDialog(message: string): Promise<boolean> {
-  const wa = getWebApp();
+  const wa = telegramDialogs();
   return new Promise((resolve) => {
     if (!wa) return resolve(window.confirm(message));
     wa.showConfirm(message, (ok) => resolve(ok));
@@ -119,7 +133,7 @@ export function confirmDialog(message: string): Promise<boolean> {
 }
 
 export function alertDialog(message: string): Promise<void> {
-  const wa = getWebApp();
+  const wa = telegramDialogs();
   return new Promise((resolve) => {
     if (!wa) {
       window.alert(message);
