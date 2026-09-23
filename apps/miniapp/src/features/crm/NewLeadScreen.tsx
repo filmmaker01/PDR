@@ -301,6 +301,7 @@ export function NewLeadScreen() {
       <Card>
         <CarScheme
           counts={counts}
+          activeCode={damageSheet ? panelCode : null}
           onSelect={(code) => {
             setPanelCode(code);
             setDamageSheet(true);

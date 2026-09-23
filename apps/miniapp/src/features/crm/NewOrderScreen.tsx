@@ -343,6 +343,7 @@ export function NewOrderScreen() {
       <Card>
         <CarScheme
           counts={damageCounts}
+          activeCode={damageSheet ? panelCode : null}
           onSelect={(code) => {
             setPanelCode(code);
             setDamageSheet(true);

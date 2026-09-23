@@ -65,6 +65,7 @@ export function DamagesTab({
         <Card>
           <CarScheme
             counts={counts}
+            activeCode={sheetOpen ? panelCode : null}
             onSelect={openNew}
             disabled={!canEdit}
             hint={

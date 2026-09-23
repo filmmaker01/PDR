@@ -145,7 +145,7 @@ export function DamageSheet({
   const size = describeDamageSize(widthMm, heightMm, sizeClass);
   const manualPriceMinor = price.trim() ? parseMajorToMinor(price) : null;
 
-  const payload = (): DamageDraft & { priceMinor?: number | null } => ({
+  const payload = (pdrMinor: number | null): DamageDraft & { priceMinor?: number | null } => ({
     panelCode,
     damageType: damageType || null,
     sizeClass,
@@ -157,7 +157,7 @@ export function DamageSheet({
     onEdge,
     comment: comment.trim() || null,
     // Цена детали — расчёт по прайсу с коэффициентом, если мастер не назвал свою.
-    priceMinor: manualPriceMinor ?? preview?.pdrMinor ?? null,
+    priceMinor: manualPriceMinor ?? pdrMinor,
     extraWorks,
   });
 
@@ -174,6 +174,9 @@ export function DamageSheet({
     extraWorks: DamageExtraWorkDraft[];
     manualPriceMinor: number | null;
   }
+
+  /** Для каких параметров посчитан показанный расчёт. */
+  const previewFor = useRef<CalcParams | null>(null);
 
   const calc = useMutation({
     mutationFn: (input: CalcParams) =>
@@ -199,7 +202,10 @@ export function DamageSheet({
           unitPriceMinor: work.unitPriceMinor,
         })),
       }),
-    onSuccess: setPreview,
+    onSuccess: (result, input) => {
+      setPreview(result);
+      previewFor.current = input;
+    },
   });
 
   const params: CalcParams = useMemo(
@@ -273,11 +279,28 @@ export function DamageSheet({
     await queryClient.invalidateQueries({ queryKey: ['crm', 'order'] });
   };
 
+  /**
+   * Цена по прайсу для сохранения — строго по текущим параметрам.
+   *
+   * Расчёт приходит с паузой после правки. Если мастер нажал «Готово»
+   * раньше, показанный расчёт ещё старый (например, до выбора размера), и
+   * повреждение сохранилось бы с чужой ценой. Тогда считаем ещё раз и ждём.
+   */
+  const currentPdrMinor = async (): Promise<number | null> => {
+    if (manualPriceMinor !== null) return null;
+    if (preview && previewFor.current === params) return preview.pdrMinor;
+    if (timer.current) clearTimeout(timer.current);
+    const fresh = await calc.mutateAsync(params);
+    return fresh.pdrMinor;
+  };
+
   const save = useMutation({
-    mutationFn: () =>
-      damage
-        ? api.patch(`/workspaces/${workspaceId}/damages/${damage.id}`, payload())
-        : api.post(basePath(workspaceId, parent), payload()),
+    mutationFn: async () => {
+      const body = payload(await currentPdrMinor());
+      return damage
+        ? api.patch(`/workspaces/${workspaceId}/damages/${damage.id}`, body)
+        : api.post(basePath(workspaceId, parent), body);
+    },
     onSuccess: async () => {
       haptic('success');
       await invalidate();
@@ -302,8 +325,12 @@ export function DamageSheet({
 
   const submit = (): void => {
     if (draftMode) {
-      onDraftSave?.(payload());
-      onClose();
+      void currentPdrMinor()
+        .catch(() => preview?.pdrMinor ?? null)
+        .then((pdrMinor) => {
+          onDraftSave?.(payload(pdrMinor));
+          onClose();
+        });
       return;
     }
     save.mutate();
