@@ -24,6 +24,7 @@ import {
   MATERIAL_LABELS,
   PRICE_UNIT_LABELS,
   SIZE_CLASSES,
+  describeDamageSize,
 } from '@pdr/shared';
 import { Idempotent } from '@/common/interceptors/idempotency.interceptor';
 import { zodBody } from '@/common/pipes/zod-validation.pipe';
@@ -82,6 +83,9 @@ function serializeEstimate(estimate: EstimateWithItems): Record<string, unknown>
       panelCode: item.panelCode,
       damageType: item.damageType,
       sizeClass: item.sizeClass,
+      widthMm: item.widthMm,
+      heightMm: item.heightMm,
+      sizeText: describeDamageSize(item.widthMm, item.heightMm, item.sizeClass).actual,
       quantity: item.quantity,
       material: item.material,
       accessDifficulty: item.accessDifficulty,

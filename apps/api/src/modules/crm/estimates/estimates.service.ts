@@ -34,7 +34,11 @@ export interface EstimateItemInput {
   title?: string | null;
   panelCode?: string | null;
   damageType?: string | null;
+  /** Тарифная зона: по ней подбирается цена. */
   sizeClass?: string | null;
+  /** Фактический размер повреждения в миллиметрах: он идёт в документы. */
+  widthMm?: number | null;
+  heightMm?: number | null;
   quantity?: number;
   material?: Material | null;
   accessDifficulty?: AccessDifficulty | null;
@@ -221,6 +225,8 @@ export class EstimatesService {
         panelCode,
         damageType,
         sizeClass,
+        widthMm: item.widthMm ?? null,
+        heightMm: item.heightMm ?? null,
         quantity,
         material: item.material ?? null,
         accessDifficulty: item.accessDifficulty ?? null,

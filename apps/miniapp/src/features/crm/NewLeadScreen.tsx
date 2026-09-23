@@ -2,7 +2,7 @@ import { useState } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
 import { useMutation, useQueryClient } from '@tanstack/react-query';
 import { ApiError } from '@pdr/api-client';
-import { LEAD_CHANNEL_SOURCES, damageTypeLabel, panelLabel, sizeClassLabel } from '@pdr/shared';
+import { LEAD_CHANNEL_SOURCES, damageTypeLabel, describeDamageSize, panelLabel } from '@pdr/shared';
 import {
   Badge,
   Button,
@@ -318,7 +318,9 @@ export function NewLeadScreen() {
                 title={panelLabel(damage.panelCode) ?? damage.panelCode}
                 subtitle={[
                   damageTypeLabel(damage.damageType),
-                  damage.sizeClass ? `размер ${sizeClassLabel(damage.sizeClass)}` : null,
+                  // Показывается измеренный размер, а не тарифная зона:
+                  // 300×300 см не должно превращаться в «100×100».
+                  describeDamageSize(damage.widthMm, damage.heightMm, damage.sizeClass).actual,
                   damage.quantity && damage.quantity > 1 ? `${damage.quantity} шт` : null,
                 ]
                   .filter(Boolean)

@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { useMutation, useQueryClient } from '@tanstack/react-query';
 import { ApiError } from '@pdr/api-client';
 import { damageTypeLabel, panelLabel, sizeClassLabel } from '@pdr/shared';
@@ -16,13 +16,8 @@ import {
 import { api } from '@/shared/api';
 import { formatMinor, parseMajorToMinor } from '@/shared/format';
 import { alertDialog, haptic } from '@/shared/telegram';
-import {
-  useAssessmentCapabilities,
-  useDamages,
-  useLeadPhotos,
-  useOrderPhotos,
-  usePriceList,
-} from './api';
+import { useAssessmentCapabilities, useDamages, useLeadPhotos, useOrderPhotos } from './api';
+import { ExtraWorkPickerSheet } from './ExtraWorkPicker';
 import type { DamageParent } from './DamageSheet';
 import type {
   AssessmentAnalysis,
@@ -90,7 +85,6 @@ export function AssessmentSheet({
   const queryClient = useQueryClient();
   const capabilities = useAssessmentCapabilities(workspaceId);
   const damages = useDamages(workspaceId, parent, open);
-  const priceList = usePriceList(workspaceId);
 
   const leadId = 'leadId' in parent ? parent.leadId : '';
   const orderId = 'orderId' in parent ? parent.orderId : '';
@@ -112,11 +106,6 @@ export function AssessmentSheet({
 
   const aiAvailable = capabilities.data?.methods.find((m) => m.value === 'ai')?.available ?? false;
   const bounds = capabilities.data?.priceCoefficient ?? { min: 50, max: 200, step: 5 };
-  /** Справочник арматурных работ — те же позиции прайса, но не для повреждений. */
-  const workCatalog = useMemo(
-    () => (priceList.data ?? []).filter((item) => item.kind !== 'damage'),
-    [priceList.data],
-  );
 
   // Повреждения со схемы — готовый список позиций: их не нужно вводить заново.
   useEffect(() => {
@@ -137,7 +126,18 @@ export function AssessmentSheet({
         comment: damage.comment,
       })),
     );
-    setExtras([]);
+    // Работы, добавленные в карточке повреждения, — часть согласованной
+    // работы по детали. Оценка начинается с них, а не с пустого списка.
+    setExtras(
+      (damages.data?.items ?? []).flatMap((damage) =>
+        damage.extraWorks.map((work) => ({
+          priceListItemId: work.priceListItemId,
+          title: work.title,
+          damageId: damage.id,
+          priceInput: String(work.unitPriceMinor / 100),
+        })),
+      ),
+    );
     setCoefficient(null);
     setPreview(null);
     setAnalysis(null);
@@ -637,151 +637,29 @@ export function AssessmentSheet({
         </Button>
       </div>
 
-      <AddWorkSheet
+      <ExtraWorkPickerSheet
         open={addWorkOpen}
         onClose={() => setAddWorkOpen(false)}
-        catalog={workCatalog}
-        lines={lines}
+        workspaceId={workspaceId}
         currency={currency}
-        onAdd={(draft) => {
-          const next = [...extras, draft];
+        damageOptions={lines
+          .filter((line): line is LineDraft & { damageId: string } => Boolean(line.damageId))
+          .map((line) => ({ id: line.damageId, panelCode: line.panelCode }))}
+        onAdd={(choice) => {
+          const next = [
+            ...extras,
+            {
+              priceListItemId: choice.priceListItemId,
+              title: choice.title,
+              damageId: choice.damageId,
+              priceInput: choice.unitPriceMinor === null ? '' : String(choice.unitPriceMinor / 100),
+            },
+          ];
           setExtras(next);
           setAddWorkOpen(false);
           requestCalc({ lines, extras: next, coefficient }, true);
         }}
       />
-    </Sheet>
-  );
-}
-
-/**
- * Выбор арматурной работы.
- *
- * Справочник мастерской редактируемый, поэтому список приходит из прайса, а не
- * из кода. Своя работа добавляется здесь же — на осмотре некогда идти в
- * настройки, чтобы завести позицию.
- */
-function AddWorkSheet({
-  open,
-  onClose,
-  catalog,
-  lines,
-  currency,
-  onAdd,
-}: {
-  open: boolean;
-  onClose: () => void;
-  catalog: { id: string; title: string; unitPriceMinor: number }[];
-  lines: LineDraft[];
-  currency: string;
-  onAdd: (draft: ExtraDraft) => void;
-}) {
-  const [damageId, setDamageId] = useState<string | null>(null);
-  const [ownTitle, setOwnTitle] = useState('');
-  const [ownPrice, setOwnPrice] = useState('');
-
-  useEffect(() => {
-    if (!open) return;
-    setDamageId(null);
-    setOwnTitle('');
-    setOwnPrice('');
-  }, [open]);
-
-  const damageOptions = lines.filter((line) => line.damageId);
-
-  return (
-    <Sheet open={open} onClose={onClose} title="Арматурные работы">
-      <div className="pdr-stack">
-        {damageOptions.length > 0 ? (
-          <Field label="К какой детали" hint="Нужно для итога по детали в документах">
-            <select
-              className="pdr-select"
-              value={damageId ?? ''}
-              onChange={(e) => setDamageId(e.target.value || null)}
-            >
-              <option value="">Ко всей машине</option>
-              {damageOptions.map((line) => (
-                <option key={line.damageId!} value={line.damageId!}>
-                  {panelLabel(line.panelCode)}
-                </option>
-              ))}
-            </select>
-          </Field>
-        ) : null}
-
-        {catalog.length === 0 ? (
-          <EmptyState
-            title="Справочник пуст"
-            description="Добавьте арматурные работы в прайсе мастерской или назовите работу здесь."
-          />
-        ) : (
-          <Card flat>
-            <div className="pdr-list">
-              {catalog.map((item) => (
-                <button
-                  key={item.id}
-                  type="button"
-                  className="pdr-list__item pdr-list__item--button"
-                  onClick={() =>
-                    onAdd({
-                      priceListItemId: item.id,
-                      title: item.title,
-                      damageId,
-                      priceInput: '',
-                    })
-                  }
-                >
-                  <span className="pdr-grow">{item.title}</span>
-                  <span style={{ whiteSpace: 'nowrap' }}>
-                    {formatMinor(item.unitPriceMinor, currency)}
-                  </span>
-                </button>
-              ))}
-            </div>
-          </Card>
-        )}
-
-        <h2 className="pdr-subtitle">Своя работа</h2>
-        <Card>
-          <Field label="Название">
-            <Input
-              value={ownTitle}
-              onChange={(e) => setOwnTitle(e.target.value)}
-              placeholder="Снятие подкрылка"
-            />
-          </Field>
-          <Field label="Цена">
-            <Input
-              value={ownPrice}
-              inputMode="decimal"
-              placeholder="1500"
-              onChange={(e) => setOwnPrice(e.target.value)}
-            />
-          </Field>
-          <Button
-            block
-            disabled={!ownTitle.trim()}
-            onClick={() =>
-              onAdd({
-                priceListItemId: null,
-                title: ownTitle.trim(),
-                damageId,
-                priceInput: ownPrice.trim() || '0',
-              })
-            }
-          >
-            Добавить работу
-          </Button>
-          <div className="pdr-hint" style={{ marginTop: 6 }}>
-            Разовая работа только для этой оценки. Чтобы она появилась в справочнике, добавьте её в
-            прайсе.
-          </div>
-        </Card>
-
-        <Button variant="secondary" block onClick={onClose}>
-          Закрыть
-        </Button>
-      </div>
     </Sheet>
   );
 }

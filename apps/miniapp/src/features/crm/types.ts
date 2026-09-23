@@ -269,6 +269,10 @@ export interface EstimateItem {
   panelCode: string | null;
   damageType: string | null;
   sizeClass: string | null;
+  widthMm: number | null;
+  heightMm: number | null;
+  /** Фактический размер готовой подписью. */
+  sizeText: string | null;
   quantity: number;
   material: 'steel' | 'aluminum' | 'other' | null;
   accessDifficulty: 'easy' | 'medium' | 'hard' | null;
@@ -523,15 +527,41 @@ export interface LeadsSummary {
   due: number;
 }
 
+/** Арматурная работа повреждения, как её хранит сервер. */
+export interface DamageExtraWork {
+  id: string;
+  priceListItemId: string | null;
+  title: string;
+  quantity: number;
+  unitPriceMinor: number;
+  lineTotalMinor: number;
+}
+
+/** То же самое в форме: работа ещё может быть не сохранена. */
+export interface DamageExtraWorkDraft {
+  priceListItemId: string | null;
+  title: string;
+  quantity: number;
+  /** Цена, введённая мастером. null — берётся из справочника. */
+  unitPriceMinor: number | null;
+}
+
 export interface Damage {
   id: string;
   leadId: string | null;
   orderId: string | null;
   panelCode: string;
   damageType: string | null;
+  /** Тарифная зона: по ней считается цена. */
   sizeClass: string | null;
   widthMm: number | null;
   heightMm: number | null;
+  /** Фактический размер готовой подписью: «300 × 300 см». */
+  sizeText: string | null;
+  /** Подпись тарифной зоны: «40×40» или «100×100+». */
+  zoneLabel: string | null;
+  /** Повреждение крупнее сетки: цена считается по верхней зоне. */
+  zoneCapped: boolean;
   quantity: number;
   material: 'steel' | 'aluminum' | 'other' | null;
   accessDifficulty: 'easy' | 'medium' | 'hard' | null;
@@ -539,6 +569,10 @@ export interface Damage {
   comment: string | null;
   priceMinor: number | null;
   priceSource: DamagePriceSource | null;
+  extraWorks: DamageExtraWork[];
+  extrasMinor: number;
+  /** Итог по детали: ремонт плюс её арматурные работы. */
+  totalMinor: number;
   position: number;
   photoCount: number;
   createdAt: string;
@@ -679,6 +713,8 @@ export interface DamageDraft {
   accessDifficulty?: 'easy' | 'medium' | 'hard' | null;
   onEdge?: boolean;
   comment?: string | null;
+  /** Арматурные работы уходят вместе с повреждением. */
+  extraWorks?: DamageExtraWorkDraft[];
 }
 
 export const LEAD_STATUS_TONES: Record<

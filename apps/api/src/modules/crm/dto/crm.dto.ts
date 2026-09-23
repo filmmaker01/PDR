@@ -249,6 +249,8 @@ export const estimateItemsSchema = z
             panelCode: optionalString(40),
             damageType: optionalString(40),
             sizeClass: sizeClassSchema.nullable().optional(),
+            widthMm: z.number().int().min(1).max(5000).nullable().optional(),
+            heightMm: z.number().int().min(1).max(5000).nullable().optional(),
             quantity: z.number().int().min(1).max(1000).default(1),
             material: z.enum(MATERIALS).nullable().optional(),
             accessDifficulty: z.enum(ACCESS_DIFFICULTIES).nullable().optional(),

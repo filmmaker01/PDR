@@ -5,6 +5,8 @@ import {
   PRICE_COEFFICIENT_MIN,
   calcAssessment,
   findPriceRule,
+  describeDamageSize,
+  isSizeBeyondGrid,
   normalizePriceCoefficient,
   sizeClassForDimensions,
   suggestDamagePrice,
@@ -314,5 +316,39 @@ describe('арматурные работы', () => {
     expect(result.extras[0]!.priceListItemId).toBeNull();
     expect(result.extras[0]!.title).toBe('Своя работа');
     expect(result.extrasMinor).toBe(50_000);
+  });
+});
+
+describe('фактический размер и тарифная зона', () => {
+  it('крупное повреждение не выдаётся за размер верхней зоны', () => {
+    const view = describeDamageSize(3000, 3000);
+    expect(view.actual).toBe('300 × 300 см');
+    expect(view.zoneCode).toBe('100x100');
+    expect(view.zone).toBe('100×100+');
+    expect(view.capped).toBe(true);
+  });
+
+  it('повреждение внутри сетки показывает зону без плюса', () => {
+    const view = describeDamageSize(400, 400);
+    expect(view.actual).toBe('40 × 40 см');
+    expect(view.zone).toBe('40×40');
+    expect(view.capped).toBe(false);
+  });
+
+  it('одна сторона и дробные сантиметры читаются', () => {
+    expect(describeDamageSize(25, null).actual).toBe('2,5 см');
+    expect(describeDamageSize(null, null).actual).toBeNull();
+  });
+
+  it('без габаритов берётся сохранённый класс', () => {
+    const view = describeDamageSize(null, null, 'M');
+    expect(view.zoneCode).toBe('M');
+    expect(view.zone).toBe('M');
+  });
+
+  it('граница сетки: ровно верхняя зона не считается превышением', () => {
+    expect(isSizeBeyondGrid(1000, 1000)).toBe(false);
+    expect(isSizeBeyondGrid(1001, 1000)).toBe(true);
+    expect(isSizeBeyondGrid(null, null)).toBe(false);
   });
 });

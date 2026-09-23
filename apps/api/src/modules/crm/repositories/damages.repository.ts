@@ -1,5 +1,5 @@
 import { Injectable } from '@nestjs/common';
-import { Prisma, type Damage } from '@prisma/client';
+import { Prisma, type Damage, type DamageExtraWork } from '@prisma/client';
 import { AppError } from '@/common/errors/app.error';
 import { PrismaService } from '@/infra/prisma/prisma.service';
 import { WorkspaceScopedRepository } from '@/modules/workspaces/repositories/workspace-scoped.repository';
@@ -60,6 +60,42 @@ export class DamagesRepository extends WorkspaceScopedRepository {
       select: { position: true },
     });
     return (last?.position ?? 0) + 1;
+  }
+
+  /** Арматурные работы повреждений: карточка и документы показывают их вместе. */
+  async listExtraWorks(
+    workspaceId: string,
+    damageIds: readonly string[],
+    tx?: Prisma.TransactionClient,
+  ): Promise<DamageExtraWork[]> {
+    if (damageIds.length === 0) return [];
+    const client = tx ?? this.prisma;
+    return client.damageExtraWork.findMany({
+      where: { workspaceId, damageId: { in: [...damageIds] } },
+      orderBy: [{ damageId: 'asc' }, { position: 'asc' }],
+    });
+  }
+
+  /**
+   * Замена набора работ повреждения целиком.
+   *
+   * Карточка повреждения присылает список таким, каким мастер его видит:
+   * добавил, убрал, поправил цену. Сравнивать построчно здесь незачем —
+   * состав маленький, а правка частичным набором давала бы расхождение
+   * с тем, что на экране.
+   */
+  async replaceExtraWorks(
+    workspaceId: string,
+    damageId: string,
+    works: Omit<Prisma.DamageExtraWorkUncheckedCreateInput, 'workspaceId' | 'damageId'>[],
+    tx: Prisma.TransactionClient,
+  ): Promise<void> {
+    await tx.damageExtraWork.deleteMany({ where: { workspaceId, damageId } });
+    if (works.length > 0) {
+      await tx.damageExtraWork.createMany({
+        data: works.map((work) => ({ ...work, workspaceId, damageId })),
+      });
+    }
   }
 
   async create(

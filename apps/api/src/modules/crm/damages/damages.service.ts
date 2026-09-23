@@ -1,19 +1,44 @@
 import { Injectable } from '@nestjs/common';
-import type { AccessDifficulty, Damage, DamagePriceSource, Material } from '@prisma/client';
+import type {
+  AccessDifficulty,
+  Damage,
+  DamageExtraWork,
+  DamagePriceSource,
+  Material,
+  Prisma,
+} from '@prisma/client';
 import {
   isKnownDamageType,
   isKnownPanel,
+  resolveExtra,
   sizeClassForDimensions,
   SIZE_CLASS_CODES,
+  type PriceRule,
 } from '@pdr/shared';
 import { AppError } from '@/common/errors/app.error';
+import { PrismaService } from '@/infra/prisma/prisma.service';
 import type { WorkspaceContext } from '@/modules/workspaces/workspace.types';
 import { CrmParentAccess, type CrmParent } from '../access/crm-parent.access';
 import { DamagesRepository } from '../repositories/damages.repository';
 import { OrderPhotosRepository } from '../repositories/order-photos.repository';
+import { PriceListRepository } from '../repositories/price-list.repository';
 
 /** Столько повреждений на одной машине не бывает даже после града. */
 const MAX_DAMAGES_PER_CARD = 60;
+
+/** Арматурных работ на одной детали больше десятка не бывает. */
+const MAX_EXTRA_WORKS_PER_DAMAGE = 12;
+
+/**
+ * Арматурная работа так, как её присылает карточка повреждения: позиция
+ * справочника, своё название или и то и другое с поправленной ценой.
+ */
+export interface DamageExtraWorkInput {
+  priceListItemId?: string | null;
+  title?: string | null;
+  quantity?: number | null;
+  unitPriceMinor?: number | null;
+}
 
 export interface DamageInput {
   panelCode: string;
@@ -28,9 +53,14 @@ export interface DamageInput {
   comment?: string | null;
   priceMinor?: number | null;
   priceSource?: DamagePriceSource | null;
+  /** Арматурные работы этой детали: присылаются набором целиком. */
+  extraWorks?: DamageExtraWorkInput[] | null;
 }
 
-export type DamageWithPhotoCount = Damage & { photoCount: number };
+export type DamageWithPhotoCount = Damage & {
+  photoCount: number;
+  extraWorks: DamageExtraWork[];
+};
 
 /**
  * Повреждения, отмеченные на схеме автомобиля.
@@ -44,22 +74,45 @@ export type DamageWithPhotoCount = Damage & { photoCount: number };
 @Injectable()
 export class DamagesService {
   constructor(
+    private readonly prisma: PrismaService,
     private readonly damages: DamagesRepository,
     private readonly photos: OrderPhotosRepository,
+    private readonly priceList: PriceListRepository,
     private readonly access: CrmParentAccess,
   ) {}
 
   async listFor(ctx: WorkspaceContext, parent: CrmParent): Promise<DamageWithPhotoCount[]> {
     await this.access.assertReadable(ctx, parent);
     const items = await this.damages.listFor(ctx.workspaceId, parent);
-    const counts = await this.photos.countByDamage(
-      ctx.workspaceId,
-      items.map((item) => item.id),
-    );
-    return items.map((item) => ({ ...item, photoCount: counts.get(item.id) ?? 0 }));
+    const ids = items.map((item) => item.id);
+    const [counts, works] = await Promise.all([
+      this.photos.countByDamage(ctx.workspaceId, ids),
+      this.damages.listExtraWorks(ctx.workspaceId, ids),
+    ]);
+    return items.map((item) => ({
+      ...item,
+      photoCount: counts.get(item.id) ?? 0,
+      extraWorks: works.filter((work) => work.damageId === item.id),
+    }));
   }
 
-  async create(ctx: WorkspaceContext, parent: CrmParent, input: DamageInput): Promise<Damage> {
+  /** Одно повреждение со своими работами: карточка открывается по нему. */
+  async getById(ctx: WorkspaceContext, damageId: string): Promise<DamageWithPhotoCount> {
+    const damage = await this.damages.findById(ctx.workspaceId, damageId);
+    if (!damage) throw AppError.notFound('Повреждение не найдено');
+    await this.access.assertReadable(ctx, this.parentOf(damage));
+    const [counts, works] = await Promise.all([
+      this.photos.countByDamage(ctx.workspaceId, [damage.id]),
+      this.damages.listExtraWorks(ctx.workspaceId, [damage.id]),
+    ]);
+    return { ...damage, photoCount: counts.get(damage.id) ?? 0, extraWorks: works };
+  }
+
+  async create(
+    ctx: WorkspaceContext,
+    parent: CrmParent,
+    input: DamageInput,
+  ): Promise<DamageWithPhotoCount> {
     await this.access.assertWritable(ctx, parent);
 
     const count = await this.damages.countFor(ctx.workspaceId, parent);
@@ -69,20 +122,33 @@ export class DamagesService {
 
     const data = this.normalizeInput(input);
     const position = await this.damages.nextPosition(ctx.workspaceId, parent);
+    const works = await this.normalizeExtraWorks(ctx, input.extraWorks);
 
-    return this.damages.create(ctx.workspaceId, {
-      ...('leadId' in parent ? { leadId: parent.leadId } : { orderId: parent.orderId }),
-      ...data,
-      position,
-      createdById: ctx.userId,
+    const damage = await this.prisma.transaction(async (tx) => {
+      const created = await this.damages.create(
+        ctx.workspaceId,
+        {
+          ...('leadId' in parent ? { leadId: parent.leadId } : { orderId: parent.orderId }),
+          ...data,
+          position,
+          createdById: ctx.userId,
+        },
+        tx,
+      );
+      if (works !== null) {
+        await this.damages.replaceExtraWorks(ctx.workspaceId, created.id, works, tx);
+      }
+      return created;
     });
+
+    return this.getById(ctx, damage.id);
   }
 
   async update(
     ctx: WorkspaceContext,
     damageId: string,
     input: Partial<DamageInput>,
-  ): Promise<Damage> {
+  ): Promise<DamageWithPhotoCount> {
     const damage = await this.writable(ctx, damageId);
     const merged = this.normalizeInput({
       panelCode: input.panelCode ?? damage.panelCode,
@@ -105,7 +171,83 @@ export class DamagesService {
       priceSource: input.priceSource !== undefined ? input.priceSource : damage.priceSource,
     });
 
-    return this.damages.update(ctx.workspaceId, damageId, merged);
+    const works = await this.normalizeExtraWorks(ctx, input.extraWorks);
+
+    await this.prisma.transaction(async (tx) => {
+      await this.damages.update(ctx.workspaceId, damageId, merged, tx);
+      if (works !== null) {
+        await this.damages.replaceExtraWorks(ctx.workspaceId, damageId, works, tx);
+      }
+    });
+
+    return this.getById(ctx, damageId);
+  }
+
+  /**
+   * Цены арматурных работ считает сервер по справочнику мастерской.
+   *
+   * Тот же `resolveExtra`, что и в оценке: название и цена берутся из
+   * справочника, ручная цена перебивает её. Интерфейс не должен уметь
+   * подписать своей работой чужую цену, а второй расчёт здесь не нужен.
+   *
+   * Публично, потому что обращение создаётся вместе с отмеченными деталями
+   * в одной транзакции, и работы там проходят ровно ту же проверку.
+   */
+  async normalizeExtraWorks(
+    ctx: WorkspaceContext,
+    input: DamageExtraWorkInput[] | null | undefined,
+  ): Promise<
+    Omit<Prisma.DamageExtraWorkUncheckedCreateInput, 'workspaceId' | 'damageId'>[] | null
+  > {
+    if (input === undefined) return null;
+    const works = input ?? [];
+    if (works.length === 0) return [];
+    if (works.length > MAX_EXTRA_WORKS_PER_DAMAGE) {
+      throw AppError.validation('Слишком много арматурных работ на одной детали');
+    }
+
+    const items = await this.priceList.list(ctx.workspaceId, true);
+    const rules: PriceRule[] = items.map((item) => ({
+      id: item.id,
+      kind: item.kind,
+      title: item.title,
+      panelCode: item.panelCode,
+      damageType: item.damageType,
+      sizeClass: item.sizeClass,
+      unitPriceMinor: Number(item.unitPriceMinor),
+      unit: item.unit,
+      isActive: item.isActive,
+    }));
+
+    return works.map((work, index) => {
+      if (work.priceListItemId) {
+        const rule = rules.find((r) => r.id === work.priceListItemId);
+        if (!rule || rule.kind === 'damage') {
+          throw AppError.validation('Арматурная работа не найдена в справочнике мастерской');
+        }
+      } else if (!work.title?.trim()) {
+        throw AppError.validation('Назовите арматурную работу или выберите её из справочника');
+      }
+
+      const resolved = resolveExtra(
+        {
+          priceListItemId: work.priceListItemId ?? null,
+          title: work.title ?? '',
+          quantity: work.quantity ?? 1,
+          unitPriceMinor: work.unitPriceMinor ?? null,
+        },
+        rules,
+        index + 1,
+      );
+
+      return {
+        priceListItemId: resolved.priceListItemId,
+        title: resolved.title,
+        quantity: resolved.quantity,
+        unitPriceMinor: BigInt(resolved.unitPriceMinor),
+        position: index + 1,
+      };
+    });
   }
 
   async remove(ctx: WorkspaceContext, damageId: string): Promise<void> {

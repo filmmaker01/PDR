@@ -221,26 +221,27 @@ model Workspace {
   createdAt   DateTime  @default(now()) @map("created_at") @db.Timestamptz(6)
   updatedAt   DateTime  @updatedAt @map("updated_at") @db.Timestamptz(6)
 
-  createdBy       User?                 @relation("WorkspaceCreatedBy", fields: [createdById], references: [id], onDelete: SetNull)
-  members         WorkspaceMember[]
-  invitations     WorkspaceInvitation[]
-  grants          AccessGrant[]
-  files           StoredFile[]
-  auditEntries    AuditLog[]
-  clients         Client[]
-  vehicles        Vehicle[]
-  orders          Order[]
-  appointments    Appointment[]
-  priceList       PriceListItem[]
-  estimates       Estimate[]
-  estimateItems   EstimateItem[]
-  payments        PaymentEntry[]
-  orderPhotos     OrderPhoto[]
-  leads           Lead[]
-  damages         Damage[]
-  assessments     Assessment[]
-  exports         Export[]
-  assessmentItems AssessmentItem[]
+  createdBy        User?                 @relation("WorkspaceCreatedBy", fields: [createdById], references: [id], onDelete: SetNull)
+  members          WorkspaceMember[]
+  invitations      WorkspaceInvitation[]
+  grants           AccessGrant[]
+  files            StoredFile[]
+  auditEntries     AuditLog[]
+  clients          Client[]
+  vehicles         Vehicle[]
+  orders           Order[]
+  appointments     Appointment[]
+  priceList        PriceListItem[]
+  estimates        Estimate[]
+  estimateItems    EstimateItem[]
+  payments         PaymentEntry[]
+  orderPhotos      OrderPhoto[]
+  leads            Lead[]
+  damages          Damage[]
+  assessments      Assessment[]
+  exports          Export[]
+  assessmentItems  AssessmentItem[]
+  damageExtraWorks DamageExtraWork[]
 
   @@map("workspaces")
 }
@@ -1395,9 +1396,10 @@ model PriceListItem {
   createdAt      DateTime         @default(now()) @map("created_at") @db.Timestamptz(6)
   updatedAt      DateTime         @updatedAt @map("updated_at") @db.Timestamptz(6)
 
-  workspace       Workspace        @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
-  estimateItems   EstimateItem[]
-  assessmentItems AssessmentItem[]
+  workspace        Workspace         @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  estimateItems    EstimateItem[]
+  assessmentItems  AssessmentItem[]
+  damageExtraWorks DamageExtraWork[]
 
   @@unique([workspaceId, id], name: "price_item_in_workspace")
   @@index([workspaceId, isActive, position])
@@ -1453,7 +1455,12 @@ model EstimateItem {
   title            String
   panelCode        String?           @map("panel_code")
   damageType       String?           @map("damage_type")
+  /// Тарифная зона: по ней считается цена.
   sizeClass        String?           @map("size_class")
+  /// Фактический размер повреждения в миллиметрах. Тарифная зона его не
+  /// заменяет: в документах клиент должен видеть измеренное, а не класс.
+  widthMm          Int?              @map("width_mm")
+  heightMm         Int?              @map("height_mm")
   quantity         Int               @default(1)
   material         Material?
   accessDifficulty AccessDifficulty? @map("access_difficulty")
@@ -1746,18 +1753,44 @@ model Damage {
   createdAt        DateTime           @default(now()) @map("created_at") @db.Timestamptz(6)
   updatedAt        DateTime           @updatedAt @map("updated_at") @db.Timestamptz(6)
 
-  workspace       Workspace        @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
-  lead            Lead?            @relation(fields: [workspaceId, leadId], references: [workspaceId, id], onDelete: Cascade)
-  order           Order?           @relation(fields: [workspaceId, orderId], references: [workspaceId, id], onDelete: Cascade)
-  createdBy       User?            @relation("DamageCreatedBy", fields: [createdById], references: [id], onDelete: SetNull)
+  workspace       Workspace         @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  lead            Lead?             @relation(fields: [workspaceId, leadId], references: [workspaceId, id], onDelete: Cascade)
+  order           Order?            @relation(fields: [workspaceId, orderId], references: [workspaceId, id], onDelete: Cascade)
+  createdBy       User?             @relation("DamageCreatedBy", fields: [createdById], references: [id], onDelete: SetNull)
   photos          OrderPhoto[]
   assessmentItems AssessmentItem[]
+  extraWorks      DamageExtraWork[]
 
   @@unique([workspaceId, id], name: "damage_in_workspace")
   @@index([leadId, position])
   @@index([orderId, position])
   @@index([workspaceId, panelCode])
   @@map("damages")
+}
+
+/// Арматурная работа конкретного повреждения: снятие обшивки, разбор двери,
+/// снятие фары. Мастер добавляет её там же, где описывает повреждение, —
+/// до всякой оценки, поэтому работа живёт у повреждения, а не только в оценке.
+/// Цена берётся из справочника мастерской и правится для этого случая.
+model DamageExtraWork {
+  id              String   @id @default(uuid()) @db.Uuid
+  workspaceId     String   @map("workspace_id") @db.Uuid
+  damageId        String   @map("damage_id") @db.Uuid
+  /// Позиция справочника, если работа выбрана из него.
+  priceListItemId String?  @map("price_list_item_id") @db.Uuid
+  title           String
+  quantity        Int      @default(1)
+  unitPriceMinor  BigInt   @map("unit_price_minor")
+  position        Int      @default(0)
+  createdAt       DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
+
+  workspace     Workspace      @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  damage        Damage         @relation(fields: [workspaceId, damageId], references: [workspaceId, id], onDelete: Cascade)
+  // NoAction: использованная позиция справочника скрывается, а не удаляется.
+  priceListItem PriceListItem? @relation(fields: [workspaceId, priceListItemId], references: [workspaceId, id], onDelete: NoAction, onUpdate: NoAction)
+
+  @@index([damageId, position])
+  @@map("damage_extra_works")
 }
 
 /// Способ оценки: вручную, расчётом по параметрам повреждения или
@@ -1774,37 +1807,37 @@ enum AssessmentMethod {
 /// мастером: предложение остаётся видимым, а окончательная сумма — всегда
 /// за человеком. Результат AI ценой не является.
 model Assessment {
-  id             String           @id @default(uuid()) @db.Uuid
-  workspaceId    String           @map("workspace_id") @db.Uuid
-  leadId         String?          @map("lead_id") @db.Uuid
-  orderId        String?          @map("order_id") @db.Uuid
-  method         AssessmentMethod
-  currency       String           @db.Char(3)
+  id               String           @id @default(uuid()) @db.Uuid
+  workspaceId      String           @map("workspace_id") @db.Uuid
+  leadId           String?          @map("lead_id") @db.Uuid
+  orderId          String?          @map("order_id") @db.Uuid
+  method           AssessmentMethod
+  currency         String           @db.Char(3)
   /// Сумма, которую предложил расчёт или разбор фотографии.
-  suggestedMinor BigInt           @default(0) @map("suggested_minor")
+  suggestedMinor   BigInt           @default(0) @map("suggested_minor")
   /// Базовый расчёт PDR по прайсу до коэффициента: он всегда остаётся видимым.
-  baseMinor      BigInt           @default(0) @map("base_minor")
+  baseMinor        BigInt           @default(0) @map("base_minor")
   /// Коэффициент цены в процентах: поправка мастера под регион и рынок.
   /// 100 — расчёт по прайсу без изменений.
-  priceCoefficient Int            @default(100) @map("price_coefficient")
+  priceCoefficient Int              @default(100) @map("price_coefficient")
   /// Арматурные работы: считаются по своим ценам, коэффициент к ним не применяется.
-  extrasMinor    BigInt           @default(0) @map("extras_minor")
+  extrasMinor      BigInt           @default(0) @map("extras_minor")
   /// Итог, который утвердил мастер. Именно он уходит в обращение и смету.
-  totalMinor     BigInt           @default(0) @map("total_minor")
+  totalMinor       BigInt           @default(0) @map("total_minor")
   /// Правил ли мастер итог руками.
-  overridden     Boolean          @default(false)
+  overridden       Boolean          @default(false)
   /// Краткое объяснение расчёта или разбора фотографии.
-  explanation    String?
-  note           String?
+  explanation      String?
+  note             String?
   /// Имя адаптера AI и модель: оценку нужно уметь перепроверить позже.
-  aiProvider     String?          @map("ai_provider")
-  aiModel        String?          @map("ai_model")
+  aiProvider       String?          @map("ai_provider")
+  aiModel          String?          @map("ai_model")
   /// Сырой ответ провайдера — для разбора спорных случаев.
-  aiRaw          Json?            @map("ai_raw")
-  aiConfidence   Float?           @map("ai_confidence")
-  createdById    String?          @map("created_by") @db.Uuid
-  createdAt      DateTime         @default(now()) @map("created_at") @db.Timestamptz(6)
-  updatedAt      DateTime         @updatedAt @map("updated_at") @db.Timestamptz(6)
+  aiRaw            Json?            @map("ai_raw")
+  aiConfidence     Float?           @map("ai_confidence")
+  createdById      String?          @map("created_by") @db.Uuid
+  createdAt        DateTime         @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt        DateTime         @updatedAt @map("updated_at") @db.Timestamptz(6)
 
   workspace Workspace        @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
   lead      Lead?            @relation(fields: [workspaceId, leadId], references: [workspaceId, id], onDelete: Cascade)

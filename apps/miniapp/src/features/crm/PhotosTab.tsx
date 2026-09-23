@@ -113,41 +113,43 @@ export function PhotosTab({
           <div
             style={{
               display: 'grid',
-              gridTemplateColumns: 'repeat(auto-fill, minmax(96px, 1fr))',
+              gridTemplateColumns: 'repeat(auto-fill, minmax(112px, 1fr))',
               gap: 8,
             }}
           >
             {items.map((photo) => (
-              <button
-                key={photo.id}
-                type="button"
-                style={{ all: 'unset', position: 'relative', cursor: 'pointer' }}
-                onClick={() => setOpened(photo)}
-              >
-                {photo.thumbUrl ? (
-                  <img
-                    src={photo.thumbUrl}
-                    alt={photo.caption ?? ''}
-                    style={{
-                      width: '100%',
-                      aspectRatio: '1',
-                      objectFit: 'cover',
-                      borderRadius: 8,
-                    }}
-                  />
-                ) : (
-                  <div className="pdr-skeleton" style={{ aspectRatio: '1' }} />
-                )}
-                {photo.hasMarkup ? (
-                  <span style={{ position: 'absolute', left: 4, bottom: 4 }}>
-                    <Badge tone="info">разметка</Badge>
-                  </span>
-                ) : null}
-              </button>
+              <div key={photo.id} className="pdr-stack" style={{ gap: 4 }}>
+                <button
+                  type="button"
+                  style={{ all: 'unset', position: 'relative', cursor: 'pointer' }}
+                  onClick={() => setOpened(photo)}
+                >
+                  {photo.thumbUrl ? (
+                    <img
+                      src={photo.thumbUrl}
+                      alt={photo.caption ?? ''}
+                      style={{
+                        width: '100%',
+                        aspectRatio: '1',
+                        objectFit: 'cover',
+                        borderRadius: 8,
+                      }}
+                    />
+                  ) : (
+                    <div className="pdr-skeleton" style={{ aspectRatio: '1' }} />
+                  )}
+                </button>
+                {photo.hasMarkup ? <Badge tone="success">Зона отмечена</Badge> : null}
+                {/* Действие названо словами: «нажмите на снимок» догадкой
+                    остаётся ровно до тех пор, пока никто не нажал. */}
+                <Button size="sm" variant="secondary" onClick={() => setOpened(photo)}>
+                  {photo.hasMarkup ? 'Изменить зону' : 'Отметить зону ремонта'}
+                </Button>
+              </div>
             ))}
           </div>
           <div className="pdr-hint" style={{ marginTop: 8 }}>
-            Нажмите на снимок, чтобы отметить конкретное повреждение.
+            Разметка хранится отдельно от снимка: оригинал остаётся нетронутым.
           </div>
         </Card>
       )}

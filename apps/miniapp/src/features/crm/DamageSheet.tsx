@@ -1,15 +1,15 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import { useMutation, useQueryClient } from '@tanstack/react-query';
 import { ApiError } from '@pdr/api-client';
 import {
   DAMAGE_TYPES,
   SIZE_ZONE_CLASSES,
+  describeDamageSize,
   panelLabel,
   sizeClassForDimensions,
-  sizeClassLabel,
-  sizeClassOption,
 } from '@pdr/shared';
 import {
+  Badge,
   Button,
   Card,
   Field,
@@ -24,7 +24,17 @@ import { createUploadTransport } from '@/shared/uploads';
 import { formatMinor, parseMajorToMinor } from '@/shared/format';
 import { alertDialog, confirmDialog, haptic } from '@/shared/telegram';
 import { photosPath, useDamagePhotos } from './api';
-import { ACCESS_OPTIONS, MATERIAL_OPTIONS, type Damage, type DamageDraft } from './types';
+import { ExtraWorkPickerSheet } from './ExtraWorkPicker';
+import { PhotoMarkupSheet } from './PhotoMarkupSheet';
+import {
+  ACCESS_OPTIONS,
+  MATERIAL_OPTIONS,
+  type AssessmentPreview,
+  type Damage,
+  type DamageDraft,
+  type DamageExtraWorkDraft,
+  type OrderPhoto,
+} from './types';
 
 export type DamageParent = { leadId: string } | { orderId: string };
 
@@ -61,6 +71,7 @@ export interface DamageSheetProps {
    */
   draftMode?: boolean;
   onDraftSave?: (draft: DamageDraft) => void;
+  currency?: string;
 }
 
 /**
@@ -69,6 +80,10 @@ export interface DamageSheetProps {
  * Одна деталь может быть повреждена несколько раз, поэтому карточка всегда
  * про конкретное повреждение, а не про деталь целиком: именно это позволяет
  * потом показать, какую из двух вмятин на двери согласовали в работу.
+ *
+ * Цена считается прямо здесь и обновляется на каждое изменение параметров:
+ * мастер называет её клиенту у машины, а не после отдельного похода в оценку.
+ * Считает сервер тем же расчётом, что и оценка, — второго калькулятора нет.
  */
 export function DamageSheet({
   open,
@@ -80,6 +95,7 @@ export function DamageSheet({
   canEdit,
   draftMode,
   onDraftSave,
+  currency = 'RUB',
 }: DamageSheetProps) {
   const queryClient = useQueryClient();
 
@@ -92,6 +108,10 @@ export function DamageSheet({
   const [onEdge, setOnEdge] = useState(false);
   const [comment, setComment] = useState('');
   const [price, setPrice] = useState('');
+  const [extraWorks, setExtraWorks] = useState<DamageExtraWorkDraft[]>([]);
+  const [workPickerOpen, setWorkPickerOpen] = useState(false);
+  const [markupPhoto, setMarkupPhoto] = useState<OrderPhoto | null>(null);
+  const [preview, setPreview] = useState<AssessmentPreview | null>(null);
 
   useEffect(() => {
     if (!open) return;
@@ -103,12 +123,27 @@ export function DamageSheet({
     setAccess(damage?.accessDifficulty ?? '');
     setOnEdge(damage?.onEdge ?? false);
     setComment(damage?.comment ?? '');
-    setPrice(damage?.priceMinor ? String(damage.priceMinor / 100) : '');
+    // Ручная цена показывается, только если она и была ручной: расчётную сумму
+    // в поле подставлять нельзя, иначе поле спорит с расчётом.
+    setPrice(
+      damage?.priceSource === 'manual' && damage.priceMinor ? String(damage.priceMinor / 100) : '',
+    );
+    setExtraWorks(
+      (damage?.extraWorks ?? []).map((work) => ({
+        priceListItemId: work.priceListItemId,
+        title: work.title,
+        quantity: work.quantity,
+        unitPriceMinor: work.unitPriceMinor,
+      })),
+    );
+    setPreview(null);
   }, [open, damage]);
 
   const widthMm = cmToMm(widthCm);
   const heightMm = cmToMm(heightCm);
   const sizeClass = sizeClassForDimensions(widthMm, heightMm);
+  const size = describeDamageSize(widthMm, heightMm, sizeClass);
+  const manualPriceMinor = price.trim() ? parseMajorToMinor(price) : null;
 
   const payload = (): DamageDraft & { priceMinor?: number | null } => ({
     panelCode,
@@ -121,11 +156,102 @@ export function DamageSheet({
     accessDifficulty: access || null,
     onEdge,
     comment: comment.trim() || null,
-    priceMinor: price.trim() ? (parseMajorToMinor(price) ?? null) : null,
+    // Цена детали — расчёт по прайсу с коэффициентом, если мастер не назвал свою.
+    priceMinor: manualPriceMinor ?? preview?.pdrMinor ?? null,
+    extraWorks,
   });
 
-  // Снимки конкретного повреждения: их снимают у детали и сюда же смотрят,
-  // когда спорят, о какой именно вмятине речь.
+  // ── Расчёт стоимости ──────────────────────────────────────────────────────
+
+  interface CalcParams {
+    widthMm: number | null;
+    heightMm: number | null;
+    quantity: number;
+    damageType: string;
+    material: string;
+    access: string;
+    onEdge: boolean;
+    extraWorks: DamageExtraWorkDraft[];
+    manualPriceMinor: number | null;
+  }
+
+  const calc = useMutation({
+    mutationFn: (input: CalcParams) =>
+      api.post<AssessmentPreview>(`/workspaces/${workspaceId}/assessments/preview`, {
+        items: [
+          {
+            panelCode,
+            damageType: input.damageType || null,
+            sizeClass: sizeClassForDimensions(input.widthMm, input.heightMm),
+            widthMm: input.widthMm,
+            heightMm: input.heightMm,
+            quantity: input.quantity,
+            material: input.material || null,
+            accessDifficulty: input.access || null,
+            onEdge: input.onEdge,
+            unitPriceMinor: input.manualPriceMinor,
+          },
+        ],
+        extras: input.extraWorks.map((work) => ({
+          priceListItemId: work.priceListItemId,
+          title: work.title,
+          quantity: work.quantity,
+          unitPriceMinor: work.unitPriceMinor,
+        })),
+      }),
+    onSuccess: setPreview,
+  });
+
+  const params: CalcParams = useMemo(
+    () => ({
+      widthMm,
+      heightMm,
+      quantity,
+      damageType,
+      material,
+      access,
+      onEdge,
+      extraWorks,
+      manualPriceMinor,
+    }),
+    [
+      widthMm,
+      heightMm,
+      quantity,
+      damageType,
+      material,
+      access,
+      onEdge,
+      extraWorks,
+      manualPriceMinor,
+    ],
+  );
+
+  /**
+   * Пересчёт после правки. Пауза нужна, чтобы ввод размера не отправлял запрос
+   * на каждую цифру; значения берутся из подготовленного набора, а не из
+   * состояния на момент отправки — иначе цена отставала бы на шаг.
+   */
+  const timer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  useEffect(() => {
+    if (!open) return;
+    if (timer.current) clearTimeout(timer.current);
+    timer.current = setTimeout(() => calc.mutate(params), 350);
+    return () => {
+      if (timer.current) clearTimeout(timer.current);
+    };
+    // Мутация в зависимостях привела бы к вечному пересчёту: она новая на
+    // каждый рендер, а ответ расчёта рендер и вызывает.
+  }, [open, params]);
+
+  const line = preview?.lines[0] ?? null;
+  const priceMissing = line !== null && line.priceListItemId === null && manualPriceMinor === null;
+  const extrasMinor = preview?.extrasMinor ?? 0;
+  const pdrMinor = preview?.pdrMinor ?? 0;
+  const totalMinor = preview?.totalMinor ?? 0;
+
+  // ── Фотографии и сохранение ───────────────────────────────────────────────
+
   const photos = useDamagePhotos(workspaceId, parent, damage?.id ?? null, open);
   const uploads = useUploadQueue({
     transport: createUploadTransport({ scope: 'order_photo', workspaceId }),
@@ -203,8 +329,9 @@ export function DamageSheet({
         </Field>
 
         <Card flat>
-          {/* Готовые зоны: мастер выбирает 40×40 одним нажатием и сразу видит,
-              как меняется стоимость. Точные габариты можно ввести и руками. */}
+          {/* Готовые зоны: мастер выбирает 40×40 одним нажатием. Точные габариты
+              вводятся руками и остаются как есть — в карточке, в заказе и в
+              документах показывается именно измеренное. */}
           <Field label="Размер зоны">
             <div className="pdr-chips">
               {SIZE_ZONE_CLASSES.map((zone) => (
@@ -212,7 +339,9 @@ export function DamageSheet({
                   key={zone.code}
                   type="button"
                   disabled={!canEdit}
-                  className={`pdr-chip${sizeClass === zone.code ? ' pdr-chip--active' : ''}`}
+                  className={`pdr-chip${
+                    sizeClass === zone.code && !size.capped ? ' pdr-chip--active' : ''
+                  }`}
                   onClick={() => {
                     setWidthCm(String(zone.widthCm));
                     setHeightCm(String(zone.heightCm));
@@ -243,13 +372,17 @@ export function DamageSheet({
               />
             </Field>
           </div>
-          <div className="pdr-hint">
-            {sizeClass
-              ? `Размерный класс: ${sizeClassLabel(sizeClass)}${
-                  sizeClassOption(sizeClass) ? ` · ${sizeClassOption(sizeClass)!.hint}` : ''
-                }`
-              : 'Размерный класс определится по габаритам'}
-          </div>
+          {size.actual ? (
+            <div className="pdr-stack" style={{ gap: 2 }}>
+              <div style={{ fontWeight: 600 }}>Размер: {size.actual}</div>
+              <div className="pdr-hint">
+                Тарифная зона: {size.zone}
+                {size.capped ? ' — повреждение крупнее сетки, цена считается по верхней зоне' : ''}
+              </div>
+            </div>
+          ) : (
+            <div className="pdr-hint">Укажите размер — по нему подбирается цена.</div>
+          )}
         </Card>
 
         <Field label="Количество вмятин">
@@ -305,56 +438,113 @@ export function DamageSheet({
           <span className="pdr-grow">На ребре жёсткости</span>
         </label>
 
-        <Field label="Комментарий">
+        {/* ── Арматурные работы этой детали ─────────────────────────────── */}
+        <h2 className="pdr-subtitle">Арматурные работы</h2>
+        <Card flat>
+          <div className="pdr-list">
+            {extraWorks.length === 0 ? (
+              <div className="pdr-list__item pdr-list__item--static">
+                <span className="pdr-hint">
+                  Снятие обшивки, разбор двери, снятие фары — то, что нужно сделать на этой детали
+                  помимо ремонта.
+                </span>
+              </div>
+            ) : (
+              extraWorks.map((work, index) => (
+                <div key={index} className="pdr-list__item pdr-list__item--static">
+                  <span className="pdr-grow">
+                    <span style={{ display: 'block', fontWeight: 600 }}>{work.title}</span>
+                    <Input
+                      value={work.unitPriceMinor === null ? '' : String(work.unitPriceMinor / 100)}
+                      inputMode="decimal"
+                      disabled={!canEdit}
+                      style={{ marginTop: 6 }}
+                      placeholder={String(
+                        (preview?.extras[index]?.suggestedUnitPriceMinor ?? 0) / 100,
+                      )}
+                      onChange={(e) => {
+                        const value = e.target.value.trim()
+                          ? (parseMajorToMinor(e.target.value) ?? 0)
+                          : null;
+                        setExtraWorks(
+                          extraWorks.map((item, i) =>
+                            i === index ? { ...item, unitPriceMinor: value } : item,
+                          ),
+                        );
+                      }}
+                    />
+                  </span>
+                  <span className="pdr-row" style={{ gap: 8, whiteSpace: 'nowrap' }}>
+                    {preview?.extras[index] ? (
+                      <span style={{ fontWeight: 600 }}>
+                        {formatMinor(preview.extras[index]!.lineTotalMinor, currency)}
+                      </span>
+                    ) : null}
+                    {canEdit ? (
+                      <Button
+                        size="sm"
+                        variant="ghost"
+                        onClick={() => setExtraWorks(extraWorks.filter((_, i) => i !== index))}
+                      >
+                        ✕
+                      </Button>
+                    ) : null}
+                  </span>
+                </div>
+              ))
+            )}
+          </div>
+        </Card>
+        {canEdit ? (
+          <Button variant="secondary" block onClick={() => setWorkPickerOpen(true)}>
+            + Добавить работу
+          </Button>
+        ) : null}
+
+        <Field label="Комментарий" hint="Что важно помнить. Работы выбираются выше, а не здесь">
           <Textarea
             value={comment}
             onChange={(e) => setComment(e.target.value)}
             rows={2}
             disabled={!canEdit}
-            placeholder="Что именно отдаём в работу"
+            placeholder="На что обратить внимание"
           />
         </Field>
 
-        {!draftMode ? (
-          <Field label="Стоимость" hint="Можно оставить пустым и посчитать при оценке">
-            <Input
-              value={price}
-              onChange={(e) => setPrice(e.target.value)}
-              inputMode="decimal"
-              placeholder="0"
-              disabled={!canEdit}
-            />
-          </Field>
-        ) : null}
-
+        {/* ── Фотографии этой детали ────────────────────────────────────── */}
         {damage && !draftMode ? (
           <>
-            <div className="pdr-hint">Фотографии этого повреждения</div>
+            <h2 className="pdr-subtitle">Фотографии детали</h2>
             {photos.length > 0 ? (
               <div
                 style={{
                   display: 'grid',
-                  gridTemplateColumns: 'repeat(auto-fill, minmax(72px, 1fr))',
-                  gap: 6,
+                  gridTemplateColumns: 'repeat(auto-fill, minmax(104px, 1fr))',
+                  gap: 8,
                 }}
               >
-                {photos.map((photo) =>
-                  photo.thumbUrl ? (
-                    <img
-                      key={photo.id}
-                      src={photo.thumbUrl}
-                      alt=""
-                      style={{
-                        width: '100%',
-                        aspectRatio: '1',
-                        objectFit: 'cover',
-                        borderRadius: 6,
-                      }}
-                    />
-                  ) : (
-                    <div key={photo.id} className="pdr-skeleton" style={{ aspectRatio: '1' }} />
-                  ),
-                )}
+                {photos.map((photo) => (
+                  <div key={photo.id} className="pdr-stack" style={{ gap: 4 }}>
+                    {photo.thumbUrl ? (
+                      <img
+                        src={photo.thumbUrl}
+                        alt=""
+                        style={{
+                          width: '100%',
+                          aspectRatio: '1',
+                          objectFit: 'cover',
+                          borderRadius: 6,
+                        }}
+                      />
+                    ) : (
+                      <div className="pdr-skeleton" style={{ aspectRatio: '1' }} />
+                    )}
+                    {photo.hasMarkup ? <Badge tone="success">Зона отмечена</Badge> : null}
+                    <Button size="sm" variant="secondary" onClick={() => setMarkupPhoto(photo)}>
+                      {photo.hasMarkup ? 'Изменить зону' : 'Отметить зону ремонта'}
+                    </Button>
+                  </div>
+                ))}
               </div>
             ) : null}
             {canEdit ? (
@@ -367,22 +557,87 @@ export function DamageSheet({
                 capture
                 cameraLabel="📷 Снять фото"
                 galleryLabel="🖼 Выбрать из галереи"
-                hint="Снимок привяжется к этому повреждению. Разметить вмятину можно на вкладке «Фото»."
+                hint="Снимок привяжется к этому повреждению. После загрузки отметьте на нём зону ремонта."
               />
             ) : null}
           </>
         ) : null}
 
-        {damage?.priceMinor ? (
-          <div className="pdr-hint">
-            Текущая стоимость: {formatMinor(damage.priceMinor, 'RUB')}
-            {damage.priceSource === 'ai' ? ' · предварительная AI-оценка' : ''}
+        {/* ── Расчёт стоимости ──────────────────────────────────────────── */}
+        <h2 className="pdr-subtitle">Расчёт стоимости</h2>
+        <Card>
+          {priceMissing ? (
+            <>
+              <div style={{ fontWeight: 600, marginBottom: 4 }}>
+                Цена для этих параметров не настроена
+              </div>
+              <div className="pdr-hint" style={{ marginBottom: 8 }}>
+                В прайсе мастерской нет подходящей позиции. Укажите стоимость вручную — или заведите
+                позицию в прайсе, чтобы она считалась сама.
+              </div>
+            </>
+          ) : (
+            <>
+              <div className="pdr-row">
+                <span className="pdr-grow pdr-hint">
+                  PDR-ремонт{line?.priceListTitle ? ` · ${line.priceListTitle}` : ''}
+                </span>
+                <span>{formatMinor(preview?.baseMinor ?? 0, currency)}</span>
+              </div>
+              {preview && preview.priceCoefficient !== 100 ? (
+                <>
+                  <div className="pdr-formula" style={{ marginTop: 6 }}>
+                    {preview.formula}
+                  </div>
+                  <div className="pdr-row" style={{ marginTop: 6 }}>
+                    <span className="pdr-grow pdr-hint">
+                      С коэффициентом {preview.priceCoefficient} %
+                    </span>
+                    <span>{formatMinor(pdrMinor, currency)}</span>
+                  </div>
+                </>
+              ) : null}
+            </>
+          )}
+
+          {extrasMinor > 0 ? (
+            <div className="pdr-row">
+              <span className="pdr-grow pdr-hint">Арматурные работы</span>
+              <span>{formatMinor(extrasMinor, currency)}</span>
+            </div>
+          ) : null}
+
+          <Field
+            label="Своя цена ремонта"
+            hint={
+              priceMissing
+                ? 'Сумма за ремонт этой детали, без арматурных работ'
+                : 'Пусто — берётся расчёт по прайсу'
+            }
+          >
+            <Input
+              value={price}
+              onChange={(e) => setPrice(e.target.value)}
+              inputMode="decimal"
+              placeholder={String(Math.round((line?.suggestedUnitPriceMinor ?? 0) / 100))}
+              disabled={!canEdit}
+            />
+          </Field>
+
+          <div className="pdr-row" style={{ marginTop: 6 }}>
+            <span className="pdr-grow" style={{ fontWeight: 600 }}>
+              Итого по повреждению
+            </span>
+            <span style={{ fontSize: 18, fontWeight: 700 }}>
+              {formatMinor(totalMinor, currency)}
+            </span>
           </div>
-        ) : null}
+          {calc.isPending ? <div className="pdr-hint">Считаем…</div> : null}
+        </Card>
 
         {canEdit ? (
           <Button block loading={save.isPending} onClick={submit}>
-            {damage ? 'Сохранить' : 'Отметить повреждение'}
+            Готово
           </Button>
         ) : null}
 
@@ -395,14 +650,43 @@ export function DamageSheet({
               if (await confirmDialog('Снять отметку повреждения?')) remove.mutate();
             }}
           >
-            Удалить
+            Удалить повреждение
           </Button>
         ) : null}
 
         <Button variant="secondary" block onClick={onClose}>
-          Закрыть
+          {canEdit ? 'Отмена' : 'Закрыть'}
         </Button>
       </div>
+
+      <ExtraWorkPickerSheet
+        open={workPickerOpen}
+        onClose={() => setWorkPickerOpen(false)}
+        workspaceId={workspaceId}
+        currency={currency}
+        onAdd={(choice) => {
+          setExtraWorks((current) => [
+            ...current,
+            {
+              priceListItemId: choice.priceListItemId,
+              title: choice.title,
+              quantity: 1,
+              unitPriceMinor: choice.unitPriceMinor,
+            },
+          ]);
+          setWorkPickerOpen(false);
+        }}
+      />
+
+      <PhotoMarkupSheet
+        open={markupPhoto !== null}
+        onClose={() => setMarkupPhoto(null)}
+        workspaceId={workspaceId}
+        photo={markupPhoto}
+        damages={damage ? [damage] : []}
+        defaultDamageId={damage?.id ?? null}
+        canEdit={canEdit}
+      />
     </Sheet>
   );
 }

@@ -19,16 +19,34 @@ export interface DocumentWorkRow {
   quantity: number;
   unitPriceMinor: number;
   lineTotalMinor: number;
+  /**
+   * Работа относится к детали из строки выше. Такие строки печатаются со
+   * сдвигом: «ремонт двери, а под ним её разборка» читается как одна работа,
+   * а вперемешку — как случайный список.
+   */
+  attached?: boolean;
+}
+
+export interface DocumentExtraRow {
+  title: string;
+  quantity: number;
+  unitPriceMinor: number;
+  lineTotalMinor: number;
 }
 
 export interface DocumentDamageRow {
   panel: string;
   damage: string | null;
+  /** Фактический размер: «300 × 300 см». Именно он идёт в документ. */
   size: string | null;
+  /** Тарифная зона, по которой считалась цена. */
+  zone: string | null;
   quantity: number;
   onEdge: boolean;
   comment: string | null;
   priceMinor: number | null;
+  /** Арматурные работы этой детали. */
+  extras: DocumentExtraRow[];
 }
 
 export interface OrderDocumentContext {
@@ -69,8 +87,8 @@ export interface OrderDocumentContext {
     paidMinor: number;
     remainingMinor: number;
   };
-  /** Откуда взяты работы и суммы: согласованная смета или оценка. */
-  source: 'estimate' | 'assessment' | 'none';
+  /** Откуда взяты работы и суммы: смета, оценка или сами отмеченные повреждения. */
+  source: 'estimate' | 'assessment' | 'damages' | 'none';
   currency: string;
   now: Date;
 }
@@ -125,7 +143,7 @@ const WORK_COLUMNS = [
 function workRows(pdf: PdfDocumentBuilder, works: DocumentWorkRow[]) {
   return works.map((work) => ({
     cells: [
-      work.title,
+      work.attached ? `      ${work.title}` : work.title,
       String(work.quantity),
       pdf.money(work.unitPriceMinor),
       pdf.money(work.lineTotalMinor),
@@ -172,32 +190,46 @@ const INSPECTION_ACT: OrderDocumentTemplate = {
         { title: 'Размер', width: 0.16 },
         { title: 'Стоимость', width: 0.2, align: 'right' },
       ],
-      ctx.damages.map((damage) => ({
-        cells: [
-          damage.panel,
-          [damage.damage, damage.quantity > 1 ? `${damage.quantity} шт` : null]
-            .filter(Boolean)
-            .join(', ') || '—',
-          damage.size ?? '—',
-          damage.priceMinor === null ? '—' : pdf.money(damage.priceMinor),
-        ],
-        details:
-          [damage.onEdge ? 'на ребре жёсткости' : null, damage.comment]
-            .filter(Boolean)
-            .join(' · ') || null,
-      })),
+      ctx.damages.flatMap((damage) => [
+        {
+          cells: [
+            damage.panel,
+            [damage.damage, damage.quantity > 1 ? `${damage.quantity} шт` : null]
+              .filter(Boolean)
+              .join(', ') || '—',
+            // Размер печатается измеренный. Тарифная зона уходит в подпись:
+            // клиент должен узнать в документе своё повреждение, а не класс.
+            damage.size ?? damage.zone ?? '—',
+            damage.priceMinor === null ? '—' : pdf.money(damage.priceMinor),
+          ],
+          details:
+            [
+              damage.zone && damage.size ? `тарифная зона ${damage.zone}` : null,
+              damage.onEdge ? 'на ребре жёсткости' : null,
+              damage.comment,
+            ]
+              .filter(Boolean)
+              .join(' · ') || null,
+        },
+        ...damage.extras.map((extra) => ({
+          cells: [
+            `      ${extra.title}`,
+            extra.quantity > 1 ? `${extra.quantity} шт` : 'арматурная работа',
+            '',
+            pdf.money(extra.lineTotalMinor),
+          ],
+          details: null,
+        })),
+      ]),
       { empty: 'Повреждения на схеме кузова не отмечены.' },
     );
 
-    if (ctx.works.some((work) => work.kind !== 'damage')) {
-      pdf.sectionTitle('Арматурные работы');
-      pdf.table(
-        WORK_COLUMNS,
-        workRows(
-          pdf,
-          ctx.works.filter((work) => work.kind !== 'damage'),
-        ),
-      );
+    // Отдельной таблицы арматурных работ здесь нет: они напечатаны под своими
+    // деталями выше. Два списка одного и того же — повод спорить, какой верный.
+    const loose = ctx.works.filter((work) => work.kind !== 'damage' && !work.attached);
+    if (loose.length > 0) {
+      pdf.sectionTitle('Работы по автомобилю');
+      pdf.table(WORK_COLUMNS, workRows(pdf, loose));
     }
 
     totals(pdf, ctx);

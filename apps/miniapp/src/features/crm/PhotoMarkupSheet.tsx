@@ -34,6 +34,7 @@ export function PhotoMarkupSheet({
   workspaceId,
   photo,
   damages,
+  defaultDamageId,
   canEdit,
 }: {
   open: boolean;
@@ -41,6 +42,8 @@ export function PhotoMarkupSheet({
   workspaceId: string;
   photo: OrderPhoto | null;
   damages: Damage[];
+  /** Деталь, из карточки которой открыли снимок: привязка уже известна. */
+  defaultDamageId?: string | null;
   canEdit: boolean;
 }) {
   const queryClient = useQueryClient();
@@ -52,7 +55,7 @@ export function PhotoMarkupSheet({
   useEffect(() => {
     if (!open || !photo) return;
     setMarkup(photo.annotation ?? EMPTY_MARKUP);
-    setDamageId(photo.damageId ?? '');
+    setDamageId(photo.damageId ?? defaultDamageId ?? '');
     setOriginalUrl(null);
     setLoading(true);
 
@@ -72,7 +75,7 @@ export function PhotoMarkupSheet({
     return () => {
       cancelled = true;
     };
-  }, [open, photo, workspaceId]);
+  }, [open, photo, workspaceId, defaultDamageId]);
 
   const invalidate = async (): Promise<void> => {
     await queryClient.invalidateQueries({ queryKey: ['crm', 'photos'] });
@@ -134,9 +137,13 @@ export function PhotoMarkupSheet({
   if (!photo) return null;
 
   return (
-    <Sheet open={open} onClose={onClose} title="Разметка повреждения">
+    <Sheet open={open} onClose={onClose} title="Зона ремонта на фотографии">
       <div className="pdr-stack">
-        {photo.hasMarkup ? <Badge tone="info">Разметка сохранена</Badge> : null}
+        {photo.hasMarkup ? <Badge tone="success">Зона отмечена</Badge> : null}
+        <div className="pdr-hint">
+          Обведите вмятину, нарисуйте или поставьте стрелку. Оригинал снимка не меняется: разметка
+          хранится отдельно и её всегда можно поправить.
+        </div>
 
         {loading || !originalUrl ? (
           <div className="pdr-row" style={{ justifyContent: 'center', padding: 24 }}>
@@ -172,7 +179,7 @@ export function PhotoMarkupSheet({
 
         {canEdit ? (
           <Button block loading={save.isPending} onClick={() => save.mutate()}>
-            Сохранить разметку
+            Сохранить зону
           </Button>
         ) : null}
 

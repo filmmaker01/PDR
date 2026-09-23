@@ -95,6 +95,81 @@ export function sizeClassForDimensions(
   return found?.code ?? LARGEST_SIZE_CLASS;
 }
 
+/**
+ * Повреждение крупнее самой большой зоны сетки.
+ *
+ * Такое считается по верхней зоне — другой цены для него в прайсе нет. Но
+ * показывать его как «100×100» нельзя: мастер измерил 300×300 см и увидел бы
+ * чужое число вместо своего.
+ */
+export function isSizeBeyondGrid(
+  widthMm: number | null | undefined,
+  heightMm: number | null | undefined,
+): boolean {
+  const values = [widthMm, heightMm].filter(
+    (v): v is number => typeof v === 'number' && Number.isFinite(v) && v > 0,
+  );
+  if (values.length === 0) return false;
+  const longest = Math.max(...values);
+  const areaMm2 = values.length === 2 ? values[0]! * values[1]! : longest * longest;
+  const largest = SIZE_CLASS_LIMITS[SIZE_CLASS_LIMITS.length - 1]!;
+  return longest > largest.maxLongestMm || areaMm2 > largest.maxAreaMm2;
+}
+
+/** Сантиметры из миллиметров: 3000 мм → «300», 25 мм → «2,5». */
+function toCm(mm: number): string {
+  const cm = mm / 10;
+  return Number.isInteger(cm) ? String(cm) : cm.toFixed(1).replace('.', ',');
+}
+
+export interface DamageSizeView {
+  /** Фактический размер, который ввёл мастер: «300 × 300 см». */
+  actual: string | null;
+  /** Код тарифной зоны, по которой считается цена. */
+  zoneCode: string | null;
+  /** Подпись тарифной зоны: «40×40» или «100×100+» для повреждений крупнее сетки. */
+  zone: string | null;
+  /** Повреждение крупнее верхней зоны: цена считается по ней. */
+  capped: boolean;
+}
+
+/**
+ * Как показать размер повреждения.
+ *
+ * Разделены два разных понятия: фактический размер — то, что мастер измерил,
+ * и тарифная зона — то, по чему считается цена. Раньше в карточке
+ * показывалось одно вместо другого, и повреждение 300×300 см выглядело как
+ * 100×100.
+ */
+export function describeDamageSize(
+  widthMm: number | null | undefined,
+  heightMm: number | null | undefined,
+  sizeClass?: string | null,
+): DamageSizeView {
+  const width = typeof widthMm === 'number' && widthMm > 0 ? widthMm : null;
+  const height = typeof heightMm === 'number' && heightMm > 0 ? heightMm : null;
+
+  const actual =
+    width && height
+      ? `${toCm(width)} × ${toCm(height)} см`
+      : width
+        ? `${toCm(width)} см`
+        : height
+          ? `${toCm(height)} см`
+          : null;
+
+  const zoneCode = sizeClassForDimensions(width, height) ?? sizeClass ?? null;
+  const capped = isSizeBeyondGrid(width, height);
+  const zoneLabel = sizeClassLabel(zoneCode);
+
+  return {
+    actual,
+    zoneCode,
+    zone: zoneLabel ? `${zoneLabel}${capped ? '+' : ''}` : null,
+    capped,
+  };
+}
+
 /** Подсказка по размерному классу для интерфейса. */
 export function sizeClassOption(code: string | null | undefined): SizeClassOption | null {
   if (!code) return null;

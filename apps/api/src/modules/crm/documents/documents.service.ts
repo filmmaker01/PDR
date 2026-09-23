@@ -4,6 +4,7 @@ import {
   applyPriceCoefficient,
   damageTypeLabel,
   defaultItemTitle,
+  describeDamageSize,
   panelLabel,
   sizeClassLabel,
 } from '@pdr/shared';
@@ -84,16 +85,32 @@ export class DocumentsService {
     ]);
     const agreed = estimates.find((estimate) => estimate.status === 'agreed') ?? null;
     const latest = assessments[0] ?? null;
+    const damageWorks = await this.damages.listExtraWorks(
+      ctx.workspaceId,
+      damages.map((damage) => damage.id),
+    );
+    const worksOf = (damageId: string) => damageWorks.filter((work) => work.damageId === damageId);
 
-    const damageRows: DocumentDamageRow[] = damages.map((damage) => ({
-      panel: panelLabel(damage.panelCode) ?? damage.panelCode,
-      damage: damageTypeLabel(damage.damageType),
-      size: sizeClassLabel(damage.sizeClass),
-      quantity: damage.quantity,
-      onEdge: damage.onEdge,
-      comment: damage.comment,
-      priceMinor: damage.priceMinor === null ? null : Number(damage.priceMinor),
-    }));
+    const damageRows: DocumentDamageRow[] = damages.map((damage) => {
+      // Размер в документе — измеренный мастером, не тарифная зона.
+      const size = describeDamageSize(damage.widthMm, damage.heightMm, damage.sizeClass);
+      return {
+        panel: panelLabel(damage.panelCode) ?? damage.panelCode,
+        damage: damageTypeLabel(damage.damageType),
+        size: size.actual,
+        zone: size.zone,
+        quantity: damage.quantity,
+        onEdge: damage.onEdge,
+        comment: damage.comment,
+        priceMinor: damage.priceMinor === null ? null : Number(damage.priceMinor),
+        extras: worksOf(damage.id).map((work) => ({
+          title: work.title,
+          quantity: work.quantity,
+          unitPriceMinor: Number(work.unitPriceMinor),
+          lineTotalMinor: work.quantity * Number(work.unitPriceMinor),
+        })),
+      };
+    });
 
     // Смета подписана клиентом — она и есть основание. Оценка идёт в дело,
     // пока сметы нет: без неё заказ-наряд печатался бы без работ и сумм.
@@ -116,7 +133,8 @@ export class DocumentsService {
             item.kind === 'damage' ? null : ESTIMATE_ITEM_KIND_LABELS[item.kind],
             panelLabel(item.panelCode),
             damageTypeLabel(item.damageType),
-            sizeClassLabel(item.sizeClass),
+            describeDamageSize(item.widthMm, item.heightMm, item.sizeClass).actual ??
+              sizeClassLabel(item.sizeClass),
             item.onEdge ? 'на ребре' : null,
             item.comment,
           ]
@@ -141,7 +159,7 @@ export class DocumentsService {
       extrasMinor = Number(latest.extrasMinor);
       pdrMinor = applyPriceCoefficient(baseMinor, coefficient);
       totalMinor = Number(latest.totalMinor);
-      works = latest.items.map((item) => ({
+      const rowOf = (item: (typeof latest.items)[number], attached: boolean): DocumentWorkRow => ({
         kind: item.kind,
         title:
           item.kind === 'damage'
@@ -154,7 +172,9 @@ export class DocumentsService {
             : (item.title ?? 'Арматурная работа'),
         details:
           [
-            item.kind === 'damage' ? null : ESTIMATE_ITEM_KIND_LABELS[item.kind],
+            item.kind === 'damage'
+              ? describeDamageSize(item.widthMm, item.heightMm, item.sizeClass).actual
+              : ESTIMATE_ITEM_KIND_LABELS[item.kind],
             item.onEdge ? 'на ребре' : null,
             item.comment,
           ]
@@ -171,7 +191,26 @@ export class DocumentsService {
           item.kind === 'damage'
             ? applyPriceCoefficient(Number(item.lineTotalMinor), coefficient)
             : Number(item.lineTotalMinor),
-      }));
+        attached,
+      });
+
+      // Порядок строк — по деталям: ремонт детали, под ним её арматурные
+      // работы. Плоский список из тех же строк читался бы как случайный набор.
+      const damageItems = latest.items.filter((item) => item.kind === 'damage');
+      const extraItems = latest.items.filter((item) => item.kind !== 'damage');
+      works = [
+        ...damageItems.flatMap((item) => [
+          rowOf(item, false),
+          ...extraItems
+            .filter((extra) => extra.damageId && extra.damageId === item.damageId)
+            .map((extra) => rowOf(extra, true)),
+        ]),
+        ...extraItems
+          .filter(
+            (extra) => !extra.damageId || !damageItems.some((d) => d.damageId === extra.damageId),
+          )
+          .map((extra) => rowOf(extra, false)),
+      ];
       // Оценка без разбора на позиции (мастер назвал сумму) — одна строка:
       // документ без работ выглядел бы как ошибка.
       if (works.length === 0 && totalMinor > 0) {
@@ -187,6 +226,50 @@ export class DocumentsService {
         ];
         pdrMinor = totalMinor;
       }
+    } else if (damages.length > 0) {
+      // Оценки ещё нет, но детали отмечены и цены у них посчитаны прямо в
+      // карточке. Печатать пустой заказ-наряд в этом случае — прятать работу,
+      // которую мастер уже согласовал с клиентом.
+      source = 'damages';
+      works = damageRows.flatMap((row, index) => {
+        const damage = damages[index]!;
+        const price = damage.priceMinor === null ? 0 : Number(damage.priceMinor);
+        return [
+          {
+            kind: 'damage' as const,
+            title: defaultItemTitle({
+              panelCode: damage.panelCode,
+              damageType: damage.damageType,
+              quantity: damage.quantity,
+              sizeClass: damage.sizeClass,
+            }),
+            details:
+              [row.size, damage.onEdge ? 'на ребре' : null, damage.comment]
+                .filter(Boolean)
+                .join(' · ') || null,
+            quantity: 1,
+            unitPriceMinor: price,
+            lineTotalMinor: price,
+            attached: false,
+          },
+          ...row.extras.map((extra) => ({
+            kind: 'disassembly' as const,
+            title: extra.title,
+            details: null,
+            quantity: extra.quantity,
+            unitPriceMinor: extra.unitPriceMinor,
+            lineTotalMinor: extra.lineTotalMinor,
+            attached: true,
+          })),
+        ];
+      });
+      pdrMinor = works
+        .filter((work) => work.kind === 'damage')
+        .reduce((sum, work) => sum + work.lineTotalMinor, 0);
+      extrasMinor = works
+        .filter((work) => work.kind !== 'damage')
+        .reduce((sum, work) => sum + work.lineTotalMinor, 0);
+      totalMinor = pdrMinor + extrasMinor;
     }
 
     const paidMinor = Number(order.paidMinor);

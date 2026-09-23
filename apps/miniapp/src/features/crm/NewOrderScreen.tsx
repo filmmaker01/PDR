@@ -14,7 +14,7 @@ import {
   Textarea,
   useUploadQueue,
 } from '@pdr/ui';
-import { damageTypeLabel, panelLabel, sizeClassLabel } from '@pdr/shared';
+import { damageTypeLabel, describeDamageSize, panelLabel } from '@pdr/shared';
 import { api } from '@/shared/api';
 import { createUploadTransport } from '@/shared/uploads';
 import { formatPhoneRu } from '@/shared/format';
@@ -360,7 +360,9 @@ export function NewOrderScreen() {
                 title={panelLabel(damage.panelCode) ?? damage.panelCode}
                 subtitle={[
                   damageTypeLabel(damage.damageType),
-                  damage.sizeClass ? `размер ${sizeClassLabel(damage.sizeClass)}` : null,
+                  // Показывается измеренный размер, а не тарифная зона:
+                  // 300×300 см не должно превращаться в «100×100».
+                  describeDamageSize(damage.widthMm, damage.heightMm, damage.sizeClass).actual,
                 ]
                   .filter(Boolean)
                   .join(' · ')}

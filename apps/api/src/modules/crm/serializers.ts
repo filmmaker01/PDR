@@ -1,4 +1,5 @@
-import type { Damage } from '@prisma/client';
+import type { Damage, DamageExtraWork } from '@prisma/client';
+import { describeDamageSize } from '@pdr/shared';
 import type { OrderPhotoWithFile } from './repositories/order-photos.repository';
 
 /**
@@ -16,7 +17,19 @@ export const PHOTO_CATEGORY_LABELS: Record<string, string> = {
   document: 'Документы',
 };
 
-export function serializeDamage(damage: Damage & { photoCount?: number }): Record<string, unknown> {
+export function serializeDamage(
+  damage: Damage & { photoCount?: number; extraWorks?: DamageExtraWork[] },
+): Record<string, unknown> {
+  const extraWorks = damage.extraWorks ?? [];
+  const extrasMinor = extraWorks.reduce(
+    (sum, work) => sum + work.quantity * Number(work.unitPriceMinor),
+    0,
+  );
+  const priceMinor = damage.priceMinor === null ? null : Number(damage.priceMinor);
+  // Фактический размер и тарифная зона — разные вещи и наружу идут раздельно:
+  // интерфейс и документы показывают измеренное, а цену считает зона.
+  const size = describeDamageSize(damage.widthMm, damage.heightMm, damage.sizeClass);
+
   return {
     id: damage.id,
     leadId: damage.leadId,
@@ -26,13 +39,28 @@ export function serializeDamage(damage: Damage & { photoCount?: number }): Recor
     sizeClass: damage.sizeClass,
     widthMm: damage.widthMm,
     heightMm: damage.heightMm,
+    /** Готовые подписи: «300 × 300 см» и «100×100+». */
+    sizeText: size.actual,
+    zoneLabel: size.zone,
+    zoneCapped: size.capped,
     quantity: damage.quantity,
     material: damage.material,
     accessDifficulty: damage.accessDifficulty,
     onEdge: damage.onEdge,
     comment: damage.comment,
-    priceMinor: damage.priceMinor === null ? null : Number(damage.priceMinor),
+    priceMinor,
     priceSource: damage.priceSource,
+    extraWorks: extraWorks.map((work) => ({
+      id: work.id,
+      priceListItemId: work.priceListItemId,
+      title: work.title,
+      quantity: work.quantity,
+      unitPriceMinor: Number(work.unitPriceMinor),
+      lineTotalMinor: work.quantity * Number(work.unitPriceMinor),
+    })),
+    extrasMinor,
+    /** Итог по детали: ремонт плюс её арматурные работы. */
+    totalMinor: (priceMinor ?? 0) + extrasMinor,
     position: damage.position,
     photoCount: damage.photoCount ?? 0,
     createdAt: damage.createdAt.toISOString(),

@@ -2,6 +2,7 @@ import { Injectable } from '@nestjs/common';
 import PDFDocument from 'pdfkit';
 import {
   ESTIMATE_ITEM_KIND_LABELS,
+  describeDamageSize,
   formatMinor,
   panelLabel,
   damageTypeLabel,
@@ -108,11 +109,14 @@ export class EstimatePdfService {
         doc.addPage();
         header();
       }
+      // Размер показывается измеренный: тарифная зона — дело калькулятора,
+      // клиенту в смете нужно его собственное число.
+      const size = describeDamageSize(item.widthMm, item.heightMm, item.sizeClass);
       const details = [
         ESTIMATE_ITEM_KIND_LABELS[item.kind] ?? item.kind,
         panelLabel(item.panelCode),
         damageTypeLabel(item.damageType),
-        sizeClassLabel(item.sizeClass),
+        size.actual ?? sizeClassLabel(item.sizeClass),
         item.onEdge ? 'на ребре' : null,
         item.comment,
       ]

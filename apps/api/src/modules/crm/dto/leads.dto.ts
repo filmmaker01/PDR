@@ -72,6 +72,26 @@ const damageInputFields = {
   ...damageFields,
   /** Мастер мог назвать цену сразу при осмотре, не дожидаясь оценки. */
   priceMinor: z.number().int().min(0).max(100_000_000).nullable().optional(),
+  /**
+   * Арматурные работы этой детали: снятие обшивки, разбор двери, снятие фары.
+   * Присылаются набором целиком — таким, каким мастер видит его на экране.
+   */
+  extraWorks: z
+    .array(
+      z
+        .object({
+          priceListItemId: z.string().uuid().nullable().optional(),
+          title: optionalString(200),
+          quantity: z.number().int().min(1).max(100).optional(),
+          unitPriceMinor: z.number().int().min(0).max(100_000_000).nullable().optional(),
+        })
+        .strict()
+        .refine((v) => Boolean(v.priceListItemId || v.title), {
+          message: 'Выберите арматурную работу из справочника или назовите свою',
+        }),
+    )
+    .max(12)
+    .optional(),
 };
 
 // ── Обращения ────────────────────────────────────────────────────────────────

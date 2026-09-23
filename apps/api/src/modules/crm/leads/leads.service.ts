@@ -208,7 +208,7 @@ export class LeadsService {
       );
 
       for (const [index, damage] of (input.damages ?? []).entries()) {
-        await this.damages.create(
+        const created = await this.damages.create(
           ctx.workspaceId,
           {
             leadId: lead.id,
@@ -218,6 +218,13 @@ export class LeadsService {
           },
           tx,
         );
+        // Арматурные работы мастер добавляет в той же карточке повреждения,
+        // ещё до создания обращения. Потерять их здесь — значит потерять
+        // часть согласованной с клиентом работы.
+        const works = await this.damageParams.normalizeExtraWorks(ctx, damage.extraWorks);
+        if (works !== null && works.length > 0) {
+          await this.damages.replaceExtraWorks(ctx.workspaceId, created.id, works, tx);
+        }
       }
 
       return lead;

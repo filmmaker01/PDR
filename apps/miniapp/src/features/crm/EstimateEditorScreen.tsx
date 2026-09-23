@@ -25,12 +25,22 @@ import {
   type EstimateItemKind,
 } from './types';
 
+/** Сантиметры на экране, миллиметры в базе. */
+function cmToMm(value: string): number | null {
+  const n = Number(value.replace(',', '.'));
+  if (!Number.isFinite(n) || n <= 0) return null;
+  return Math.round(n * 10);
+}
+
 interface ItemDraft {
   kind: EstimateItemKind;
   title: string;
   panelCode: string | null;
   damageType: string | null;
   sizeClass: string | null;
+  /** Фактический размер повреждения в миллиметрах: он идёт в документы. */
+  widthMm: number | null;
+  heightMm: number | null;
   quantity: number;
   onEdge: boolean;
   material: 'steel' | 'aluminum' | 'other' | null;
@@ -47,6 +57,8 @@ function toDraft(item: EstimateItem): ItemDraft {
     panelCode: item.panelCode,
     damageType: item.damageType,
     sizeClass: item.sizeClass,
+    widthMm: item.widthMm,
+    heightMm: item.heightMm,
     quantity: item.quantity,
     onEdge: item.onEdge,
     material: item.material,
@@ -63,6 +75,8 @@ const EMPTY_DRAFT: ItemDraft = {
   panelCode: null,
   damageType: null,
   sizeClass: null,
+  widthMm: null,
+  heightMm: null,
   quantity: 1,
   onEdge: false,
   material: null,
@@ -114,6 +128,8 @@ export function EstimateEditorScreen() {
           panelCode: item.panelCode,
           damageType: item.damageType,
           sizeClass: item.sizeClass,
+          widthMm: item.widthMm,
+          heightMm: item.heightMm,
           quantity: item.quantity,
           material: item.material,
           accessDifficulty: item.accessDifficulty,
@@ -535,7 +551,7 @@ export function EstimateEditorScreen() {
                   ))}
                 </select>
               </Field>
-              <Field label="Размер">
+              <Field label="Тарифная зона" hint="По ней подбирается цена в прайсе">
                 <div className="pdr-chips">
                   {(dictionaries.data?.sizeClasses ?? []).map((size) => (
                     <button
@@ -554,6 +570,26 @@ export function EstimateEditorScreen() {
                   ))}
                 </div>
               </Field>
+              {/* Фактический размер хранится отдельно от зоны: в смете и в
+                  документах клиент должен видеть измеренное повреждение. */}
+              <div className="pdr-row">
+                <Field label="Ширина, см">
+                  <Input
+                    value={draft.widthMm === null ? '' : String(Math.round(draft.widthMm / 10))}
+                    inputMode="decimal"
+                    placeholder="40"
+                    onChange={(e) => setDraft({ ...draft, widthMm: cmToMm(e.target.value) })}
+                  />
+                </Field>
+                <Field label="Высота, см">
+                  <Input
+                    value={draft.heightMm === null ? '' : String(Math.round(draft.heightMm / 10))}
+                    inputMode="decimal"
+                    placeholder="40"
+                    onChange={(e) => setDraft({ ...draft, heightMm: cmToMm(e.target.value) })}
+                  />
+                </Field>
+              </div>
               <label className="pdr-row" style={{ cursor: 'pointer' }}>
                 <input
                   type="checkbox"
