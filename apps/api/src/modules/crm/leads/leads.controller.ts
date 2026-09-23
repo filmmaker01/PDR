@@ -128,6 +128,7 @@ export class LeadsController {
   async create(
     @Ws() ws: WorkspaceContext,
     @Body(zodBody(createLeadSchema)) body: Record<string, never>,
+    @CurrentAuth() auth: AuthContext,
   ) {
     const input = body as unknown as Parameters<LeadsService['create']>[1] & {
       photos?: {
@@ -135,6 +136,8 @@ export class LeadsController {
         category: never;
         caption?: string | null;
         damageIndex?: number | null;
+        annotation?: unknown;
+        annotationFileId?: string | null;
       }[];
     };
     const lead = await this.leads.create(ws, input);
@@ -144,6 +147,7 @@ export class LeadsController {
     const photos = input.photos ?? [];
     let attached = 0;
     const failed: { fileId: string; message: string }[] = [];
+    let markupFailed = 0;
 
     if (photos.length > 0) {
       const created = await this.leads.damagesOf(ws, lead.id);
@@ -153,7 +157,7 @@ export class LeadsController {
             ? null
             : (created[photo.damageIndex]?.id ?? null);
         try {
-          await this.photos.attach(
+          const attachedPhoto = await this.photos.attach(
             ws,
             { leadId: lead.id },
             {
@@ -164,6 +168,21 @@ export class LeadsController {
             },
           );
           attached += 1;
+
+          // Разметку сохраняет тот же путь, что и во вкладке «Фото»: оригинал
+          // не трогается, фигуры и сведённая картинка лежат отдельно.
+          if (photo.annotation) {
+            await this.photos
+              .saveMarkup(
+                ws,
+                attachedPhoto.id,
+                { annotation: photo.annotation, annotationFileId: photo.annotationFileId ?? null },
+                auth,
+              )
+              .catch(() => {
+                markupFailed += 1;
+              });
+          }
         } catch (error) {
           // Обращение уже создано, и терять его из-за одной неудачной
           // фотографии нельзя: мастер добавит её из карточки.
@@ -179,7 +198,7 @@ export class LeadsController {
       id: lead.id,
       number: lead.number,
       status: lead.status,
-      photos: { attached, failed },
+      photos: { attached, failed, markupFailed },
     };
   }
 

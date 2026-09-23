@@ -380,6 +380,67 @@ describe('CRM: обращения, повреждения, оценки', () => 
       expect(saved.annotationFileId).toBe(markupFileId);
     });
 
+    it('разметка из формы нового обращения доезжает до заказа вместе с привязкой', async () => {
+      const markedFileId = await uploadPng();
+      const markupFileId = await uploadPng();
+      const plainFileId = await uploadPng();
+      const unboundFileId = await uploadPng();
+      const circle = { v: 1, shapes: [{ type: 'circle', cx: 0.4, cy: 0.5, rx: 0.2, ry: 0.1 }] };
+
+      const created = await http()
+        .post(`/v1/workspaces/${workspaceId}/leads`)
+        .set(...owner.authHeader)
+        .send({
+          contactName: 'Марина',
+          damages: [{ panelCode: 'door_fl' }, { panelCode: 'hood', widthMm: 3000, heightMm: 3000 }],
+          photos: [
+            // Размечено и привязано ко второму повреждению ещё до сохранения формы.
+            {
+              fileId: markedFileId,
+              damageIndex: 1,
+              annotation: circle,
+              annotationFileId: markupFileId,
+            },
+            { fileId: plainFileId },
+            // Разметка есть, а повреждение ещё не выбрано.
+            { fileId: unboundFileId, annotation: circle },
+          ],
+        })
+        .expect(201);
+      expect(created.body.photos).toEqual({ attached: 3, failed: [], markupFailed: 0 });
+
+      const leadId = created.body.id;
+      const damages = await http()
+        .get(`/v1/workspaces/${workspaceId}/leads/${leadId}/damages`)
+        .set(...owner.authHeader)
+        .expect(200);
+      const hood = damages.body.items.find((d: { panelCode: string }) => d.panelCode === 'hood');
+
+      const converted = await http()
+        .post(`/v1/workspaces/${workspaceId}/leads/${leadId}/convert`)
+        .set(...owner.authHeader)
+        .send({})
+        .expect(201);
+
+      const photos = await http()
+        .get(`/v1/workspaces/${workspaceId}/orders/${converted.body.orderId}/photos`)
+        .set(...owner.authHeader)
+        .expect(200);
+      const byFile = (fileId: string) =>
+        photos.body.items.find((p: { fileId: string }) => p.fileId === fileId);
+
+      const marked = byFile(markedFileId);
+      expect(marked.hasMarkup).toBe(true);
+      expect(marked.annotation).toEqual(circle);
+      expect(marked.annotationFileId).toBe(markupFileId);
+      // Повреждение переехало в заказ с тем же id — связь снимка не рвётся.
+      expect(marked.damageId).toBe(hood.id);
+
+      expect(byFile(plainFileId).hasMarkup).toBe(false);
+      expect(byFile(unboundFileId).hasMarkup).toBe(true);
+      expect(byFile(unboundFileId).damageId).toBeNull();
+    });
+
     it('не даёт подменить оригинал сведённой картинкой', async () => {
       const leadId = await createLead();
       const fileId = await uploadPng();

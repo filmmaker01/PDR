@@ -94,6 +94,53 @@ const damageInputFields = {
     .optional(),
 };
 
+// ── Разметка фотографии ──────────────────────────────────────────────────────
+
+/**
+ * Одна фигура разметки в нормированных координатах 0–1: снимок открывают
+ * и на телефоне, и в вебе, и разметка обязана лечь одинаково при любом размере.
+ */
+const markupShapeSchema = z.discriminatedUnion('type', [
+  z
+    .object({
+      type: z.literal('free'),
+      color: z.string().max(20).optional(),
+      width: z.number().min(0).max(1).optional(),
+      points: z
+        .array(z.tuple([z.number().min(-1).max(2), z.number().min(-1).max(2)]))
+        .min(2)
+        .max(2000),
+    })
+    .strict(),
+  z
+    .object({
+      type: z.literal('circle'),
+      color: z.string().max(20).optional(),
+      width: z.number().min(0).max(1).optional(),
+      cx: z.number().min(-1).max(2),
+      cy: z.number().min(-1).max(2),
+      rx: z.number().min(0).max(2),
+      ry: z.number().min(0).max(2),
+    })
+    .strict(),
+  z
+    .object({
+      type: z.literal('arrow'),
+      color: z.string().max(20).optional(),
+      width: z.number().min(0).max(1).optional(),
+      x1: z.number().min(-1).max(2),
+      y1: z.number().min(-1).max(2),
+      x2: z.number().min(-1).max(2),
+      y2: z.number().min(-1).max(2),
+    })
+    .strict(),
+]);
+
+/** Разметка целиком: версия формата и фигуры. */
+const markupDocSchema = z
+  .object({ v: z.literal(1), shapes: z.array(markupShapeSchema).max(200) })
+  .strict();
+
 // ── Обращения ────────────────────────────────────────────────────────────────
 
 export const leadListQuerySchema = z.object({
@@ -136,6 +183,13 @@ export const createLeadSchema = z
             caption: optionalString(200),
             /** Номер повреждения в массиве damages, начиная с нуля. */
             damageIndex: z.number().int().min(0).max(59).nullable().optional(),
+            /**
+             * Разметка, сделанная ещё в форме нового обращения: мастер обвёл
+             * вмятину до того, как обращение появилось в базе.
+             */
+            annotation: markupDocSchema.nullable().optional(),
+            /** Сведённая картинка с разметкой — отдельный файл, не оригинал. */
+            annotationFileId: z.string().uuid().nullable().optional(),
           })
           .strict(),
       )
@@ -304,55 +358,10 @@ export const updateAssessmentSchema = z
   })
   .strict();
 
-// ── Разметка фотографии ──────────────────────────────────────────────────────
-
-/**
- * Одна фигура разметки в нормированных координатах 0–1: снимок открывают
- * и на телефоне, и в вебе, и разметка обязана лечь одинаково при любом размере.
- */
-const markupShapeSchema = z.discriminatedUnion('type', [
-  z
-    .object({
-      type: z.literal('free'),
-      color: z.string().max(20).optional(),
-      width: z.number().min(0).max(1).optional(),
-      points: z
-        .array(z.tuple([z.number().min(-1).max(2), z.number().min(-1).max(2)]))
-        .min(2)
-        .max(2000),
-    })
-    .strict(),
-  z
-    .object({
-      type: z.literal('circle'),
-      color: z.string().max(20).optional(),
-      width: z.number().min(0).max(1).optional(),
-      cx: z.number().min(-1).max(2),
-      cy: z.number().min(-1).max(2),
-      rx: z.number().min(0).max(2),
-      ry: z.number().min(0).max(2),
-    })
-    .strict(),
-  z
-    .object({
-      type: z.literal('arrow'),
-      color: z.string().max(20).optional(),
-      width: z.number().min(0).max(1).optional(),
-      x1: z.number().min(-1).max(2),
-      y1: z.number().min(-1).max(2),
-      x2: z.number().min(-1).max(2),
-      y2: z.number().min(-1).max(2),
-    })
-    .strict(),
-]);
-
 export const photoMarkupSchema = z
   .object({
     /** null очищает разметку: оригинал снимка при этом не трогается. */
-    annotation: z
-      .object({ v: z.literal(1), shapes: z.array(markupShapeSchema).max(200) })
-      .strict()
-      .nullable(),
+    annotation: markupDocSchema.nullable(),
     /** Сведённая картинка с разметкой — отдельный файл, а не замена оригинала. */
     annotationFileId: z.string().uuid().nullable().optional(),
   })

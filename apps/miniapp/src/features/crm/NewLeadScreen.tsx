@@ -3,30 +3,20 @@ import { useNavigate, useParams } from 'react-router-dom';
 import { useMutation, useQueryClient } from '@tanstack/react-query';
 import { ApiError } from '@pdr/api-client';
 import { LEAD_CHANNEL_SOURCES, damageTypeLabel, describeDamageSize, panelLabel } from '@pdr/shared';
-import {
-  Badge,
-  Button,
-  CarScheme,
-  Card,
-  Field,
-  Input,
-  ListItem,
-  MediaUploader,
-  Textarea,
-  useUploadQueue,
-} from '@pdr/ui';
+import { Badge, Button, CarScheme, Card, Field, Input, ListItem, Textarea } from '@pdr/ui';
 import { api } from '@/shared/api';
-import { createUploadTransport } from '@/shared/uploads';
 import { formatPhoneRu } from '@/shared/format';
 import { alertDialog, haptic } from '@/shared/telegram';
 import { useClients } from './api';
 import { DamageSheet } from './DamageSheet';
 import {
-  LEAD_CHANNEL_OPTIONS,
-  type ClientListItem,
-  type DamageDraft,
-  type LeadChannel,
-} from './types';
+  DraftPhotoUploader,
+  useDraftPhotos,
+  withDraftKey,
+  withoutDraftKey,
+  type DraftDamage,
+} from './DraftPhotos';
+import { LEAD_CHANNEL_OPTIONS, type ClientListItem, type LeadChannel } from './types';
 
 /**
  * Новое обращение.
@@ -55,7 +45,7 @@ export function NewLeadScreen() {
   const [comment, setComment] = useState('');
   const [nextContactAt, setNextContactAt] = useState('');
 
-  const [damages, setDamages] = useState<DamageDraft[]>([]);
+  const [damages, setDamages] = useState<DraftDamage[]>([]);
   const [panelCode, setPanelCode] = useState<string | null>(null);
   const [damageSheet, setDamageSheet] = useState(false);
 
@@ -63,14 +53,10 @@ export function NewLeadScreen() {
   const clients = useClients(workspaceId, search);
 
   // Файлы загружаются сразу, а привязываются к обращению при сохранении:
-  // клиент показывает фотографии, пока мастер ещё заполняет форму.
-  const [fileIds, setFileIds] = useState<string[]>([]);
-  const uploads = useUploadQueue({
-    transport: createUploadTransport({ scope: 'order_photo', workspaceId }),
-    onUploaded: async (fileId) => {
-      setFileIds((current) => [...current, fileId]);
-    },
-  });
+  // клиент показывает фотографии, пока мастер ещё заполняет форму. Разметку
+  // зоны ремонта можно сделать тут же — она уйдёт вместе со снимком.
+  const photos = useDraftPhotos(workspaceId);
+  const uploads = photos.uploads;
 
   const counts = damages.reduce<Record<string, number>>((acc, damage) => {
     acc[damage.panelCode] = (acc[damage.panelCode] ?? 0) + 1;
@@ -79,7 +65,11 @@ export function NewLeadScreen() {
 
   const create = useMutation({
     mutationFn: () =>
-      api.post<{ id: string; number: number; photos: { attached: number; failed: unknown[] } }>(
+      api.post<{
+        id: string;
+        number: number;
+        photos: { attached: number; failed: unknown[]; markupFailed?: number };
+      }>(
         `/workspaces/${workspaceId}/leads`,
         {
           ...(selectedClient
@@ -99,8 +89,17 @@ export function NewLeadScreen() {
           ...(channel ? { channel, source: LEAD_CHANNEL_SOURCES[channel] } : {}),
           comment: comment.trim() || null,
           nextContactAt: nextContactAt ? new Date(nextContactAt).toISOString() : null,
-          damages,
-          photos: fileIds.map((fileId) => ({ fileId, category: 'before' })),
+          damages: damages.map(withoutDraftKey),
+          // Связь снимка с повреждением из формы — по номеру в массиве damages:
+          // у повреждения ещё нет id, он появится в той же операции.
+          photos: photos.payload().map(({ damageKey, annotation, annotationFileId, ...photo }) => {
+            const index = damageKey ? damages.findIndex((d) => d.key === damageKey) : -1;
+            return {
+              ...photo,
+              damageIndex: index >= 0 ? index : null,
+              ...(annotation ? { annotation, annotationFileId } : {}),
+            };
+          }),
         },
         // Ключ идемпотентности один на экран: повтор после обрыва сети
         // не создаёт второе обращение.
@@ -112,6 +111,10 @@ export function NewLeadScreen() {
       if (lead.photos.failed.length > 0) {
         await alertDialog(
           `Обращение создано, но ${lead.photos.failed.length} фото не прикрепилось. Добавьте их из карточки.`,
+        );
+      } else if ((lead.photos.markupFailed ?? 0) > 0) {
+        await alertDialog(
+          'Обращение создано, но разметка на части фото не сохранилась. Отметьте зону заново во вкладке «Фото».',
         );
       }
       navigate(`/workspace/${workspaceId}/leads/${lead.id}`, { replace: true });
@@ -284,16 +287,11 @@ export function NewLeadScreen() {
 
       <h2 className="pdr-subtitle">Фотографии</h2>
       <Card>
-        <MediaUploader
-          items={uploads.items}
-          onAdd={uploads.add}
-          onRetry={uploads.retry}
-          onRemove={uploads.remove}
-          accept="image/*"
-          capture
-          cameraLabel="📷 Снять фото"
-          galleryLabel="🖼 Выбрать из галереи"
-          hint="Снимите повреждение камерой или выберите из галереи фото, которое прислал клиент."
+        <DraftPhotoUploader
+          workspaceId={workspaceId}
+          photos={photos}
+          damages={damages}
+          hint="Снимите повреждение камерой или выберите из галереи фото, которое прислал клиент. Зону ремонта можно отметить сразу."
         />
       </Card>
 
@@ -315,7 +313,7 @@ export function NewLeadScreen() {
           <div className="pdr-list">
             {damages.map((damage, index) => (
               <ListItem
-                key={index}
+                key={damage.key}
                 title={panelLabel(damage.panelCode) ?? damage.panelCode}
                 subtitle={[
                   damageTypeLabel(damage.damageType),
@@ -327,7 +325,11 @@ export function NewLeadScreen() {
                   .filter(Boolean)
                   .join(' · ')}
                 right={<Badge tone="muted">убрать</Badge>}
-                onClick={() => setDamages((current) => current.filter((_, i) => i !== index))}
+                onClick={() => {
+                  // Снимки, привязанные к убранному повреждению, остаются в
+                  // обращении со своей разметкой — просто без привязки.
+                  setDamages((current) => current.filter((_, i) => i !== index));
+                }}
               />
             ))}
           </div>
@@ -380,7 +382,7 @@ export function NewLeadScreen() {
           panelCode={panelCode}
           canEdit
           draftMode
-          onDraftSave={(draft) => setDamages((current) => [...current, draft])}
+          onDraftSave={(draft) => setDamages((current) => [...current, withDraftKey(draft)])}
         />
       ) : null}
     </div>

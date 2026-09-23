@@ -2,31 +2,21 @@ import { useState } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
 import { useMutation, useQueryClient } from '@tanstack/react-query';
 import { ApiError } from '@pdr/api-client';
-import {
-  Badge,
-  Button,
-  CarScheme,
-  Card,
-  Field,
-  Input,
-  ListItem,
-  MediaUploader,
-  Textarea,
-  useUploadQueue,
-} from '@pdr/ui';
+import { Badge, Button, CarScheme, Card, Field, Input, ListItem, Textarea } from '@pdr/ui';
 import { damageTypeLabel, describeDamageSize, panelLabel } from '@pdr/shared';
 import { api } from '@/shared/api';
-import { createUploadTransport } from '@/shared/uploads';
 import { formatPhoneRu } from '@/shared/format';
 import { alertDialog, confirmDialog, haptic } from '@/shared/telegram';
 import { useClients, useMembers, useWorkspace } from './api';
 import { DamageSheet } from './DamageSheet';
 import {
-  APPOINTMENT_KIND_OPTIONS,
-  type AppointmentKind,
-  type ClientListItem,
-  type DamageDraft,
-} from './types';
+  DraftPhotoUploader,
+  useDraftPhotos,
+  withDraftKey,
+  withoutDraftKey,
+  type DraftDamage,
+} from './DraftPhotos';
+import { APPOINTMENT_KIND_OPTIONS, type AppointmentKind, type ClientListItem } from './types';
 
 /** Создание заказа: клиент, автомобиль и заказ одной операцией. */
 export function NewOrderScreen() {
@@ -49,10 +39,9 @@ export function NewOrderScreen() {
   const [assigneeMemberId, setAssigneeMemberId] = useState<string>('');
   const [idempotencyKey] = useState(() => crypto.randomUUID());
 
-  const [damages, setDamages] = useState<DamageDraft[]>([]);
+  const [damages, setDamages] = useState<DraftDamage[]>([]);
   const [panelCode, setPanelCode] = useState<string | null>(null);
   const [damageSheet, setDamageSheet] = useState(false);
-  const [fileIds, setFileIds] = useState<string[]>([]);
 
   const [withAppointment, setWithAppointment] = useState(false);
   const [day, setDay] = useState(() => new Date().toISOString().slice(0, 10));
@@ -64,12 +53,9 @@ export function NewOrderScreen() {
 
   // Файлы уезжают в хранилище сразу, а к заказу привязываются после его
   // создания: снять повреждение важно в момент осмотра, а не после формы.
-  const uploads = useUploadQueue({
-    transport: createUploadTransport({ scope: 'order_photo', workspaceId }),
-    onUploaded: async (fileId) => {
-      setFileIds((current) => [...current, fileId]);
-    },
-  });
+  // Разметку зоны ремонта можно сделать тут же — она уйдёт вместе со снимком.
+  const photos = useDraftPhotos(workspaceId);
+  const uploads = photos.uploads;
 
   const damageCounts = damages.reduce<Record<string, number>>((acc, damage) => {
     acc[damage.panelCode] = (acc[damage.panelCode] ?? 0) + 1;
@@ -115,18 +101,46 @@ export function NewOrderScreen() {
 
       // Повреждения и снимки привязываются к уже созданному заказу: отдельный
       // сбой на фотографии не должен отменять сам заказ.
+      const damageIds = new Map<string, string>();
       for (const damage of damages) {
-        await api
-          .post(`/workspaces/${workspaceId}/orders/${order.id}/damages`, damage)
-          .catch(() => undefined);
+        const created = await api
+          .post<{ id: string }>(
+            `/workspaces/${workspaceId}/orders/${order.id}/damages`,
+            withoutDraftKey(damage),
+          )
+          .catch(() => null);
+        if (created) damageIds.set(damage.key, created.id);
       }
-      for (const fileId of fileIds) {
-        await api
-          .post(`/workspaces/${workspaceId}/orders/${order.id}/photos`, {
-            fileId,
-            category: 'before',
+
+      let lost = 0;
+      for (const photo of photos.payload()) {
+        const attached = await api
+          .post<{ id: string }>(`/workspaces/${workspaceId}/orders/${order.id}/photos`, {
+            fileId: photo.fileId,
+            category: photo.category,
+            damageId: (photo.damageKey && damageIds.get(photo.damageKey)) || null,
           })
-          .catch(() => undefined);
+          .catch(() => null);
+        if (!attached) {
+          lost += 1;
+          continue;
+        }
+        // Разметка сохраняется тем же запросом, что и во вкладке «Фото».
+        if (photo.annotation) {
+          await api
+            .post(`/workspaces/${workspaceId}/photos/${attached.id}/markup`, {
+              annotation: photo.annotation,
+              ...(photo.annotationFileId ? { annotationFileId: photo.annotationFileId } : {}),
+            })
+            .catch(() => {
+              lost += 1;
+            });
+        }
+      }
+      if (lost > 0) {
+        await alertDialog(
+          'Заказ создан, но часть фото или разметки не сохранилась. Проверьте вкладку «Фото».',
+        );
       }
 
       await queryClient.invalidateQueries({ queryKey: ['crm'] });
@@ -326,16 +340,11 @@ export function NewOrderScreen() {
 
       <h2 className="pdr-subtitle">Фотографии</h2>
       <Card>
-        <MediaUploader
-          items={uploads.items}
-          onAdd={uploads.add}
-          onRetry={uploads.retry}
-          onRemove={uploads.remove}
-          accept="image/*"
-          capture
-          cameraLabel="📷 Снять фото"
-          galleryLabel="🖼 Выбрать из галереи"
-          hint="Снимите повреждение камерой или выберите готовую фотографию из галереи."
+        <DraftPhotoUploader
+          workspaceId={workspaceId}
+          photos={photos}
+          damages={damages}
+          hint="Снимите повреждение камерой или выберите готовую фотографию из галереи. Зону ремонта можно отметить сразу."
         />
       </Card>
 
@@ -357,7 +366,7 @@ export function NewOrderScreen() {
           <div className="pdr-list">
             {damages.map((damage, index) => (
               <ListItem
-                key={index}
+                key={damage.key}
                 title={panelLabel(damage.panelCode) ?? damage.panelCode}
                 subtitle={[
                   damageTypeLabel(damage.damageType),
@@ -454,7 +463,7 @@ export function NewOrderScreen() {
           panelCode={panelCode}
           canEdit
           draftMode
-          onDraftSave={(draft) => setDamages((current) => [...current, draft])}
+          onDraftSave={(draft) => setDamages((current) => [...current, withDraftKey(draft)])}
         />
       ) : null}
     </div>

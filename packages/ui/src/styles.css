@@ -449,6 +449,16 @@ select {
   grid-template-columns: repeat(auto-fill, minmax(96px, 1fr));
   gap: 8px;
 }
+.pdr-uploader__grid--footers {
+  /* Под снимком — кнопка разметки: ей нужно место на две строки. */
+  grid-template-columns: repeat(auto-fill, minmax(112px, 1fr));
+}
+.pdr-uploader__cell {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  min-width: 0;
+}
 .pdr-uploader__tile {
   position: relative;
   aspect-ratio: 1;
