@@ -206,4 +206,53 @@ describe('CRM: документы заказа и календарь месяц�
         .expect(422);
     });
   });
+
+  describe('ссылка на документ для клиента', () => {
+    function getShared(token: string) {
+      return http()
+        .get(`/v1/shared/documents/${token}`)
+        .buffer(true)
+        .parse((response, callback) => {
+          const chunks: Buffer[] = [];
+          response.on('data', (chunk: Buffer) => chunks.push(chunk));
+          response.on('end', () => callback(null, Buffer.concat(chunks)));
+        });
+    }
+
+    it('открывается без входа и отдаёт PDF', async () => {
+      const share = await http()
+        .post(`/v1/workspaces/${workspaceId}/orders/${orderId}/documents/work_order/share`)
+        .set(...owner.authHeader)
+        .expect(201);
+      expect(share.body.title).toBe('Заказ-наряд');
+      expect(new Date(share.body.expiresAt).getTime()).toBeGreaterThan(Date.now());
+
+      const pdf = await getShared(share.body.token).expect(200);
+      expect(pdf.headers['content-type']).toContain('application/pdf');
+      expect((pdf.body as Buffer).subarray(0, 4).toString()).toBe('%PDF');
+    });
+
+    it('испорченная ссылка не отдаёт ничего', async () => {
+      const share = await http()
+        .post(`/v1/workspaces/${workspaceId}/orders/${orderId}/documents/work_order/share`)
+        .set(...owner.authHeader)
+        .expect(201);
+      const token = share.body.token as string;
+      await getShared(`${token.slice(0, -2)}xx`).expect(404);
+      await getShared('garbage').expect(404);
+    });
+
+    it('ссылку на чужой заказ не выдают, неизвестный документ — тоже', async () => {
+      const stranger = await createUser(ctx, { firstName: 'Чужой' });
+      await createWorkspace(ctx, { ownerUserId: stranger.id, name: 'Другой цех' });
+      await http()
+        .post(`/v1/workspaces/${workspaceId}/orders/${orderId}/documents/work_order/share`)
+        .set(...stranger.authHeader)
+        .expect((res) => expect([403, 404]).toContain(res.status));
+      await http()
+        .post(`/v1/workspaces/${workspaceId}/orders/${orderId}/documents/unknown/share`)
+        .set(...owner.authHeader)
+        .expect(404);
+    });
+  });
 });

@@ -22,7 +22,12 @@ export interface OrderListItem {
   agreedTotalMinor: number | null;
   paidMinor: number;
   currency: string;
-  client: { id: string; name: string; phone: string | null };
+  client: {
+    id: string;
+    name: string;
+    phone: string | null;
+    telegramUsername?: string | null;
+  };
   vehicle: { id: string; make: string; model: string; plate: string | null } | null;
   assignee: { id: string; name: string; color: string | null } | null;
   scheduledStartAt: string | null;

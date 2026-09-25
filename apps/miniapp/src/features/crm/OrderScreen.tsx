@@ -14,10 +14,11 @@ import {
   Textarea,
 } from '@pdr/ui';
 import { api } from '@/shared/api';
-import { formatDateTime, formatMinor, formatPhoneRu } from '@/shared/format';
+import { formatDateTime, formatMinor } from '@/shared/format';
 import { alertDialog, confirmDialog, haptic } from '@/shared/telegram';
 import { useStickyState } from '@/shared/navigation';
 import { useMembers, useOrder, useWorkspace } from './api';
+import { ClientPhoneActions, SendToClientSheet } from './ClientContact';
 import { AssessmentSheet } from './AssessmentSheet';
 import { DamagesTab } from './DamagesTab';
 import { DocumentsTab } from './DocumentsTab';
@@ -37,6 +38,7 @@ export function OrderScreen() {
   const [statusSheet, setStatusSheet] = useState(false);
   const [appointmentSheet, setAppointmentSheet] = useState(false);
   const [assessmentSheet, setAssessmentSheet] = useState(false);
+  const [sendSheet, setSendSheet] = useState(false);
   const [pendingStatus, setPendingStatus] = useState<OrderStatus | null>(null);
   const [comment, setComment] = useState('');
 
@@ -133,6 +135,9 @@ export function OrderScreen() {
             <Button block variant="secondary" onClick={() => setAssessmentSheet(true)}>
               Сделать оценку
             </Button>
+            <Button block variant="secondary" onClick={() => setSendSheet(true)}>
+              ↗ Отправить клиенту
+            </Button>
             {data.allowedTransitions.length > 0 ? (
               <Button block onClick={() => setStatusSheet(true)}>
                 Изменить статус
@@ -169,13 +174,14 @@ export function OrderScreen() {
                 >
                   {data.client.name}
                 </button>
-                {data.client.phone ? (
-                  <div>
-                    <a href={`tel:${data.client.phone}`} style={{ color: 'var(--pdr-link)' }}>
-                      {formatPhoneRu(data.client.phone)}
-                    </a>
-                  </div>
-                ) : null}
+                <ClientPhoneActions
+                  recipient={{
+                    name: data.client.name,
+                    phone: data.client.phone,
+                    telegramUsername: data.client.telegramUsername ?? null,
+                  }}
+                  workspaceName={workspace.data?.name ?? 'мастерская'}
+                />
               </div>
 
               {data.vehicle ? (
@@ -326,6 +332,14 @@ export function OrderScreen() {
         workspaceId={workspaceId}
         parent={{ orderId }}
         currency={data.currency}
+      />
+
+      <SendToClientSheet
+        open={sendSheet}
+        onClose={() => setSendSheet(false)}
+        workspaceId={workspaceId}
+        workspaceName={workspace.data?.name ?? 'мастерская'}
+        order={data}
       />
 
       <AppointmentSheet

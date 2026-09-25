@@ -3,6 +3,14 @@ import { getInitData, isInsideTelegram } from './telegram';
 
 const baseUrl = `${import.meta.env.VITE_API_URL ?? 'http://localhost:3000'}/v1`;
 
+/**
+ * Полный адрес API — для ссылок, которые уходят за пределы приложения
+ * (документ для клиента). На staging база относительная (`/api`).
+ */
+export function absoluteApiUrl(path: string): string {
+  return new URL(`${baseUrl}${path}`, window.location.origin).href;
+}
+
 export const tokenStore = createLocalTokenStore('pdr.miniapp');
 
 let authFailureHandler: (() => void) | null = null;

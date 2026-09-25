@@ -8,15 +8,20 @@ import {
   panelLabel,
   sizeClassLabel,
 } from '@pdr/shared';
+import type { Workspace } from '@prisma/client';
 import { AppError } from '@/common/errors/app.error';
+import { AppConfigService } from '@/config/config.service';
+import { PrismaService } from '@/infra/prisma/prisma.service';
 import { WorkspacesService } from '@/modules/workspaces/workspaces.service';
 import type { WorkspaceContext } from '@/modules/workspaces/workspace.types';
 import { ORDER_STATUS_LABELS } from '../orders/order-state-machine';
+import { CrmParentAccess } from '../access/crm-parent.access';
 import { AssessmentsRepository } from '../repositories/assessments.repository';
 import { DamagesRepository } from '../repositories/damages.repository';
 import { EstimatesRepository } from '../repositories/estimates.repository';
 import { OrdersRepository } from '../repositories/orders.repository';
 import { PdfDocumentBuilder } from './pdf-document';
+import { DOCUMENT_SHARE_TTL_SEC, signDocumentShare, verifyDocumentShare } from './document-share';
 import {
   ORDER_DOCUMENT_TEMPLATES,
   orderDocumentTemplate,
@@ -43,6 +48,9 @@ export class DocumentsService {
     private readonly damages: DamagesRepository,
     private readonly assessments: AssessmentsRepository,
     private readonly estimates: EstimatesRepository,
+    private readonly access: CrmParentAccess,
+    private readonly prisma: PrismaService,
+    private readonly config: AppConfigService,
   ) {}
 
   /** Перечень документов заказа для интерфейса. */
@@ -59,10 +67,52 @@ export class DocumentsService {
     orderId: string,
     kind: string,
   ): Promise<{ buffer: Buffer; fileName: string; title: string }> {
+    return this.renderFor(ctx.workspace, orderId, kind);
+  }
+
+  /**
+   * Ссылка на документ для клиента: открывается без входа и живёт неделю.
+   * Выдаётся только тому, кто сам может открыть этот заказ.
+   */
+  async share(
+    ctx: WorkspaceContext,
+    orderId: string,
+    kind: string,
+  ): Promise<{ token: string; expiresAt: string; title: string }> {
+    const template = orderDocumentTemplate(kind);
+    if (!template) throw AppError.notFound('Документ не найден');
+    await this.access.readableOrder(ctx, orderId);
+
+    const exp = Math.floor(Date.now() / 1000) + DOCUMENT_SHARE_TTL_SEC;
+    const token = signDocumentShare(
+      { workspaceId: ctx.workspaceId, orderId, kind: template.kind, exp },
+      this.config.env.SESSION_JWT_SECRET,
+    );
+    return { token, expiresAt: new Date(exp * 1000).toISOString(), title: template.title };
+  }
+
+  /** Документ по ссылке клиента: подпись и срок проверяются до любых запросов к базе. */
+  async renderShared(token: string): Promise<{ buffer: Buffer; fileName: string; title: string }> {
+    const claims = verifyDocumentShare(token, this.config.env.SESSION_JWT_SECRET);
+    // Одна и та же ошибка на всё: по ответу нельзя понять, что именно не так.
+    if (!claims) throw AppError.notFound('Ссылка на документ недействительна или устарела');
+
+    const workspace = await this.prisma.workspace.findUnique({
+      where: { id: claims.workspaceId },
+    });
+    if (!workspace) throw AppError.notFound('Ссылка на документ недействительна или устарела');
+    return this.renderFor(workspace, claims.orderId, claims.kind);
+  }
+
+  private async renderFor(
+    workspace: Workspace,
+    orderId: string,
+    kind: string,
+  ): Promise<{ buffer: Buffer; fileName: string; title: string }> {
     const template = orderDocumentTemplate(kind);
     if (!template) throw AppError.notFound('Документ не найден');
 
-    const data = await this.collect(ctx, orderId);
+    const data = await this.collect(workspace, orderId);
     const pdf = new PdfDocumentBuilder(template.title, data.currency);
     template.render(pdf, data);
 
@@ -74,7 +124,8 @@ export class DocumentsService {
   }
 
   /** Сбор данных документа из карточки заказа. */
-  private async collect(ctx: WorkspaceContext, orderId: string): Promise<OrderDocumentContext> {
+  private async collect(workspace: Workspace, orderId: string): Promise<OrderDocumentContext> {
+    const ctx = { workspaceId: workspace.id, workspace };
     const order = await this.orders.findById(ctx.workspaceId, orderId);
     if (!order) throw AppError.notFound('Заказ не найден');
 

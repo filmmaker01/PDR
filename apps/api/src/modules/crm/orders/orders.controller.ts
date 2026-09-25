@@ -6,7 +6,9 @@ import { Audited } from '@/modules/audit/audit.interceptor';
 import { AllowExpiredAccess, Can, Workspace } from '@/modules/workspaces/guards/workspace.guard';
 import { Ws } from '@/modules/workspaces/decorators/workspace.decorators';
 import type { WorkspaceContext } from '@/modules/workspaces/workspace.types';
+import { CurrentAuth, type AuthContext } from '@/modules/auth/decorators/auth.decorators';
 import { OrdersService } from './orders.service';
+import { OrderPhotosService, type DraftPhotoInput } from '../photos/order-photos.service';
 import { AppointmentsService } from '../appointments/appointments.service';
 import {
   APPOINTMENT_KIND_LABELS,
@@ -33,7 +35,13 @@ function serializeListItem(order: OrderWithRelations): Record<string, unknown> {
     agreedTotalMinor: order.agreedTotalMinor === null ? null : Number(order.agreedTotalMinor),
     paidMinor: Number(order.paidMinor),
     currency: order.currency,
-    client: { id: order.client.id, name: order.client.name, phone: order.client.phone },
+    client: {
+      id: order.client.id,
+      name: order.client.name,
+      phone: order.client.phone,
+      // Нужен для «Написать → Telegram»: по одному номеру личный чат не открыть.
+      telegramUsername: order.client.telegramUsername,
+    },
     vehicle: order.vehicle
       ? {
           id: order.vehicle.id,
@@ -63,6 +71,7 @@ export class OrdersController {
   constructor(
     private readonly orders: OrdersService,
     private readonly appointments: AppointmentsService,
+    private readonly photos: OrderPhotosService,
   ) {}
 
   @Get('today')
@@ -97,13 +106,33 @@ export class OrdersController {
   @Can('orders.create')
   @Idempotent()
   @Audited({ entityType: 'order', action: 'create', idFrom: { responseField: 'id' } })
-  @ApiOperation({ summary: 'Новый заказ вместе с клиентом и автомобилем' })
+  @ApiOperation({
+    summary: 'Новый заказ вместе с клиентом, автомобилем, повреждениями и фотографиями',
+  })
   async create(
     @Ws() ws: WorkspaceContext,
     @Body(zodBody(createOrderSchema)) body: Record<string, never>,
+    @CurrentAuth() auth: AuthContext,
   ) {
-    const order = await this.orders.create(ws, body as never);
-    return { id: order.id, number: order.number, status: order.status };
+    const input = body as unknown as Parameters<OrdersService['create']>[1] & {
+      photos?: DraftPhotoInput[];
+    };
+    const order = await this.orders.create(ws, input);
+
+    // Снимки привязываются после заказа: файл уже в хранилище, и его проверка
+    // не должна держать транзакцию с базой открытой.
+    const photos =
+      input.photos && input.photos.length > 0
+        ? await this.photos.attachDraftPhotos(
+            ws,
+            { orderId: order.id },
+            input.photos,
+            await this.orders.damageIdsOf(ws, order.id),
+            auth,
+          )
+        : { attached: 0, failed: [], markupFailed: 0 };
+
+    return { id: order.id, number: order.number, status: order.status, photos };
   }
 
   @Get('orders/:orderId')
