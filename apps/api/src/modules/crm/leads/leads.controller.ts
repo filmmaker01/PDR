@@ -8,7 +8,6 @@ import {
 } from '@pdr/shared';
 import { Idempotent } from '@/common/interceptors/idempotency.interceptor';
 import { zodBody } from '@/common/pipes/zod-validation.pipe';
-import { AppError } from '@/common/errors/app.error';
 import { CurrentAuth, type AuthContext } from '@/modules/auth/decorators/auth.decorators';
 import { Audited } from '@/modules/audit/audit.interceptor';
 import { AllowExpiredAccess, Can, Workspace } from '@/modules/workspaces/guards/workspace.guard';
@@ -16,7 +15,7 @@ import { Ws } from '@/modules/workspaces/decorators/workspace.decorators';
 import type { WorkspaceContext } from '@/modules/workspaces/workspace.types';
 import { LeadsService } from './leads.service';
 import { DamagesService } from '../damages/damages.service';
-import { OrderPhotosService } from '../photos/order-photos.service';
+import { OrderPhotosService, type DraftPhotoInput } from '../photos/order-photos.service';
 import type { LeadWithRelations } from '../repositories/leads.repository';
 import { serializeDamage, serializePhoto } from '../serializers';
 import {
@@ -131,74 +130,28 @@ export class LeadsController {
     @CurrentAuth() auth: AuthContext,
   ) {
     const input = body as unknown as Parameters<LeadsService['create']>[1] & {
-      photos?: {
-        fileId: string;
-        category: never;
-        caption?: string | null;
-        damageIndex?: number | null;
-        annotation?: unknown;
-        annotationFileId?: string | null;
-      }[];
+      photos?: DraftPhotoInput[];
     };
     const lead = await this.leads.create(ws, input);
 
     // Снимки привязываются после обращения: файл уже загружен в хранилище,
     // и его проверка не должна держать транзакцию с базой открытой.
-    const photos = input.photos ?? [];
-    let attached = 0;
-    const failed: { fileId: string; message: string }[] = [];
-    let markupFailed = 0;
-
-    if (photos.length > 0) {
-      const created = await this.leads.damagesOf(ws, lead.id);
-      for (const photo of photos) {
-        const damageId =
-          photo.damageIndex === null || photo.damageIndex === undefined
-            ? null
-            : (created[photo.damageIndex]?.id ?? null);
-        try {
-          const attachedPhoto = await this.photos.attach(
+    const photos =
+      input.photos && input.photos.length > 0
+        ? await this.photos.attachDraftPhotos(
             ws,
             { leadId: lead.id },
-            {
-              fileId: photo.fileId,
-              category: photo.category,
-              caption: photo.caption ?? null,
-              damageId,
-            },
-          );
-          attached += 1;
-
-          // Разметку сохраняет тот же путь, что и во вкладке «Фото»: оригинал
-          // не трогается, фигуры и сведённая картинка лежат отдельно.
-          if (photo.annotation) {
-            await this.photos
-              .saveMarkup(
-                ws,
-                attachedPhoto.id,
-                { annotation: photo.annotation, annotationFileId: photo.annotationFileId ?? null },
-                auth,
-              )
-              .catch(() => {
-                markupFailed += 1;
-              });
-          }
-        } catch (error) {
-          // Обращение уже создано, и терять его из-за одной неудачной
-          // фотографии нельзя: мастер добавит её из карточки.
-          failed.push({
-            fileId: photo.fileId,
-            message: error instanceof AppError ? error.message : 'Не удалось прикрепить фотографию',
-          });
-        }
-      }
-    }
+            input.photos,
+            (await this.leads.damagesOf(ws, lead.id)).map((damage) => damage.id),
+            auth,
+          )
+        : { attached: 0, failed: [], markupFailed: 0 };
 
     return {
       id: lead.id,
       number: lead.number,
       status: lead.status,
-      photos: { attached, failed, markupFailed },
+      photos,
     };
   }
 

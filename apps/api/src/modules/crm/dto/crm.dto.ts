@@ -15,7 +15,7 @@ import {
   nonEmptyString,
   optionalString,
 } from '@pdr/shared';
-import { sizeClassSchema } from './leads.dto';
+import { draftDamagesField, draftPhotosField, sizeClassSchema } from './leads.dto';
 
 /** Локальное время мастерской: `YYYY-MM-DDTHH:mm`. */
 const localDateTime = z
@@ -113,6 +113,10 @@ export const createOrderSchema = z
       })
       .strict()
       .optional(),
+    /** Отмеченные на схеме повреждения: создаются в той же транзакции. */
+    damages: draftDamagesField,
+    /** Уже загруженные снимки: привязываются сразу после создания заказа. */
+    photos: draftPhotosField,
   })
   .strict()
   .refine((v) => Boolean(v.clientId || v.newClient), {

@@ -141,6 +141,37 @@ const markupDocSchema = z
   .object({ v: z.literal(1), shapes: z.array(markupShapeSchema).max(200) })
   .strict();
 
+/**
+ * Повреждения и снимки из формы новой записи — обращения или заказа.
+ *
+ * Отмеченное на схеме и снятое до сохранения формы уходит вместе с самой
+ * записью, одним запросом: иначе сбой на повреждении после создания записи
+ * терялся бы молча, и мастер находил бы пустую схему в новом заказе.
+ */
+export const draftDamagesField = z.array(z.object(damageInputFields).strict()).max(60).optional();
+
+export const draftPhotosField = z
+  .array(
+    z
+      .object({
+        fileId: z.string().uuid(),
+        category: z.enum(PHOTO_CATEGORIES).default('before'),
+        caption: optionalString(200),
+        /** Номер повреждения в массиве damages, начиная с нуля. */
+        damageIndex: z.number().int().min(0).max(59).nullable().optional(),
+        /**
+         * Разметка, сделанная ещё в форме: мастер обвёл вмятину до того,
+         * как запись появилась в базе.
+         */
+        annotation: markupDocSchema.nullable().optional(),
+        /** Сведённая картинка с разметкой — отдельный файл, не оригинал. */
+        annotationFileId: z.string().uuid().nullable().optional(),
+      })
+      .strict(),
+  )
+  .max(30)
+  .optional();
+
 // ── Обращения ────────────────────────────────────────────────────────────────
 
 export const leadListQuerySchema = z.object({
@@ -172,29 +203,9 @@ export const createLeadSchema = z
      * Присылаются вместе с обращением, чтобы мастер не сохранял черновик
      * и не открывал вторую форму.
      */
-    damages: z.array(z.object(damageInputFields).strict()).max(60).optional(),
+    damages: draftDamagesField,
     /** Уже загруженные снимки: привязываются к обращению в той же операции. */
-    photos: z
-      .array(
-        z
-          .object({
-            fileId: z.string().uuid(),
-            category: z.enum(PHOTO_CATEGORIES).default('before'),
-            caption: optionalString(200),
-            /** Номер повреждения в массиве damages, начиная с нуля. */
-            damageIndex: z.number().int().min(0).max(59).nullable().optional(),
-            /**
-             * Разметка, сделанная ещё в форме нового обращения: мастер обвёл
-             * вмятину до того, как обращение появилось в базе.
-             */
-            annotation: markupDocSchema.nullable().optional(),
-            /** Сведённая картинка с разметкой — отдельный файл, не оригинал. */
-            annotationFileId: z.string().uuid().nullable().optional(),
-          })
-          .strict(),
-      )
-      .max(30)
-      .optional(),
+    photos: draftPhotosField,
   })
   .strict()
   .refine((v) => Boolean(v.clientId || v.contactName || v.contactPhone || v.contactExtra), {

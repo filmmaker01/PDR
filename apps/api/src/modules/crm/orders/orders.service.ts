@@ -14,6 +14,8 @@ import {
   type OrderWithRelations,
 } from '../repositories/orders.repository';
 import { AppointmentsService } from '../appointments/appointments.service';
+import { DamagesRepository } from '../repositories/damages.repository';
+import { DamagesService, type DamageInput } from '../damages/damages.service';
 import {
   allowedFrom,
   canTransition,
@@ -53,6 +55,8 @@ export interface CreateOrderInput {
     note?: string | null;
     allowOverlap?: boolean;
   };
+  /** Повреждения, отмеченные на схеме ещё в форме нового заказа. */
+  damages?: DamageInput[];
 }
 
 @Injectable()
@@ -73,6 +77,8 @@ export class OrdersService {
     private readonly workspaces: WorkspacesService,
     private readonly notifications: NotificationsService,
     private readonly appointments: AppointmentsService,
+    private readonly damages: DamagesRepository,
+    private readonly damageParams: DamagesService,
   ) {}
 
   onTransition(listener: OrderTransitionListener): void {
@@ -205,6 +211,26 @@ export class OrdersService {
         },
       });
 
+      // Повреждения со схемы создаются в той же транзакции, что и заказ:
+      // раньше их досылал интерфейс отдельными запросами, и сбой на любом из
+      // них терялся молча — заказ открывался с пустой схемой.
+      for (const [index, damage] of (input.damages ?? []).entries()) {
+        const created = await this.damages.create(
+          ctx.workspaceId,
+          {
+            orderId: order.id,
+            ...this.damageParams.normalizeInput(damage),
+            position: index + 1,
+            createdById: ctx.userId,
+          },
+          tx,
+        );
+        const works = await this.damageParams.normalizeExtraWorks(ctx, damage.extraWorks);
+        if (works !== null && works.length > 0) {
+          await this.damages.replaceExtraWorks(ctx.workspaceId, created.id, works, tx);
+        }
+      }
+
       // Заказ и первая запись появляются вместе: запись без заказа
       // после ошибки оставила бы календарь рассинхронизированным.
       if (input.appointment) {
@@ -222,6 +248,13 @@ export class OrdersService {
 
       return order;
     });
+  }
+
+  /** Повреждения заказа в порядке добавления: нужны, чтобы привязать к ним снимки. */
+  async damageIdsOf(ctx: WorkspaceContext, orderId: string): Promise<string[]> {
+    await this.getById(ctx, orderId);
+    const items = await this.damages.listFor(ctx.workspaceId, { orderId });
+    return items.map((damage) => damage.id);
   }
 
   async update(

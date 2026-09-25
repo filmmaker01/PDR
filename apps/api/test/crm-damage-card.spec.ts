@@ -2,6 +2,13 @@ import request from 'supertest';
 import { afterAll, beforeAll, beforeEach, describe, expect, it } from 'vitest';
 import { createTestApp, truncateAll, type TestApp } from './helpers/app';
 import { createUser, createWorkspace, type TestUser } from './helpers/factories';
+import { FilesService } from '@/modules/files/files.service';
+
+/** Минимальный валидный PNG 1×1. */
+const PNG_1X1 = Buffer.from(
+  'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8z8BQDwAEhQGAhKmMIQAAAABJRU5ErkJggg==',
+  'base64',
+);
 
 /**
  * Карточка повреждения: фактический размер и арматурные работы детали.
@@ -38,6 +45,33 @@ describe('CRM: карточка повреждения', () => {
       .send({ contactName: 'Пётр', contactPhone: '+79001234567' })
       .expect(201);
     return res.body.id as string;
+  }
+
+  async function uploadPng(): Promise<string> {
+    const presigned = await http()
+      .post('/v1/files/presign-upload')
+      .set(...owner.authHeader)
+      .send({
+        scope: 'order_photo',
+        mimeType: 'image/png',
+        sizeBytes: PNG_1X1.length,
+        workspaceId,
+        originalName: 'damage.png',
+      })
+      .expect(201);
+    const url = new URL(presigned.body.upload.url);
+    await http()
+      .post(`${url.pathname}${url.search}`)
+      .set('Content-Type', 'application/octet-stream')
+      .send(PNG_1X1)
+      .expect(201);
+    await http()
+      .post(`/v1/files/${presigned.body.fileId}/complete`)
+      .set(...owner.authHeader)
+      .send({})
+      .expect(201);
+    await ctx.app.get(FilesService).process(presigned.body.fileId);
+    return presigned.body.fileId as string;
   }
 
   async function createWork(title: string, priceMinor: number): Promise<string> {
@@ -282,6 +316,132 @@ describe('CRM: карточка повреждения', () => {
         heightMm: 3000,
         sizeText: '300 × 300 см',
       });
+    });
+  });
+
+  describe('новый заказ сразу с повреждениями', () => {
+    it('капот и дверь из формы попадают в заказ со всеми параметрами, работами и фото', async () => {
+      const workId = await createWork('Снятие обшивки двери', 150000);
+      const hoodPhoto = await uploadPng();
+      const hoodMarkup = await uploadPng();
+      const doorPhoto = await uploadPng();
+      const loosePhoto = await uploadPng();
+      const circle = { v: 1, shapes: [{ type: 'circle', cx: 0.5, cy: 0.5, rx: 0.2, ry: 0.1 }] };
+
+      const created = await http()
+        .post(`/v1/workspaces/${workspaceId}/orders`)
+        .set(...owner.authHeader)
+        .send({
+          newClient: { name: 'Олег', phone: '+79272666022' },
+          newVehicle: { make: 'Toyota', model: 'Camry' },
+          damages: [
+            {
+              panelCode: 'hood',
+              damageType: 'dent',
+              widthMm: 3000,
+              heightMm: 3000,
+              quantity: 2,
+              material: 'aluminum',
+              accessDifficulty: 'medium',
+              onEdge: true,
+              priceMinor: 3450000,
+              extraWorks: [{ title: 'Снятие шумоизоляции', unitPriceMinor: 200000 }],
+            },
+            {
+              panelCode: 'door_fl',
+              damageType: 'dent',
+              widthMm: 400,
+              heightMm: 400,
+              material: 'steel',
+              accessDifficulty: 'hard',
+              onEdge: false,
+              priceMinor: 900000,
+              extraWorks: [{ priceListItemId: workId }],
+            },
+          ],
+          photos: [
+            { fileId: hoodPhoto, damageIndex: 0, annotation: circle, annotationFileId: hoodMarkup },
+            { fileId: doorPhoto, damageIndex: 1 },
+            { fileId: loosePhoto },
+          ],
+        })
+        .expect(201);
+      expect(created.body.photos).toEqual({ attached: 3, failed: [], markupFailed: 0 });
+      const orderId = created.body.id as string;
+
+      // То, что читает вкладка «Повреждения» и схема: обе детали на месте.
+      const list = await http()
+        .get(`/v1/workspaces/${workspaceId}/orders/${orderId}/damages`)
+        .set(...owner.authHeader)
+        .expect(200);
+      expect(list.body.items.map((d: { panelCode: string }) => d.panelCode)).toEqual([
+        'hood',
+        'door_fl',
+      ]);
+      const [hood, door] = list.body.items;
+      expect(hood).toMatchObject({
+        damageType: 'dent',
+        widthMm: 3000,
+        heightMm: 3000,
+        sizeText: '300 × 300 см',
+        quantity: 2,
+        material: 'aluminum',
+        accessDifficulty: 'medium',
+        onEdge: true,
+        priceMinor: 3450000,
+        extrasMinor: 200000,
+        totalMinor: 3650000,
+      });
+      expect(hood.extraWorks).toHaveLength(1);
+      expect(hood.extraWorks[0].title).toBe('Снятие шумоизоляции');
+      expect(door).toMatchObject({
+        widthMm: 400,
+        material: 'steel',
+        accessDifficulty: 'hard',
+        onEdge: false,
+        priceMinor: 900000,
+        extrasMinor: 150000,
+      });
+      expect(door.extraWorks[0].priceListItemId).toBe(workId);
+
+      const photos = await http()
+        .get(`/v1/workspaces/${workspaceId}/orders/${orderId}/photos`)
+        .set(...owner.authHeader)
+        .expect(200);
+      const byFile = (fileId: string) =>
+        photos.body.items.find((p: { fileId: string }) => p.fileId === fileId);
+      expect(byFile(hoodPhoto)).toMatchObject({
+        damageId: hood.id,
+        hasMarkup: true,
+        annotationFileId: hoodMarkup,
+      });
+      expect(byFile(hoodPhoto).annotation).toEqual(circle);
+      expect(byFile(doorPhoto)).toMatchObject({ damageId: door.id, hasMarkup: false });
+      expect(byFile(loosePhoto).damageId).toBeNull();
+    });
+
+    it('ошибка в повреждении не создаёт заказ без схемы', async () => {
+      await http()
+        .post(`/v1/workspaces/${workspaceId}/orders`)
+        .set(...owner.authHeader)
+        .send({
+          newClient: { name: 'Олег' },
+          damages: [
+            { panelCode: 'hood' },
+            // Позиция чужого справочника: работа не найдётся.
+            {
+              panelCode: 'door_fl',
+              extraWorks: [{ priceListItemId: '00000000-0000-4000-8000-000000000000' }],
+            },
+          ],
+        })
+        .expect((res) => expect(res.status).toBeGreaterThanOrEqual(400));
+
+      const orders = await http()
+        .get(`/v1/workspaces/${workspaceId}/orders`)
+        .set(...owner.authHeader)
+        .expect(200);
+      expect(orders.body.items).toHaveLength(0);
     });
   });
 });

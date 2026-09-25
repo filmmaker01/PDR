@@ -67,7 +67,11 @@ export function NewOrderScreen() {
 
   const create = useMutation({
     mutationFn: (options: { allowOverlap?: boolean } = {}) =>
-      api.post<{ id: string; number: number }>(
+      api.post<{
+        id: string;
+        number: number;
+        photos: { attached: number; failed: unknown[]; markupFailed: number };
+      }>(
         `/workspaces/${workspaceId}/orders`,
         {
           ...(selectedClient
@@ -91,6 +95,17 @@ export function NewOrderScreen() {
                 },
               }
             : {}),
+          // Повреждения и снимки уходят вместе с заказом: сервер создаёт их в
+          // той же операции, и сбой не может молча оставить заказ без схемы.
+          damages: damages.map(withoutDraftKey),
+          photos: photos.payload().map(({ damageKey, annotation, annotationFileId, ...photo }) => {
+            const index = damageKey ? damages.findIndex((d) => d.key === damageKey) : -1;
+            return {
+              ...photo,
+              damageIndex: index >= 0 ? index : null,
+              ...(annotation ? { annotation, annotationFileId } : {}),
+            };
+          }),
         },
         // Ключ идемпотентности один на экран: повтор после обрыва сети
         // не создаёт второй заказ.
@@ -99,47 +114,13 @@ export function NewOrderScreen() {
     onSuccess: async (order) => {
       haptic('success');
 
-      // Повреждения и снимки привязываются к уже созданному заказу: отдельный
-      // сбой на фотографии не должен отменять сам заказ.
-      const damageIds = new Map<string, string>();
-      for (const damage of damages) {
-        const created = await api
-          .post<{ id: string }>(
-            `/workspaces/${workspaceId}/orders/${order.id}/damages`,
-            withoutDraftKey(damage),
-          )
-          .catch(() => null);
-        if (created) damageIds.set(damage.key, created.id);
-      }
-
-      let lost = 0;
-      for (const photo of photos.payload()) {
-        const attached = await api
-          .post<{ id: string }>(`/workspaces/${workspaceId}/orders/${order.id}/photos`, {
-            fileId: photo.fileId,
-            category: photo.category,
-            damageId: (photo.damageKey && damageIds.get(photo.damageKey)) || null,
-          })
-          .catch(() => null);
-        if (!attached) {
-          lost += 1;
-          continue;
-        }
-        // Разметка сохраняется тем же запросом, что и во вкладке «Фото».
-        if (photo.annotation) {
-          await api
-            .post(`/workspaces/${workspaceId}/photos/${attached.id}/markup`, {
-              annotation: photo.annotation,
-              ...(photo.annotationFileId ? { annotationFileId: photo.annotationFileId } : {}),
-            })
-            .catch(() => {
-              lost += 1;
-            });
-        }
-      }
-      if (lost > 0) {
+      if (order.photos.failed.length > 0) {
         await alertDialog(
-          'Заказ создан, но часть фото или разметки не сохранилась. Проверьте вкладку «Фото».',
+          `Заказ создан, но ${order.photos.failed.length} фото не прикрепилось. Добавьте их во вкладке «Фото».`,
+        );
+      } else if (order.photos.markupFailed > 0) {
+        await alertDialog(
+          'Заказ создан, но разметка на части фото не сохранилась. Отметьте зону заново во вкладке «Фото».',
         );
       }
 

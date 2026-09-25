@@ -17,6 +17,22 @@ const MAX_PHOTOS_PER_ORDER = 1000;
 /** Обращение — это ещё не заказ: пачка снимков от клиента, а не съёмка ремонта. */
 const MAX_PHOTOS_PER_LEAD = 100;
 
+/** Снимок из формы новой записи: повреждение указано номером в массиве damages. */
+export interface DraftPhotoInput {
+  fileId: string;
+  category?: PhotoCategory;
+  caption?: string | null;
+  damageIndex?: number | null;
+  annotation?: unknown;
+  annotationFileId?: string | null;
+}
+
+export interface DraftPhotosResult {
+  attached: number;
+  failed: { fileId: string; message: string }[];
+  markupFailed: number;
+}
+
 export interface AttachPhotoInput {
   fileId: string;
   category?: PhotoCategory;
@@ -130,6 +146,56 @@ export class OrderPhotosService {
       position,
       createdById: ctx.userId,
     });
+  }
+
+  /**
+   * Снимки из формы новой записи: привязка, связь с повреждением и разметка.
+   *
+   * Запись уже создана, и терять её из-за одной неудачной фотографии нельзя:
+   * снимок, который не прикрепился, возвращается в списке, мастер добавит его
+   * из карточки. Разметка сохраняется тем же путём, что во вкладке «Фото».
+   */
+  async attachDraftPhotos(
+    ctx: WorkspaceContext,
+    parent: PhotoParent,
+    photos: DraftPhotoInput[],
+    damageIds: readonly string[],
+    auth: { user: User; platformRoles: string[] },
+  ): Promise<DraftPhotosResult> {
+    const result: DraftPhotosResult = { attached: 0, failed: [], markupFailed: 0 };
+    for (const photo of photos) {
+      const damageId =
+        photo.damageIndex === null || photo.damageIndex === undefined
+          ? null
+          : (damageIds[photo.damageIndex] ?? null);
+      let attached: OrderPhoto;
+      try {
+        attached = await this.attach(ctx, parent, {
+          fileId: photo.fileId,
+          category: photo.category,
+          caption: photo.caption ?? null,
+          damageId,
+        });
+        result.attached += 1;
+      } catch (error) {
+        result.failed.push({
+          fileId: photo.fileId,
+          message: error instanceof AppError ? error.message : 'Не удалось прикрепить фотографию',
+        });
+        continue;
+      }
+      if (photo.annotation) {
+        await this.saveMarkup(
+          ctx,
+          attached.id,
+          { annotation: photo.annotation, annotationFileId: photo.annotationFileId ?? null },
+          auth,
+        ).catch(() => {
+          result.markupFailed += 1;
+        });
+      }
+    }
+    return result;
   }
 
   async update(
