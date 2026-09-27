@@ -43,15 +43,17 @@ export function TodayScreen() {
   return (
     <div className="pdr-stack">
       <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 8 }}>
-        <Button block onClick={() => navigate(`/workspace/${workspaceId}/leads/new`)}>
-          + Обращение
+        {/* Мастер почти всегда начинает с заказа: клиент уже приехал. Обращение —
+            для тех, кто пока только написал и думает. */}
+        <Button block onClick={() => navigate(`/workspace/${workspaceId}/orders/new`)}>
+          + Заказ
         </Button>
         <Button
           variant="secondary"
           block
-          onClick={() => navigate(`/workspace/${workspaceId}/orders/new`)}
+          onClick={() => navigate(`/workspace/${workspaceId}/leads/new`)}
         >
-          + Заказ
+          + Обращение
         </Button>
       </div>
 

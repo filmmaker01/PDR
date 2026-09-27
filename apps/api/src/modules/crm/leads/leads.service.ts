@@ -475,6 +475,9 @@ export class LeadsService {
           // Комментарий клиента — это и есть описание повреждений, которое он
           // дал при обращении. Переписывать его руками незачем.
           damageSummary: lead.comment ?? null,
+          // Откуда пришёл клиент, известно из обращения — заказ его помнит.
+          source: lead.source,
+          channel: lead.channel,
           internalNotes: input.internalNotes ?? null,
           createdById: ctx.userId,
         },

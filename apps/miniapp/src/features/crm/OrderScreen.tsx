@@ -184,6 +184,13 @@ export function OrderScreen() {
                 />
               </div>
 
+              {data.channelLabel ? (
+                <div>
+                  <div className="pdr-hint">Источник обращения</div>
+                  <div style={{ fontWeight: 600 }}>{data.channelLabel}</div>
+                </div>
+              ) : null}
+
               {data.vehicle ? (
                 <div>
                   <div className="pdr-hint">Автомобиль</div>

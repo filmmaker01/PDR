@@ -16,7 +16,13 @@ import {
   withoutDraftKey,
   type DraftDamage,
 } from './DraftPhotos';
-import { APPOINTMENT_KIND_OPTIONS, type AppointmentKind, type ClientListItem } from './types';
+import {
+  APPOINTMENT_KIND_OPTIONS,
+  LEAD_CHANNEL_OPTIONS,
+  type AppointmentKind,
+  type ClientListItem,
+  type LeadChannel,
+} from './types';
 
 /** Создание заказа: клиент, автомобиль и заказ одной операцией. */
 export function NewOrderScreen() {
@@ -34,6 +40,7 @@ export function NewOrderScreen() {
   const [model, setModel] = useState('');
   const [plate, setPlate] = useState('');
 
+  const [channel, setChannel] = useState<LeadChannel | ''>('');
   const [title, setTitle] = useState('');
   const [damageSummary, setDamageSummary] = useState('');
   const [assigneeMemberId, setAssigneeMemberId] = useState<string>('');
@@ -84,6 +91,8 @@ export function NewOrderScreen() {
               : {}),
           title: title || null,
           damageSummary: damageSummary || null,
+          // Источник — характеристика заказа: обращение ради него не создаётся.
+          ...(channel ? { channel } : {}),
           ...(assigneeMemberId ? { assigneeMemberId } : {}),
           ...(withAppointment
             ? {
@@ -231,6 +240,22 @@ export function NewOrderScreen() {
           </Card>
         </>
       )}
+
+      <h2 className="pdr-subtitle">Источник обращения</h2>
+      <Card>
+        <div className="pdr-chips pdr-chips--wrap">
+          {LEAD_CHANNEL_OPTIONS.map((option) => (
+            <button
+              key={option.value}
+              type="button"
+              className={`pdr-chip${channel === option.value ? ' pdr-chip--active' : ''}`}
+              onClick={() => setChannel(channel === option.value ? '' : option.value)}
+            >
+              {option.label}
+            </button>
+          ))}
+        </div>
+      </Card>
 
       <h2 className="pdr-subtitle">Автомобиль</h2>
 

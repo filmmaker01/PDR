@@ -420,6 +420,44 @@ describe('CRM: карточка повреждения', () => {
       expect(byFile(loosePhoto).damageId).toBeNull();
     });
 
+    it('источник клиента сохраняется в самом заказе, без обращения', async () => {
+      const created = await http()
+        .post(`/v1/workspaces/${workspaceId}/orders`)
+        .set(...owner.authHeader)
+        .send({ newClient: { name: 'Олег', phone: '+79272666033' }, channel: 'max' })
+        .expect(201);
+
+      const order = await http()
+        .get(`/v1/workspaces/${workspaceId}/orders/${created.body.id}`)
+        .set(...owner.authHeader)
+        .expect(200);
+      expect(order.body).toMatchObject({ channel: 'max', channelLabel: 'MAX', source: 'online' });
+
+      // Обращение ради источника не заводится.
+      const leads = await http()
+        .get(`/v1/workspaces/${workspaceId}/leads`)
+        .set(...owner.authHeader)
+        .expect(200);
+      expect(leads.body.items).toHaveLength(0);
+
+      const inPerson = await http()
+        .post(`/v1/workspaces/${workspaceId}/orders`)
+        .set(...owner.authHeader)
+        .send({ newClient: { name: 'Анна' }, channel: 'in_person' })
+        .expect(201);
+      const second = await http()
+        .get(`/v1/workspaces/${workspaceId}/orders/${inPerson.body.id}`)
+        .set(...owner.authHeader)
+        .expect(200);
+      expect(second.body).toMatchObject({ channel: 'in_person', source: 'offline' });
+
+      await http()
+        .post(`/v1/workspaces/${workspaceId}/orders`)
+        .set(...owner.authHeader)
+        .send({ newClient: { name: 'Пётр' }, channel: 'pigeon' })
+        .expect(422);
+    });
+
     it('ошибка в повреждении не создаёт заказ без схемы', async () => {
       await http()
         .post(`/v1/workspaces/${workspaceId}/orders`)

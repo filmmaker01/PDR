@@ -1,3 +1,4 @@
+import { normalizePhone } from '@pdr/shared';
 import { getWebApp, isInsideTelegram } from './telegram';
 
 /**
@@ -157,4 +158,28 @@ export async function copyText(text: string): Promise<boolean> {
   } finally {
     area.remove();
   }
+}
+
+/**
+ * Ссылка звонка: только «+» и цифры, иначе набор номера спотыкается о
+ * пробелы и скобки.
+ */
+export function telHref(phone: string): string | null {
+  const normalized = normalizePhone(phone);
+  if (normalized) return `tel:${normalized}`;
+  const digits = phone.replace(/[^\d+]/g, '').replace(/(?!^)\+/g, '');
+  return digits.replace(/\D/g, '').length >= 3 ? `tel:${digits}` : null;
+}
+
+/**
+ * Звонок из Telegram на iPhone (и на Mac).
+ *
+ * Ссылка остаётся обычной `tel:`. Но WebView Telegram на iOS разрешает
+ * переход по ней внутри страницы, а сам WKWebView открыть `tel:` не умеет —
+ * нажатие молча ничего не делает. Ссылку «в новом окне» Telegram передаёт
+ * системе, и та открывает экран звонка. На Android и в браузере она не нужна.
+ */
+export function telLinkTarget(): '_blank' | undefined {
+  const wa = isInsideTelegram() ? getWebApp() : null;
+  return wa && (wa.platform === 'ios' || wa.platform === 'macos') ? '_blank' : undefined;
 }

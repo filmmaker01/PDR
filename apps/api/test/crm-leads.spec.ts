@@ -681,6 +681,23 @@ describe('CRM: обращения, повреждения, оценки', () => 
   });
 
   describe('конверсия в заказ', () => {
+    it('заказ помнит, откуда пришёл клиент обращения', async () => {
+      const leadId = await createLead({ channel: 'max' });
+      const converted = await http()
+        .post(`/v1/workspaces/${workspaceId}/leads/${leadId}/convert`)
+        .set(...owner.authHeader)
+        .send({})
+        .expect(201);
+
+      const order = await http()
+        .get(`/v1/workspaces/${workspaceId}/orders/${converted.body.orderId}`)
+        .set(...owner.authHeader)
+        .expect(200);
+      expect(order.body.channel).toBe('max');
+      expect(order.body.channelLabel).toBe('MAX');
+      expect(order.body.source).toBe('online');
+    });
+
     it('переносит клиента, машину, повреждения, фото и оценки', async () => {
       await seedPriceList();
       const leadId = await createLead({ vehiclePlate: 'a123bc77' });

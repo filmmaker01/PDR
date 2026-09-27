@@ -4,6 +4,7 @@ import { Idempotent } from '@/common/interceptors/idempotency.interceptor';
 import { zodBody } from '@/common/pipes/zod-validation.pipe';
 import { Audited } from '@/modules/audit/audit.interceptor';
 import { AllowExpiredAccess, Can, Workspace } from '@/modules/workspaces/guards/workspace.guard';
+import { LEAD_CHANNEL_LABELS } from '@pdr/shared';
 import { Ws } from '@/modules/workspaces/decorators/workspace.decorators';
 import type { WorkspaceContext } from '@/modules/workspaces/workspace.types';
 import { CurrentAuth, type AuthContext } from '@/modules/auth/decorators/auth.decorators';
@@ -32,6 +33,9 @@ function serializeListItem(order: OrderWithRelations): Record<string, unknown> {
     statusLabel: ORDER_STATUS_LABELS[order.status],
     paymentStatus: order.paymentStatus,
     title: order.title,
+    source: order.source,
+    channel: order.channel,
+    channelLabel: order.channel ? LEAD_CHANNEL_LABELS[order.channel] : null,
     agreedTotalMinor: order.agreedTotalMinor === null ? null : Number(order.agreedTotalMinor),
     paidMinor: Number(order.paidMinor),
     currency: order.currency,

@@ -441,3 +441,13 @@
 - `GET /v1/shared/documents/:token` — PDF по такой ссылке, без входа, с
   ограничением частоты. Испорченная или истёкшая ссылка — `404`.
 - В карточке заказа `client.telegramUsername`.
+
+### Источник клиента у заказа (этап 22)
+
+- `POST .../orders` принимает `channel` (`in_person`, `call`, `telegram`,
+  `whatsapp`, `max`, `vk`, `other`) и необязательный `source`; без `source` он
+  выводится из канала, как у обращения. Карточка заказа отдаёт `source`,
+  `channel`, `channelLabel`.
+- Конвертация обращения в заказ переносит его `source` и `channel`.
+- В справочник каналов добавлен `max`; `call` подписывается «Телефон».
+  Миграция `20260928000000_order_source_and_max_channel`.

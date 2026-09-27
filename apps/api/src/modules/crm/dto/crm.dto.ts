@@ -4,6 +4,8 @@ import {
   APPOINTMENT_KINDS,
   APPOINTMENT_STATUSES,
   DISCOUNT_KINDS,
+  LEAD_CHANNELS,
+  LEAD_SOURCES,
   ESTIMATE_ITEM_KINDS,
   MATERIALS,
   ORDER_STATUSES,
@@ -100,6 +102,9 @@ export const createOrderSchema = z
       .optional(),
     title: optionalString(300),
     damageSummary: optionalString(4000),
+    /** Откуда пришёл клиент — отмечается прямо в заказе, без обращения. */
+    source: z.enum(LEAD_SOURCES).nullable().optional(),
+    channel: z.enum(LEAD_CHANNELS).nullable().optional(),
     assigneeMemberId: z.string().uuid().nullable().optional(),
     internalNotes: optionalString(4000),
     /** Запись в календарь создаётся вместе с заказом. */

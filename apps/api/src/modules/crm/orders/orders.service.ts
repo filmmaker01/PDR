@@ -1,6 +1,6 @@
 import { Injectable, Logger } from '@nestjs/common';
-import type { Order, OrderStatus, Prisma } from '@prisma/client';
-import { ownsRecord } from '@pdr/shared';
+import type { LeadChannel, LeadSource, Order, OrderStatus, Prisma } from '@prisma/client';
+import { LEAD_CHANNEL_SOURCES, ownsRecord } from '@pdr/shared';
 import { PrismaService } from '@/infra/prisma/prisma.service';
 import { AppError } from '@/common/errors/app.error';
 import { NotificationsService } from '@/modules/notifications/notifications.service';
@@ -45,6 +45,9 @@ export interface CreateOrderInput {
   };
   title?: string | null;
   damageSummary?: string | null;
+  /** Откуда пришёл клиент: заказ часто создаётся сразу, без обращения. */
+  source?: LeadSource | null;
+  channel?: LeadChannel | null;
   assigneeMemberId?: string | null;
   internalNotes?: string | null;
   /** Первая запись в календарь: создаётся вместе с заказом. */
@@ -195,6 +198,9 @@ export class OrdersService {
           currency: ctx.workspace.currency,
           title: input.title ?? null,
           damageSummary: input.damageSummary ?? null,
+          // Источник подсказывается каналом, как у обращения: из MAX лично не приходят.
+          channel: input.channel ?? null,
+          source: input.source ?? (input.channel ? LEAD_CHANNEL_SOURCES[input.channel] : null),
           internalNotes: input.internalNotes ?? null,
           createdById: ctx.userId,
         },

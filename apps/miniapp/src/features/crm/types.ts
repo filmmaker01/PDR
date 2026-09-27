@@ -28,6 +28,10 @@ export interface OrderListItem {
     phone: string | null;
     telegramUsername?: string | null;
   };
+  /** Откуда пришёл клиент: отмечается прямо в заказе или переносится из обращения. */
+  source?: LeadSource | null;
+  channel?: LeadChannel | null;
+  channelLabel?: string | null;
   vehicle: { id: string; make: string; model: string; plate: string | null } | null;
   assignee: { id: string; name: string; color: string | null } | null;
   scheduledStartAt: string | null;
@@ -735,11 +739,12 @@ export const LEAD_STATUS_TONES: Record<
 };
 
 export const LEAD_CHANNEL_OPTIONS: { value: LeadChannel; label: string }[] = [
+  { value: 'in_person', label: 'Лично' },
+  { value: 'call', label: 'Телефон' },
   { value: 'telegram', label: 'Telegram' },
   { value: 'whatsapp', label: 'WhatsApp' },
+  { value: 'max', label: 'MAX' },
   { value: 'vk', label: 'VK' },
-  { value: 'call', label: 'Звонок' },
-  { value: 'in_person', label: 'Лично' },
   { value: 'other', label: 'Другое' },
 ];
 

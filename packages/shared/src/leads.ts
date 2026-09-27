@@ -25,8 +25,9 @@ export const LEAD_SOURCE_LABELS: Readonly<Record<LeadSource, string>> = {
 export const LEAD_CHANNEL_LABELS: Readonly<Record<LeadChannel, string>> = {
   telegram: 'Telegram',
   whatsapp: 'WhatsApp',
+  max: 'MAX',
   vk: 'VK',
-  call: 'Звонок',
+  call: 'Телефон',
   in_person: 'Лично',
   other: 'Другое',
 };
@@ -35,6 +36,7 @@ export const LEAD_CHANNEL_LABELS: Readonly<Record<LeadChannel, string>> = {
 export const LEAD_CHANNEL_SOURCES: Readonly<Record<LeadChannel, LeadSource>> = {
   telegram: 'online',
   whatsapp: 'online',
+  max: 'online',
   vk: 'online',
   call: 'online',
   in_person: 'offline',

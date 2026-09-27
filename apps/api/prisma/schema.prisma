@@ -1212,6 +1212,10 @@ model Order {
   currency         String        @db.Char(3)
   title            String?
   damageSummary    String?       @map("damage_summary")
+  /// Откуда пришёл клиент. Тот же справочник, что у обращения: заказ часто
+  /// создаётся сразу, без обращения, а источник всё равно нужен.
+  source           LeadSource?
+  channel          LeadChannel?
   internalNotes    String?       @map("internal_notes")
   clientNotes      String?       @map("client_notes")
   scheduledStartAt DateTime?     @map("scheduled_start_at") @db.Timestamptz(6)
@@ -1615,6 +1619,7 @@ enum LeadSource {
 enum LeadChannel {
   telegram
   whatsapp
+  max
   vk
   call
   in_person

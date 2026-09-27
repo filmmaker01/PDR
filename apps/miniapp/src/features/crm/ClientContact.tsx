@@ -6,6 +6,8 @@ import { formatMinor, formatPhoneRu } from '@/shared/format';
 import {
   MESSAGE_CHANNELS,
   copyText,
+  telHref,
+  telLinkTarget,
   type MessageChannel,
   type MessageRecipient,
   type OutgoingMessage,
@@ -38,15 +40,24 @@ export function ClientPhoneActions({
 }) {
   const [writeOpen, setWriteOpen] = useState(false);
   if (!recipient.phone) return null;
+  const callHref = telHref(recipient.phone);
 
   return (
     <>
       <div className="pdr-stack" style={{ gap: 6 }}>
         <div style={{ fontWeight: 600 }}>{formatPhoneRu(recipient.phone)}</div>
         <div className="pdr-row" style={{ gap: 8 }}>
-          <a className="pdr-btn pdr-btn--secondary pdr-btn--sm" href={`tel:${recipient.phone}`}>
-            📞 Позвонить
-          </a>
+          {callHref ? (
+            // Обычная ссылка tel: без обработчиков — звонок открывает сам телефон.
+            <a
+              className="pdr-btn pdr-btn--secondary pdr-btn--sm"
+              href={callHref}
+              target={telLinkTarget()}
+              rel="noopener"
+            >
+              📞 Позвонить
+            </a>
+          ) : null}
           <Button size="sm" variant="secondary" onClick={() => setWriteOpen(true)}>
             💬 Написать
           </Button>

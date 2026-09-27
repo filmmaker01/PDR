@@ -307,6 +307,11 @@ select {
   padding-bottom: 4px;
   scrollbar-width: none;
 }
+/* Короткий список, который должен быть виден целиком, без прокрутки. */
+.pdr-chips--wrap {
+  flex-wrap: wrap;
+  overflow-x: visible;
+}
 .pdr-chips::-webkit-scrollbar {
   display: none;
 }
