@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { ApiError } from '@pdr/api-client';
@@ -38,6 +38,8 @@ export function InviteScreen() {
     mutationFn: () => api.post<{ workspaceId: string }>('/invitations/accept', { token }),
     onSuccess: async (result) => {
       haptic('success');
+      // Приглашение из ссылки выполнено: иначе оно вернуло бы на этот экран.
+      clearStartAction();
       await reload();
       await queryClient.invalidateQueries();
       navigate(`/workspace/${result.workspaceId}`, { replace: true });
@@ -48,7 +50,21 @@ export function InviteScreen() {
     },
   });
 
-  if (preview.isLoading) {
+  /**
+   * Открыл ссылку — уже в мастерской. Человек перешёл по приглашению сам,
+   * второе подтверждение кнопкой только теряло тех, кто её не заметил.
+   * Если приглашение выдано на номер, сначала нужен телефон — тогда ждём.
+   */
+  const autoAccepted = useRef(false);
+  const readyToAccept =
+    preview.data !== undefined && !(preview.data.requiresPhone && !me?.user.phone);
+  useEffect(() => {
+    if (!readyToAccept || autoAccepted.current) return;
+    autoAccepted.current = true;
+    accept.mutate();
+  }, [readyToAccept, accept]);
+
+  if (preview.isLoading || (accept.isPending && !error)) {
     return (
       <div className="app-splash">
         <Spinner />
@@ -65,7 +81,16 @@ export function InviteScreen() {
             ? preview.error.message
             : 'Ссылка устарела или уже использована'
         }
-        action={<Button onClick={() => navigate('/profile', { replace: true })}>В профиль</Button>}
+        action={
+          <Button
+            onClick={() => {
+              clearStartAction();
+              navigate('/profile', { replace: true });
+            }}
+          >
+            В профиль
+          </Button>
+        }
       />
     );
   }
@@ -127,7 +152,14 @@ export function InviteScreen() {
       >
         Принять приглашение
       </Button>
-      <Button variant="secondary" onClick={() => navigate('/profile', { replace: true })} block>
+      <Button
+        variant="secondary"
+        onClick={() => {
+          clearStartAction();
+          navigate('/profile', { replace: true });
+        }}
+        block
+      >
         Не сейчас
       </Button>
     </div>

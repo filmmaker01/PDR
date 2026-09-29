@@ -2,6 +2,7 @@ import { NavLink, Outlet, ScrollRestoration, useMatches } from 'react-router-dom
 import clsx from 'clsx';
 import { AuthGate } from '@/features/auth/AuthGate';
 import { BackBar, isBackHandle } from '@/shared/navigation';
+import { PendingInviteRedirect } from './StartActionRedirect';
 
 const TABS = [
   { to: '/learning', label: 'Обучение', icon: '🎓' },
@@ -19,6 +20,7 @@ export function RootLayout() {
     <AuthGate>
       <div className="app-shell">
         <main className="app-content pdr-page">
+          <PendingInviteRedirect />
           {fallback ? <BackBar fallback={fallback} /> : null}
           <Outlet />
         </main>
