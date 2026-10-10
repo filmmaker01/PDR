@@ -691,17 +691,26 @@ type PriceSpec = {
   kind?: 'damage' | 'disassembly' | 'extra';
 };
 
+/**
+ * Размерная сетка демо-мастерской: «до ширина × высота см → цена».
+ * Цены условные — клиент заменит их своими в прайсе, без изменения кода.
+ * null — строка «крупнее остальных».
+ */
+const SIZE_TIERS: { cm: [number, number] | null; price: number }[] = [
+  { cm: [2, 2], price: 1500 },
+  { cm: [5, 5], price: 2500 },
+  { cm: [10, 10], price: 4000 },
+  { cm: [20, 20], price: 6000 },
+  { cm: [20, 40], price: 7000 },
+  { cm: [40, 40], price: 9000 },
+  { cm: [40, 60], price: 12000 },
+  { cm: [60, 60], price: 15000 },
+  { cm: [60, 100], price: 22000 },
+  { cm: [100, 100], price: 30000 },
+  { cm: null, price: 40000 },
+];
+
 const PRICE_LIST: PriceSpec[] = [
-  { title: 'Вмятина S — до 2 см', price: 1500, panel: null, size: 'S' },
-  { title: 'Вмятина M — 2–5 см', price: 2500, panel: null, size: 'M' },
-  { title: 'Вмятина L — 5–10 см', price: 4000, panel: null, size: 'L' },
-  { title: 'Вмятина XL — 10–20 см', price: 6000, panel: null, size: 'XL' },
-  { title: 'Зона 20×40 см', price: 7000, panel: null, size: '20x40' },
-  { title: 'Зона 40×40 см', price: 9000, panel: null, size: '40x40' },
-  { title: 'Зона 40×60 см', price: 12000, panel: null, size: '40x60' },
-  { title: 'Зона 60×60 см', price: 15000, panel: null, size: '60x60' },
-  { title: 'Зона 60×100 см', price: 22000, panel: null, size: '60x100' },
-  { title: 'Зона 100×100 см', price: 30000, panel: null, size: '100x100' },
   { title: 'Капот, град (за элемент)', price: 12000, panel: 'hood', size: null, type: 'hail' },
   { title: 'Крыша, град (за элемент)', price: 15000, panel: 'roof', size: null, type: 'hail' },
   {
@@ -899,6 +908,22 @@ async function seedWorkspace(input: {
     },
   });
 
+  for (const [index, tier] of SIZE_TIERS.entries()) {
+    await prisma.priceListItem.create({
+      data: {
+        workspaceId: workspace.id,
+        kind: 'damage',
+        title: tier.cm ? `Размер до ${tier.cm[0]}×${tier.cm[1]} см` : 'Размер крупнее остальных',
+        sizeTier: true,
+        maxWidthMm: tier.cm ? tier.cm[0] * 10 : null,
+        maxHeightMm: tier.cm ? tier.cm[1] * 10 : null,
+        unitPriceMinor: minor(tier.price),
+        unit: 'per_item',
+        position: index + 1,
+      },
+    });
+  }
+
   for (const [index, item] of PRICE_LIST.entries()) {
     await prisma.priceListItem.create({
       data: {
@@ -910,7 +935,7 @@ async function seedWorkspace(input: {
         sizeClass: item.size,
         unitPriceMinor: minor(item.price),
         unit: 'per_item',
-        position: index + 1,
+        position: SIZE_TIERS.length + index + 1,
       },
     });
   }

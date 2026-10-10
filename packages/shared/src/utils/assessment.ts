@@ -24,6 +24,13 @@ export interface PriceRule {
   unitPriceMinor: Minor;
   unit: 'per_item' | 'per_dent' | 'per_hour';
   isActive: boolean;
+  /**
+   * Строка размерной сетки мастерской: «до 40×60 см → цена». Границы — в
+   * миллиметрах; обе пустые — строка «крупнее всех остальных».
+   */
+  sizeTier?: boolean;
+  maxWidthMm?: number | null;
+  maxHeightMm?: number | null;
 }
 
 export interface DamageParams {
@@ -145,6 +152,8 @@ export function describeDamageSize(
   widthMm: number | null | undefined,
   heightMm: number | null | undefined,
   sizeClass?: string | null,
+  /** Размерная сетка мастерской: если она заведена, зона берётся из неё. */
+  tiers?: readonly SizeTierBounds[],
 ): DamageSizeView {
   const width = typeof widthMm === 'number' && widthMm > 0 ? widthMm : null;
   const height = typeof heightMm === 'number' && heightMm > 0 ? heightMm : null;
@@ -158,6 +167,16 @@ export function describeDamageSize(
           ? `${toCm(height)} см`
           : null;
 
+  if (tiers && tiers.length > 0) {
+    const pick = pickSizeTier(tiers, width, height);
+    return {
+      actual,
+      zoneCode: pick?.tier.id ?? null,
+      zone: pick?.label ?? null,
+      capped: pick?.capped ?? false,
+    };
+  }
+
   const zoneCode = sizeClassForDimensions(width, height) ?? sizeClass ?? null;
   const capped = isSizeBeyondGrid(width, height);
   const zoneLabel = sizeClassLabel(zoneCode);
@@ -168,6 +187,143 @@ export function describeDamageSize(
     zone: zoneLabel ? `${zoneLabel}${capped ? '+' : ''}` : null,
     capped,
   };
+}
+
+// ── Размерная сетка мастерской ───────────────────────────────────────────────
+
+/** Строка сетки в том виде, в каком её знает правило выбора тарифа. */
+export interface SizeTierBounds {
+  id: string;
+  /** Обе границы пустые — строка «крупнее остальных», например «100×100+». */
+  maxWidthMm: number | null;
+  maxHeightMm: number | null;
+}
+
+export interface SizeTierPick<T extends SizeTierBounds = SizeTierBounds> {
+  tier: T;
+  /** Подпись тарифной категории: «40×60» или «100×100+». */
+  label: string;
+  /**
+   * Размер не помещается ни в одну строку, а строки «крупнее» нет: цена
+   * взята по самой крупной. Показывается мастеру, а не прячется.
+   */
+  capped: boolean;
+}
+
+function measuredSides(
+  widthMm: number | null | undefined,
+  heightMm: number | null | undefined,
+): { short: number; long: number } | null {
+  const values = [widthMm, heightMm].filter(
+    (v): v is number => typeof v === 'number' && Number.isFinite(v) && v > 0,
+  );
+  if (values.length === 0) return null;
+  // Одна сторона — повреждение считается круглым: 60 мм это 60×60 мм.
+  return { short: Math.min(...values), long: Math.max(...values) };
+}
+
+function isBounded(tier: SizeTierBounds): boolean {
+  return (tier.maxWidthMm ?? 0) > 0 && (tier.maxHeightMm ?? 0) > 0;
+}
+
+function tierArea(tier: SizeTierBounds): number {
+  return (tier.maxWidthMm ?? 0) * (tier.maxHeightMm ?? 0);
+}
+
+/** «40×60»: границы строки сетки в сантиметрах. */
+export function sizeTierBoundsLabel(tier: SizeTierBounds): string {
+  if (!isBounded(tier)) return '';
+  return `${toCm(tier.maxWidthMm!)}×${toCm(tier.maxHeightMm!)}`;
+}
+
+/**
+ * Подпись строки сетки. Открытая строка подписывается по самой крупной
+ * ограниченной: «100×100+», а без них — «любой размер».
+ */
+export function sizeTierLabel(tier: SizeTierBounds, all: readonly SizeTierBounds[]): string {
+  if (isBounded(tier)) return sizeTierBoundsLabel(tier);
+  const largest = [...all].filter(isBounded).sort((a, b) => tierArea(b) - tierArea(a))[0];
+  return largest ? `${sizeTierBoundsLabel(largest)}+` : 'любой размер';
+}
+
+/**
+ * Правила выбора тарифной категории по фактическому размеру.
+ *
+ * Правило отделено от расчёта: поменять его — значит добавить сюда ещё одно
+ * и переключить DEFAULT_SIZE_TIER_RULE, не трогая ни оценку, ни прайс.
+ * Фактический размер при этом никогда не округляется — выбирается только тариф.
+ */
+export const SIZE_TIER_RULES = {
+  /**
+   * Самая маленькая строка, в которую повреждение помещается целиком.
+   * Стороны можно поворачивать: 57×43 и 43×57 — одно и то же. 43×57 не
+   * помещается в 40×60 (43 > 40), поэтому считается по следующей строке,
+   * которая его покрывает, например 60×60. Не поместилось никуда — строка
+   * «крупнее остальных», а без неё самая крупная строка с пометкой.
+   */
+  smallest_covering: {
+    title: 'Наименьший диапазон, который полностью покрывает размер',
+    description:
+      'Берётся самый маленький диапазон, в который повреждение помещается целиком (стороны можно поворачивать). Если размер больше всех диапазонов — строка «крупнее», а без неё самый крупный диапазон.',
+    pick<T extends SizeTierBounds>(
+      tiers: readonly T[],
+      sides: { short: number; long: number },
+    ): { tier: T; capped: boolean } | null {
+      const bounded = tiers
+        .filter(isBounded)
+        .map((tier, index) => ({ tier, index }))
+        // По площади; при равной — как расставил мастер.
+        .sort((a, b) => tierArea(a.tier) - tierArea(b.tier) || a.index - b.index)
+        .map((entry) => entry.tier);
+
+      const covering = bounded.find((tier) => {
+        const short = Math.min(tier.maxWidthMm!, tier.maxHeightMm!);
+        const long = Math.max(tier.maxWidthMm!, tier.maxHeightMm!);
+        return sides.short <= short && sides.long <= long;
+      });
+      if (covering) return { tier: covering, capped: false };
+
+      const open = tiers.find((tier) => !isBounded(tier));
+      if (open) return { tier: open, capped: false };
+
+      const largest = bounded[bounded.length - 1];
+      return largest ? { tier: largest, capped: true } : null;
+    },
+  },
+} as const;
+
+export type SizeTierRuleCode = keyof typeof SIZE_TIER_RULES;
+
+/** Правило, которым сейчас пользуется расчёт. */
+export const DEFAULT_SIZE_TIER_RULE: SizeTierRuleCode = 'smallest_covering';
+
+/** Тарифная категория для фактического размера или null, если размера нет. */
+export function pickSizeTier<T extends SizeTierBounds>(
+  tiers: readonly T[],
+  widthMm: number | null | undefined,
+  heightMm: number | null | undefined,
+  rule: SizeTierRuleCode = DEFAULT_SIZE_TIER_RULE,
+): SizeTierPick<T> | null {
+  const sides = measuredSides(widthMm, heightMm);
+  if (!sides || tiers.length === 0) return null;
+  const picked = SIZE_TIER_RULES[rule].pick(tiers, sides);
+  if (!picked) return null;
+  return {
+    tier: picked.tier,
+    label: `${sizeTierLabel(picked.tier, tiers)}${picked.capped ? '+' : ''}`,
+    capped: picked.capped,
+  };
+}
+
+/** Активные строки размерной сетки из прайса, в порядке мастера. */
+export function sizeTierRules(rules: readonly PriceRule[]): (PriceRule & SizeTierBounds)[] {
+  return rules
+    .filter((rule) => rule.isActive && rule.kind === 'damage' && rule.sizeTier)
+    .map((rule) => ({
+      ...rule,
+      maxWidthMm: rule.maxWidthMm ?? null,
+      maxHeightMm: rule.maxHeightMm ?? null,
+    }));
 }
 
 /** Подсказка по размерному классу для интерфейса. */
@@ -242,6 +398,11 @@ export interface AssessmentSuggestion {
   lineTotalMinor: Minor;
   /** Человеческое объяснение расчёта одной строкой. */
   explanation: string;
+  /**
+   * Тарифная категория из размерной сетки мастерской. Фактический размер
+   * хранится отдельно и не меняется — это только «по какой строке цена».
+   */
+  sizeTier: { id: string; label: string; capped: boolean } | null;
 }
 
 /**
@@ -257,7 +418,37 @@ export function suggestDamagePrice(
   const sizeClass =
     params.sizeClass ?? sizeClassForDimensions(params.widthMm, params.heightMm) ?? null;
   const quantity = Math.max(1, Math.trunc(params.quantity ?? 1));
-  const rule = findPriceRule(rules, params, sizeClass);
+  const tiers = sizeTierRules(rules);
+
+  let rule: PriceRule | null;
+  let sizeTier: AssessmentSuggestion['sizeTier'] = null;
+  let missing = 'В прайсе нет подходящей позиции — укажите стоимость вручную';
+
+  if (tiers.length > 0) {
+    // Заведена размерная сетка: база — её строка. Позиция прайса под
+    // конкретную деталь или тип повреждения остаётся точнее сетки и
+    // перебивает её, как и раньше.
+    const pick = pickSizeTier(tiers, params.widthMm, params.heightMm);
+    sizeTier = pick ? { id: pick.tier.id, label: pick.label, capped: pick.capped } : null;
+    const specific = findPriceRule(
+      rules.filter((r) => !r.sizeTier && (r.panelCode !== null || r.damageType !== null)),
+      params,
+      sizeClass,
+    );
+    if (specific) {
+      rule = specific;
+    } else if (!pick) {
+      rule = null;
+      missing = 'Укажите ширину и высоту — по ним выбирается тарифная категория';
+    } else if (pick.tier.unitPriceMinor <= 0) {
+      rule = null;
+      missing = `В сетке цен для ${pick.label} не указана цена — укажите стоимость вручную`;
+    } else {
+      rule = pick.tier;
+    }
+  } else {
+    rule = findPriceRule(rules, params, sizeClass);
+  }
 
   if (!rule) {
     return {
@@ -269,7 +460,8 @@ export function suggestDamagePrice(
       multipliers: [],
       unitPriceMinor: 0,
       lineTotalMinor: 0,
-      explanation: 'В прайсе нет подходящей позиции — укажите стоимость вручную',
+      explanation: missing,
+      sizeTier,
     };
   }
 
@@ -296,7 +488,14 @@ export function suggestDamagePrice(
   const tail = multipliers.length
     ? ` + ${multipliers.map((m) => `${m.reason} ×${m.factor}`).join(', ')}`
     : '';
-  const size = sizeClass ? `, размер ${sizeClassLabel(sizeClass)}` : '';
+  const head = rule.sizeTier && sizeTier ? `Тариф ${sizeTier.label}` : `«${rule.title}»`;
+  const size = sizeTier
+    ? rule.sizeTier
+      ? ''
+      : `, тариф ${sizeTier.label}`
+    : sizeClass
+      ? `, размер ${sizeClassLabel(sizeClass)}`
+      : '';
   const count = quantity > 1 ? ` × ${quantity}` : '';
 
   return {
@@ -308,7 +507,8 @@ export function suggestDamagePrice(
     multipliers,
     unitPriceMinor,
     lineTotalMinor: lineTotal(quantity, unitPriceMinor),
-    explanation: `«${rule.title}»${size}${tail}${count}`,
+    explanation: `${head}${size}${tail}${count}`,
+    sizeTier,
   };
 }
 

@@ -8,7 +8,9 @@ import {
   describeDamageSize,
   isSizeBeyondGrid,
   normalizePriceCoefficient,
+  pickSizeTier,
   sizeClassForDimensions,
+  sizeTierRules,
   suggestDamagePrice,
   type PriceRule,
 } from './assessment';
@@ -350,5 +352,109 @@ describe('фактический размер и тарифная зона', () 
     expect(isSizeBeyondGrid(1000, 1000)).toBe(false);
     expect(isSizeBeyondGrid(1001, 1000)).toBe(true);
     expect(isSizeBeyondGrid(null, null)).toBe(false);
+  });
+});
+
+describe('размерная сетка мастерской', () => {
+  const tier = (id: string, w: number | null, h: number | null, price: number): PriceRule =>
+    rule({
+      id,
+      title: id,
+      sizeTier: true,
+      maxWidthMm: w === null ? null : w * 10,
+      maxHeightMm: h === null ? null : h * 10,
+      unitPriceMinor: price,
+    });
+
+  // Пример структуры из задачи: границы в сантиметрах, цены условные.
+  const GRID: PriceRule[] = [
+    tier('10x10', 10, 10, 100_000),
+    tier('20x20', 20, 20, 200_000),
+    tier('30x30', 30, 30, 300_000),
+    tier('40x40', 40, 40, 400_000),
+    tier('40x60', 40, 60, 500_000),
+    tier('60x60', 60, 60, 600_000),
+    tier('60x100', 60, 100, 800_000),
+    tier('100x100', 100, 100, 1_000_000),
+    tier('open', null, null, 1_500_000),
+  ];
+
+  it('43×57 не помещается в 40×60 и считается по 60×60', () => {
+    const pick = pickSizeTier(sizeTierRules(GRID), 430, 570);
+    expect(pick?.tier.id).toBe('60x60');
+    expect(pick?.label).toBe('60×60');
+    expect(pick?.capped).toBe(false);
+  });
+
+  it('стороны можно поворачивать: 57×38 помещается в 40×60', () => {
+    expect(pickSizeTier(sizeTierRules(GRID), 570, 380)?.tier.id).toBe('40x60');
+  });
+
+  it('ровно по границе — эта строка, а не следующая', () => {
+    expect(pickSizeTier(sizeTierRules(GRID), 400, 400)?.tier.id).toBe('40x40');
+  });
+
+  it('крупнее всех — строка «крупнее остальных» с подписью 100×100+', () => {
+    const pick = pickSizeTier(sizeTierRules(GRID), 1200, 900);
+    expect(pick?.tier.id).toBe('open');
+    expect(pick?.label).toBe('100×100+');
+  });
+
+  it('без строки «крупнее» — самая крупная строка с пометкой', () => {
+    const pick = pickSizeTier(sizeTierRules(GRID.filter((r) => r.id !== 'open')), 1200, 900);
+    expect(pick?.tier.id).toBe('100x100');
+    expect(pick).toMatchObject({ label: '100×100+', capped: true });
+  });
+
+  it('отключённая строка не участвует', () => {
+    const grid = GRID.map((r) => (r.id === '60x60' ? { ...r, isActive: false } : r));
+    expect(pickSizeTier(sizeTierRules(grid), 430, 570)?.tier.id).toBe('60x100');
+  });
+
+  it('расчёт: база из сетки, надбавки и количество поверх, размер не округляется', () => {
+    const result = suggestDamagePrice(
+      { panelCode: 'door_fl', widthMm: 430, heightMm: 570, quantity: 2, material: 'aluminum' },
+      GRID,
+    );
+    expect(result.priceListItemId).toBe('60x60');
+    expect(result.basePriceMinor).toBe(600_000);
+    expect(result.unitPriceMinor).toBe(780_000);
+    expect(result.lineTotalMinor).toBe(1_560_000);
+    expect(result.sizeTier).toEqual({ id: '60x60', label: '60×60', capped: false });
+    expect(describeDamageSize(430, 570, null, sizeTierRules(GRID))).toMatchObject({
+      actual: '43 × 57 см',
+      zone: '60×60',
+    });
+  });
+
+  it('позиция под конкретную деталь точнее сетки', () => {
+    const result = suggestDamagePrice({ panelCode: 'hood', widthMm: 430, heightMm: 570 }, [
+      ...GRID,
+      rule({ id: 'hood', title: 'Капот', panelCode: 'hood', unitPriceMinor: 900_000 }),
+    ]);
+    expect(result.priceListItemId).toBe('hood');
+    expect(result.sizeTier?.label).toBe('60×60');
+  });
+
+  it('без размера — просьба указать ширину и высоту, а не чужая цена', () => {
+    const result = suggestDamagePrice({ panelCode: 'door_fl' }, GRID);
+    expect(result.priceListItemId).toBeNull();
+    expect(result.explanation).toMatch(/ширину и высоту/);
+  });
+
+  it('строка без цены — ручной ввод, а не ноль', () => {
+    const grid = GRID.map((r) => (r.id === '60x60' ? { ...r, unitPriceMinor: 0 } : r));
+    const result = suggestDamagePrice({ panelCode: 'door_fl', widthMm: 430, heightMm: 570 }, grid);
+    expect(result.priceListItemId).toBeNull();
+    expect(result.sizeTier?.label).toBe('60×60');
+  });
+
+  it('без сетки расчёт работает по-старому', () => {
+    const result = suggestDamagePrice(
+      { panelCode: 'hood', damageType: 'dent', sizeClass: 'M' },
+      PRICE_LIST,
+    );
+    expect(result.priceListItemId).toBe('hood-dent-m');
+    expect(result.sizeTier).toBeNull();
   });
 });

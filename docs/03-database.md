@@ -572,7 +572,17 @@ price_list_items                -- прайс мастерской (справо
   unit              enum price_unit (per_item, per_dent, per_hour)
   is_active         boolean not null default true
   position          int not null
+  size_tier         boolean not null default false  -- строка размерной сетки «до W × H → цена»
+  max_width_mm      int null                  -- границы строки сетки; обе null — «крупнее остальных»
+  max_height_mm     int null
+  check (строка сетки: kind = damage, без panel_code/damage_type/size_class; границы обе или ни одной)
   index (workspace_id, is_active)
+
+-- Размерная сетка редактируется мастерской: цена, границы, включение строки.
+-- Тариф по фактическому размеру выбирает правило из @pdr/shared
+-- (SIZE_TIER_RULES, сейчас smallest_covering — наименьший диапазон, который
+-- покрывает размер целиком). Сам размер повреждения не округляется. Пока сетка
+-- пуста, расчёт работает по позициям с size_class, как раньше.
 
 estimates
   id                uuid pk

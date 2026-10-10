@@ -5,6 +5,7 @@ import {
   damageTypeLabel,
   defaultItemTitle,
   describeDamageSize,
+  sizeTierRules,
   panelLabel,
   sizeClassLabel,
 } from '@pdr/shared';
@@ -20,6 +21,7 @@ import { AssessmentsRepository } from '../repositories/assessments.repository';
 import { DamagesRepository } from '../repositories/damages.repository';
 import { EstimatesRepository } from '../repositories/estimates.repository';
 import { OrdersRepository } from '../repositories/orders.repository';
+import { PriceListRepository } from '../repositories/price-list.repository';
 import { PdfDocumentBuilder } from './pdf-document';
 import { DOCUMENT_SHARE_TTL_SEC, signDocumentShare, verifyDocumentShare } from './document-share';
 import {
@@ -48,6 +50,7 @@ export class DocumentsService {
     private readonly damages: DamagesRepository,
     private readonly assessments: AssessmentsRepository,
     private readonly estimates: EstimatesRepository,
+    private readonly priceList: PriceListRepository,
     private readonly access: CrmParentAccess,
     private readonly prisma: PrismaService,
     private readonly config: AppConfigService,
@@ -129,11 +132,16 @@ export class DocumentsService {
     const order = await this.orders.findById(ctx.workspaceId, orderId);
     if (!order) throw AppError.notFound('Заказ не найден');
 
-    const [damages, estimates, assessments] = await Promise.all([
+    const [damages, estimates, assessments, prices] = await Promise.all([
       this.damages.listFor(ctx.workspaceId, { orderId }),
       this.estimates.listForOrder(ctx.workspaceId, orderId),
       this.assessments.listFor(ctx.workspaceId, { orderId }),
+      this.priceList.list(ctx.workspaceId, false, 'damage'),
     ]);
+    // Тарифная зона в документе — по размерной сетке мастерской, если она заведена.
+    const tiers = sizeTierRules(
+      prices.map((item) => ({ ...item, unitPriceMinor: Number(item.unitPriceMinor) })),
+    );
     const agreed = estimates.find((estimate) => estimate.status === 'agreed') ?? null;
     const latest = assessments[0] ?? null;
     const damageWorks = await this.damages.listExtraWorks(
@@ -144,7 +152,7 @@ export class DocumentsService {
 
     const damageRows: DocumentDamageRow[] = damages.map((damage) => {
       // Размер в документе — измеренный мастером, не тарифная зона.
-      const size = describeDamageSize(damage.widthMm, damage.heightMm, damage.sizeClass);
+      const size = describeDamageSize(damage.widthMm, damage.heightMm, damage.sizeClass, tiers);
       return {
         panel: panelLabel(damage.panelCode) ?? damage.panelCode,
         damage: damageTypeLabel(damage.damageType),

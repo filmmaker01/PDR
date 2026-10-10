@@ -323,6 +323,10 @@ export interface PriceListItem {
   panelCode: string | null;
   damageType: string | null;
   sizeClass: string | null;
+  /** Строка размерной сетки: «до maxWidth × maxHeight». Обе границы пустые — «крупнее остальных». */
+  sizeTier: boolean;
+  maxWidthMm: number | null;
+  maxHeightMm: number | null;
   unitPriceMinor: number;
   unit: 'per_item' | 'per_dent' | 'per_hour';
   unitLabel: string;
@@ -658,6 +662,8 @@ export interface AssessmentLine {
   overridden: boolean;
   explanation: string;
   comment: string | null;
+  /** Тарифная категория из размерной сетки мастерской: «60×60», «100×100+». */
+  sizeTier: { id: string; label: string; capped: boolean } | null;
 }
 
 /** Строка арматурной работы в расчёте, который пришёл с сервера. */

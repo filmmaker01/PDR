@@ -215,16 +215,23 @@ export const availabilityQuerySchema = z
 
 // ── Прайс и сметы ────────────────────────────────────────────────────────────
 
+/** Граница строки размерной сетки, в миллиметрах: до 5 м. */
+const tierBoundMm = z.number().int().min(1).max(5000).nullable().optional();
+
 export const priceListItemSchema = z
   .object({
     kind: z.enum(ESTIMATE_ITEM_KINDS).default('damage'),
-    title: nonEmptyString(200),
+    /** Строке размерной сетки название не нужно: оно собирается из границ. */
+    title: nonEmptyString(200).optional(),
     panelCode: optionalString(40),
     damageType: optionalString(40),
     sizeClass: sizeClassSchema.nullable().optional(),
     unitPriceMinor: z.number().int().min(0).max(100_000_000),
     unit: z.enum(PRICE_UNITS).default('per_item'),
     isActive: z.boolean().optional(),
+    sizeTier: z.boolean().optional(),
+    maxWidthMm: tierBoundMm,
+    maxHeightMm: tierBoundMm,
   })
   .strict();
 

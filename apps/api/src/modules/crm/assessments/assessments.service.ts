@@ -620,6 +620,9 @@ export class AssessmentsService {
       unitPriceMinor: Number(item.unitPriceMinor),
       unit: item.unit,
       isActive: item.isActive,
+      sizeTier: item.sizeTier,
+      maxWidthMm: item.maxWidthMm,
+      maxHeightMm: item.maxHeightMm,
     }));
   }
 

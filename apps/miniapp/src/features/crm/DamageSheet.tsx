@@ -3,7 +3,8 @@ import { useMutation, useQueryClient } from '@tanstack/react-query';
 import { ApiError } from '@pdr/api-client';
 import {
   DAMAGE_TYPES,
-  SIZE_ZONE_CLASSES,
+  DEFAULT_SIZE_TIER_RULE,
+  SIZE_TIER_RULES,
   describeDamageSize,
   panelLabel,
   sizeClassForDimensions,
@@ -45,9 +46,12 @@ function basePath(workspaceId: string, parent: DamageParent): string {
     : `/workspaces/${workspaceId}/orders/${parent.orderId}/damages`;
 }
 
-/** Сантиметры на экране, миллиметры в базе: мастер меряет рулеткой в сантиметрах. */
+/**
+ * Сантиметры на экране, миллиметры в базе: мастер меряет рулеткой в
+ * сантиметрах. Без округления до целых: 43,5 см остаются 43,5 см.
+ */
 function mmToCm(mm: number | null | undefined): string {
-  return mm === null || mm === undefined ? '' : String(Math.round(mm / 10));
+  return mm === null || mm === undefined ? '' : String(mm / 10).replace('.', ',');
 }
 
 function cmToMm(value: string): number | null {
@@ -252,6 +256,9 @@ export function DamageSheet({
   }, [open, params]);
 
   const line = preview?.lines[0] ?? null;
+  // Тариф по сетке мастерской приходит с сервера; без сетки — прежняя зона.
+  const tierLabel = line?.sizeTier?.label ?? (line && !calc.isPending ? size.zone : null);
+  const tierCapped = line?.sizeTier ? line.sizeTier.capped : size.capped;
   const priceMissing = line !== null && line.priceListItemId === null && manualPriceMinor === null;
   const extrasMinor = preview?.extrasMinor ?? 0;
   const pdrMinor = preview?.pdrMinor ?? 0;
@@ -370,29 +377,8 @@ export function DamageSheet({
         </Field>
 
         <Card flat>
-          {/* Готовые зоны: мастер выбирает 40×40 одним нажатием. Точные габариты
-              вводятся руками и остаются как есть — в карточке, в заказе и в
-              документах показывается именно измеренное. */}
-          <Field label="Размер зоны">
-            <div className="pdr-chips">
-              {SIZE_ZONE_CLASSES.map((zone) => (
-                <button
-                  key={zone.code}
-                  type="button"
-                  disabled={!canEdit}
-                  className={`pdr-chip${
-                    sizeClass === zone.code && !size.capped ? ' pdr-chip--active' : ''
-                  }`}
-                  onClick={() => {
-                    setWidthCm(String(zone.widthCm));
-                    setHeightCm(String(zone.heightCm));
-                  }}
-                >
-                  {zone.label}
-                </button>
-              ))}
-            </div>
-          </Field>
+          {/* Размер — только фактический, по рулетке: никаких готовых кнопок,
+              которые подменили бы измеренное тарифом. Тариф выбирает расчёт. */}
           <div className="pdr-row">
             <Field label="Ширина, см">
               <Input
@@ -415,14 +401,24 @@ export function DamageSheet({
           </div>
           {size.actual ? (
             <div className="pdr-stack" style={{ gap: 2 }}>
-              <div style={{ fontWeight: 600 }}>Размер: {size.actual}</div>
+              <div style={{ fontWeight: 600 }}>Фактический размер: {size.actual}</div>
+              <div>
+                Тарифная категория:{' '}
+                {tierLabel ?? (calc.isPending ? 'считаем…' : 'не найдена в прайсе')}
+              </div>
               <div className="pdr-hint">
-                Тарифная зона: {size.zone}
-                {size.capped ? ' — повреждение крупнее сетки, цена считается по верхней зоне' : ''}
+                {tierCapped
+                  ? 'Повреждение крупнее всех диапазонов прайса — цена по самому крупному. '
+                  : ''}
+                {line?.sizeTier
+                  ? SIZE_TIER_RULES[DEFAULT_SIZE_TIER_RULE].description
+                  : 'Фактический размер не округляется — по нему только выбирается тариф.'}
               </div>
             </div>
           ) : (
-            <div className="pdr-hint">Укажите размер — по нему подбирается цена.</div>
+            <div className="pdr-hint">
+              Измерьте ширину и высоту рулеткой — по ним подбирается тарифная категория и цена.
+            </div>
           )}
         </Card>
 

@@ -19,6 +19,7 @@ import { formatMinor, parseMajorToMinor } from '@/shared/format';
 import { alertDialog, confirmDialog, haptic } from '@/shared/telegram';
 import { useDictionaries, usePriceList, useWorkspace } from './api';
 import { ScreenError } from './ScreenError';
+import { SizeTierGrid } from './SizeTierGrid';
 import type { EstimateItemKind, PriceListItem } from './types';
 
 interface FormState {
@@ -66,6 +67,9 @@ export function PriceListScreen() {
   const workspace = useWorkspace(workspaceId);
   const [showInactive, setShowInactive] = useState(false);
   const priceList = usePriceList(workspaceId, showInactive);
+  // Таблица размеров показывает и отключённые строки: их включают обратно там же.
+  const allPrices = usePriceList(workspaceId, true);
+  const sizeTiers = (allPrices.data ?? []).filter((item) => item.sizeTier);
   const dictionaries = useDictionaries(workspaceId);
 
   const [sheet, setSheet] = useState(false);
@@ -141,7 +145,9 @@ export function PriceListScreen() {
   };
 
   const currency = workspace.data?.currency ?? 'RUB';
-  const shown = (priceList.data ?? []).filter((item) => SECTION_KINDS[section].includes(item.kind));
+  const shown = (priceList.data ?? []).filter(
+    (item) => !item.sizeTier && SECTION_KINDS[section].includes(item.kind),
+  );
   const isExtraWork = form.kind !== 'damage';
 
   if (priceList.isError) {
@@ -169,9 +175,25 @@ export function PriceListScreen() {
 
       <div className="pdr-hint">
         {section === 'damage'
-          ? 'Цены по размерной сетке и элементам кузова. Расчёт оценки берёт их как базу, дальше применяется коэффициент. Изменение прайса не меняет уже составленные сметы и оценки.'
+          ? 'Базовая цена ремонта берётся из таблицы размеров, дальше применяются материал, доступ, ребро, количество и коэффициент. Изменение прайса не меняет уже составленные сметы и оценки.'
           : 'Снятие обшивки, разбор двери, снятие фары. Добавляются к повреждению при оценке и суммируются с ремонтом. Коэффициент цены к ним не применяется.'}
       </div>
+
+      {section === 'damage' ? (
+        <SizeTierGrid
+          workspaceId={workspaceId}
+          items={sizeTiers}
+          canManage={canManage}
+          currency={currency}
+        />
+      ) : null}
+
+      {section === 'damage' ? (
+        <div className="pdr-hint">
+          Особые цены: под конкретную деталь или тип повреждения. Если такая позиция подходит, она
+          точнее таблицы размеров и перебивает её.
+        </div>
+      ) : null}
 
       {canManage ? (
         <Button
@@ -181,7 +203,7 @@ export function PriceListScreen() {
             setSheet(true);
           }}
         >
-          {section === 'damage' ? '+ Позиция прайса' : '+ Арматурная работа'}
+          {section === 'damage' ? '+ Особая цена' : '+ Арматурная работа'}
         </Button>
       ) : null}
 
@@ -189,10 +211,10 @@ export function PriceListScreen() {
         <SkeletonList rows={4} />
       ) : shown.length === 0 ? (
         <EmptyState
-          title={section === 'damage' ? 'Прайс пуст' : 'Арматурных работ нет'}
+          title={section === 'damage' ? 'Особых цен нет' : 'Арматурных работ нет'}
           description={
             section === 'damage'
-              ? 'Добавьте цены по размерам: S, M, L, зона 40×40, и по элементам кузова.'
+              ? 'Обычно хватает таблицы размеров. Особая цена нужна, если деталь или тип повреждения считается иначе.'
               : 'Добавьте работы: снятие обшивки двери, разбор двери, снятие бампера.'
           }
         />

@@ -73,6 +73,101 @@ describe('CRM: коэффициент оценки и арматурные ра�
     quantity: 1,
   });
 
+  describe('размерная сетка мастерской', () => {
+    const tier = (w: number | null, h: number | null, unitPriceMinor: number) => ({
+      kind: 'damage',
+      sizeTier: true,
+      maxWidthMm: w,
+      maxHeightMm: h,
+      unitPriceMinor,
+    });
+
+    async function addTier(body: ReturnType<typeof tier>): Promise<string> {
+      const res = await http()
+        .post(`/v1/workspaces/${workspaceId}/price-list`)
+        .set(...owner.authHeader)
+        .send(body)
+        .expect(201);
+      return res.body.id as string;
+    }
+
+    const preview = (widthMm: number, heightMm: number) =>
+      http()
+        .post(`/v1/workspaces/${workspaceId}/assessments/preview`)
+        .set(...owner.authHeader)
+        .send({ items: [{ panelCode: 'door_fl', damageType: 'dent', widthMm, heightMm }] })
+        .expect(201);
+
+    it('43×57 см: точный размер, тариф 60×60, база из сетки', async () => {
+      await addTier(tier(400, 400, 900_000));
+      await addTier(tier(400, 600, 1_200_000));
+      await addTier(tier(600, 600, 1_500_000));
+      await addTier(tier(null, null, 3_000_000));
+
+      const res = await preview(430, 570);
+      expect(res.body.lines[0].sizeTier).toEqual(
+        expect.objectContaining({ label: '60×60', capped: false }),
+      );
+      expect(res.body.lines[0].basePriceMinor).toBe(1_500_000);
+      expect(res.body.totalMinor).toBe(1_500_000);
+
+      const huge = await preview(1500, 900);
+      expect(huge.body.lines[0].sizeTier.label).toBe('60×60+');
+      expect(huge.body.totalMinor).toBe(3_000_000);
+    });
+
+    it('цену, границы и активность строки меняет мастерская, без кода', async () => {
+      const id = await addTier(tier(400, 600, 1_200_000));
+      await addTier(tier(600, 600, 1_500_000));
+
+      await http()
+        .patch(`/v1/workspaces/${workspaceId}/price-list/${id}`)
+        .set(...owner.authHeader)
+        .send({ maxWidthMm: 450, unitPriceMinor: 1_300_000 })
+        .expect(200);
+      expect((await preview(430, 570)).body.totalMinor).toBe(1_300_000);
+
+      await http()
+        .patch(`/v1/workspaces/${workspaceId}/price-list/${id}`)
+        .set(...owner.authHeader)
+        .send({ isActive: false })
+        .expect(200);
+      expect((await preview(430, 570)).body.totalMinor).toBe(1_500_000);
+
+      const list = await http()
+        .get(`/v1/workspaces/${workspaceId}/price-list?all=true`)
+        .set(...owner.authHeader)
+        .expect(200);
+      const row = list.body.find((item: { id: string }) => item.id === id);
+      expect(row).toMatchObject({
+        sizeTier: true,
+        maxWidthMm: 450,
+        maxHeightMm: 600,
+        title: 'Размер до 45×60 см',
+        isActive: false,
+      });
+    });
+
+    it('строка с одной границей не принимается', async () => {
+      await http()
+        .post(`/v1/workspaces/${workspaceId}/price-list`)
+        .set(...owner.authHeader)
+        .send(tier(400, null, 100_000))
+        .expect(422);
+    });
+
+    it('повреждение хранит измеренный размер без округления до тарифа', async () => {
+      await addTier(tier(600, 600, 1_500_000));
+      const leadId = await createLead();
+      const res = await http()
+        .post(`/v1/workspaces/${workspaceId}/leads/${leadId}/damages`)
+        .set(...owner.authHeader)
+        .send({ panelCode: 'door_fl', damageType: 'dent', widthMm: 435, heightMm: 570 })
+        .expect(201);
+      expect(res.body).toMatchObject({ widthMm: 435, heightMm: 570, sizeText: '43,5 × 57 см' });
+    });
+  });
+
   describe('размеры считаются по-настоящему', () => {
     it('40×40, 40×60 и 60×60 дают разную цену', async () => {
       await seedPriceList();
