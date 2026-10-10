@@ -70,24 +70,30 @@ export function useUploadQueue({ transport, onUploaded, maxFiles }: UseUploadQue
     }
   }, [onUploaded, patch, transport]);
 
+  // Текущий список нужен синхронно: `add` возвращает добавленные снимки,
+  // чтобы форма могла сразу открыть их разметку.
+  const itemsRef = useRef<UploadItem[]>([]);
+  itemsRef.current = items;
+
   const add = useCallback(
-    (files: FileList | File[]) => {
+    (files: FileList | File[]): UploadItem[] => {
       const list = Array.from(files);
-      setItems((current) => {
-        const room = maxFiles ? Math.max(0, maxFiles - current.length) : list.length;
-        const accepted = list.slice(0, room).map<UploadItem>((file) => ({
-          localId: nextLocalId(),
-          fileId: null,
-          file,
-          previewUrl: URL.createObjectURL(file),
-          status: 'queued',
-          progress: 0,
-          error: null,
-        }));
-        queue.current.push(...accepted);
-        void pump();
-        return [...current, ...accepted];
-      });
+      const room = maxFiles ? Math.max(0, maxFiles - itemsRef.current.length) : list.length;
+      const accepted = list.slice(0, room).map<UploadItem>((file) => ({
+        localId: nextLocalId(),
+        fileId: null,
+        file,
+        previewUrl: URL.createObjectURL(file),
+        status: 'queued',
+        progress: 0,
+        error: null,
+      }));
+      if (accepted.length === 0) return accepted;
+      itemsRef.current = [...itemsRef.current, ...accepted];
+      queue.current.push(...accepted);
+      setItems((current) => [...current, ...accepted]);
+      void pump();
+      return accepted;
     },
     [maxFiles, pump],
   );

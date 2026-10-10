@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { useQueryClient } from '@tanstack/react-query';
 import {
   Badge,
@@ -12,7 +12,9 @@ import {
 import { api } from '@/shared/api';
 import { createUploadTransport } from '@/shared/uploads';
 import { photosPath, useDamages, useLeadPhotos, useOrderPhotos } from './api';
-import { PhotoMarkupSheet } from './PhotoMarkupSheet';
+import { useFreshMarkupQueue, useMarkupAfterUpload } from './FreshPhotoMarkup';
+import { DraftPhotoMarkupSheet, PhotoMarkupSheet } from './PhotoMarkupSheet';
+import { panelLabel } from '@pdr/shared';
 import type { DamageParent } from './DamageSheet';
 import { PHOTO_CATEGORY_OPTIONS, type OrderPhoto, type PhotoCategory } from './types';
 
@@ -51,14 +53,27 @@ export function PhotosTab({
     await queryClient.invalidateQueries({ queryKey: ['crm', 'photos'] });
   };
 
+  const markupAfterUpload = useMarkupAfterUpload(workspaceId, invalidate);
+  const fresh = useFreshMarkupQueue();
+
   const uploads = useUploadQueue({
     transport: createUploadTransport({ scope: 'order_photo', workspaceId }),
-    onUploaded: async (fileId) => {
+    onUploaded: async (fileId, item) => {
       // Категория берётся на момент загрузки: мастер снимает пачку в одном режиме.
-      await api.post(photosPath(workspaceId, parent), { fileId, category });
+      const photo = await api.post<{ id: string }>(photosPath(workspaceId, parent), {
+        fileId,
+        category,
+      });
       await invalidate();
+      await markupAfterUpload.attached(item.localId, photo.id);
     },
   });
+
+  // Сразу после съёмки — разметка: снимок ещё загружается, редактор уже открыт.
+  const freshItem = uploads.items.find((item) => item.localId === fresh.current) ?? null;
+  useEffect(() => {
+    if (fresh.current && !freshItem) fresh.drop(fresh.current);
+  }, [fresh, freshItem]);
 
   if (query.isLoading) return <SkeletonList rows={3} />;
 
@@ -70,7 +85,7 @@ export function PhotosTab({
         <Card>
           <MediaUploader
             items={uploads.items}
-            onAdd={uploads.add}
+            onAdd={(files) => fresh.enqueue(uploads.add(files))}
             onRetry={uploads.retry}
             onRemove={uploads.remove}
             accept="image/*"
@@ -153,6 +168,29 @@ export function PhotosTab({
           </div>
         </Card>
       )}
+
+      <DraftPhotoMarkupSheet
+        key={freshItem?.localId ?? 'none'}
+        open={freshItem !== null && opened === null}
+        onClose={() => {
+          if (freshItem) fresh.drop(freshItem.localId);
+        }}
+        fresh
+        workspaceId={workspaceId}
+        src={freshItem?.previewUrl ?? null}
+        name={freshItem?.localId ?? 'photo'}
+        value={null}
+        damageOptions={(damages.data?.items ?? []).map((damage) => ({
+          value: damage.id,
+          label: `${panelLabel(damage.panelCode)}${damage.comment ? ` — ${damage.comment}` : ''}`,
+        }))}
+        onSave={(value) => {
+          if (freshItem) markupAfterUpload.save(freshItem.localId, value);
+        }}
+        onRemovePhoto={() => {
+          if (freshItem) void markupAfterUpload.discard(freshItem.localId, uploads.remove);
+        }}
+      />
 
       <PhotoMarkupSheet
         open={opened !== null}

@@ -1,7 +1,8 @@
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { damageTypeLabel, describeDamageSize, panelLabel } from '@pdr/shared';
 import { Badge, Button, MediaUploader, useUploadQueue } from '@pdr/ui';
 import { createUploadTransport } from '@/shared/uploads';
+import { useFreshMarkupQueue } from './FreshPhotoMarkup';
 import { DraftPhotoMarkupSheet, draftHasMarkup, type DraftPhotoMarkup } from './PhotoMarkupSheet';
 import type { DamageDraft, PhotoCategory } from './types';
 
@@ -34,9 +35,9 @@ export interface DraftPhotoPayload {
 /**
  * Снимки формы нового обращения или заказа и их разметка.
  *
- * Файлы загружаются сразу, а к записи привязываются при её создании. Под
- * каждой миниатюрой — та же кнопка разметки, что во вкладке «Фото», чтобы
- * отметить вмятину можно было прямо у машины, до сохранения формы.
+ * Файлы загружаются сразу, а к записи привязываются при её создании. Сразу
+ * после съёмки или выбора открывается разметка зоны ремонта; под каждой
+ * миниатюрой остаётся кнопка «Изменить зону», чтобы поправить её позже.
  */
 export function useDraftPhotos(workspaceId: string) {
   const uploads = useUploadQueue({
@@ -90,14 +91,30 @@ export function DraftPhotoUploader({
   damages: DraftDamage[];
   hint: string;
 }) {
+  // Ручное открытие («Изменить зону») важнее очереди свежих снимков.
   const [openedId, setOpenedId] = useState<string | null>(null);
-  const opened = photos.uploads.items.find((item) => item.localId === openedId) ?? null;
+  const fresh = useFreshMarkupQueue();
+  const activeId = openedId ?? fresh.current;
+  const isFresh = openedId === null && fresh.current !== null;
+  const opened = photos.uploads.items.find((item) => item.localId === activeId) ?? null;
+
+  // Снимок убрали крестиком, пока он ждал разметки: очередь не должна застрять.
+  useEffect(() => {
+    if (fresh.current && !photos.uploads.items.some((item) => item.localId === fresh.current)) {
+      fresh.drop(fresh.current);
+    }
+  }, [fresh, photos.uploads.items]);
+
+  const close = (): void => {
+    if (isFresh && fresh.current) fresh.drop(fresh.current);
+    else setOpenedId(null);
+  };
 
   return (
     <>
       <MediaUploader
         items={photos.uploads.items}
-        onAdd={photos.uploads.add}
+        onAdd={(files) => fresh.enqueue(photos.uploads.add(files))}
         onRetry={photos.uploads.retry}
         onRemove={photos.remove}
         accept="image/*"
@@ -120,8 +137,10 @@ export function DraftPhotoUploader({
       />
 
       <DraftPhotoMarkupSheet
+        key={opened?.localId ?? 'none'}
         open={opened !== null}
-        onClose={() => setOpenedId(null)}
+        onClose={close}
+        fresh={isFresh}
         workspaceId={workspaceId}
         src={opened?.previewUrl ?? null}
         name={opened?.localId ?? 'photo'}
@@ -135,6 +154,7 @@ export function DraftPhotoUploader({
           photos.setMarkups((current) => ({ ...current, [opened.localId]: value }));
         }}
         onRemovePhoto={() => {
+          // Из очереди свежих снимков его уберёт закрытие редактора.
           if (opened) photos.remove(opened.localId);
         }}
       />

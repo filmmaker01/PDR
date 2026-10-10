@@ -25,7 +25,8 @@ import { formatMinor, parseMajorToMinor } from '@/shared/format';
 import { alertDialog, confirmDialog, haptic } from '@/shared/telegram';
 import { photosPath, useDamagePhotos } from './api';
 import { ExtraWorkPickerSheet } from './ExtraWorkPicker';
-import { PhotoMarkupSheet } from './PhotoMarkupSheet';
+import { useFreshMarkupQueue, useMarkupAfterUpload } from './FreshPhotoMarkup';
+import { DraftPhotoMarkupSheet, PhotoMarkupSheet } from './PhotoMarkupSheet';
 import {
   ACCESS_OPTIONS,
   MATERIAL_OPTIONS,
@@ -259,19 +260,32 @@ export function DamageSheet({
   // ── Фотографии и сохранение ───────────────────────────────────────────────
 
   const photos = useDamagePhotos(workspaceId, parent, damage?.id ?? null, open);
+  const invalidatePhotos = async (): Promise<void> => {
+    await queryClient.invalidateQueries({ queryKey: ['crm', 'photos'] });
+    await queryClient.invalidateQueries({ queryKey: ['crm', 'damages'] });
+  };
+  const markupAfterUpload = useMarkupAfterUpload(workspaceId, invalidatePhotos);
+  const freshPhotos = useFreshMarkupQueue();
+
   const uploads = useUploadQueue({
     transport: createUploadTransport({ scope: 'order_photo', workspaceId }),
-    onUploaded: async (fileId) => {
+    onUploaded: async (fileId, item) => {
       if (!damage) return;
-      await api.post(photosPath(workspaceId, parent), {
+      const photo = await api.post<{ id: string }>(photosPath(workspaceId, parent), {
         fileId,
         category: 'before',
         damageId: damage.id,
       });
-      await queryClient.invalidateQueries({ queryKey: ['crm', 'photos'] });
-      await queryClient.invalidateQueries({ queryKey: ['crm', 'damages'] });
+      await invalidatePhotos();
+      await markupAfterUpload.attached(item.localId, photo.id);
     },
   });
+
+  // Сразу после съёмки — разметка зоны ремонта на только что сделанном снимке.
+  const freshItem = uploads.items.find((item) => item.localId === freshPhotos.current) ?? null;
+  useEffect(() => {
+    if (freshPhotos.current && !freshItem) freshPhotos.drop(freshPhotos.current);
+  }, [freshPhotos, freshItem]);
 
   const invalidate = async (): Promise<void> => {
     await queryClient.invalidateQueries({ queryKey: ['crm', 'damages'] });
@@ -577,14 +591,14 @@ export function DamageSheet({
             {canEdit ? (
               <MediaUploader
                 items={uploads.items}
-                onAdd={uploads.add}
+                onAdd={(files) => freshPhotos.enqueue(uploads.add(files))}
                 onRetry={uploads.retry}
                 onRemove={uploads.remove}
                 accept="image/*"
                 capture
                 cameraLabel="📷 Снять фото"
                 galleryLabel="🖼 Выбрать из галереи"
-                hint="Снимок привяжется к этому повреждению. После загрузки отметьте на нём зону ремонта."
+                hint="Снимок привяжется к этому повреждению. Сразу после съёмки откроется разметка зоны ремонта."
               />
             ) : null}
           </>
@@ -704,6 +718,29 @@ export function DamageSheet({
           setWorkPickerOpen(false);
         }}
       />
+
+      {damage ? (
+        <DraftPhotoMarkupSheet
+          key={freshItem?.localId ?? 'none'}
+          open={freshItem !== null && markupPhoto === null}
+          onClose={() => {
+            if (freshItem) freshPhotos.drop(freshItem.localId);
+          }}
+          fresh
+          workspaceId={workspaceId}
+          src={freshItem?.previewUrl ?? null}
+          name={freshItem?.localId ?? 'photo'}
+          value={null}
+          damageOptions={[]}
+          onSave={(value) => {
+            // Привязка к повреждению уже есть: снимок загружен из его карточки.
+            if (freshItem) markupAfterUpload.save(freshItem.localId, { ...value, damageKey: null });
+          }}
+          onRemovePhoto={() => {
+            if (freshItem) void markupAfterUpload.discard(freshItem.localId, uploads.remove);
+          }}
+        />
+      ) : null}
 
       <PhotoMarkupSheet
         open={markupPhoto !== null}

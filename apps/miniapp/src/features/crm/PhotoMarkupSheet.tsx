@@ -71,6 +71,7 @@ async function flattenMarkup(
 function MarkupEditorSheet({
   open,
   onClose,
+  fresh = false,
   src,
   loading,
   initialMarkup,
@@ -83,6 +84,12 @@ function MarkupEditorSheet({
 }: {
   open: boolean;
   onClose: () => void;
+  /**
+   * Снимок только что сделан или выбран: редактор открылся сам, до
+   * появления фото в форме. Главное действие — «Готово», рядом —
+   * «Пропустить разметку», чтобы быстрый заказ не упирался в лишний экран.
+   */
+  fresh?: boolean;
   src: string | null;
   loading: boolean;
   initialMarkup: MarkupDoc | null;
@@ -121,7 +128,7 @@ function MarkupEditorSheet({
   };
 
   const remove = async (): Promise<void> => {
-    if (!(await confirmDialog('Удалить фотографию вместе с разметкой?'))) return;
+    if (!fresh && !(await confirmDialog('Удалить фотографию вместе с разметкой?'))) return;
     setRemoving(true);
     try {
       await onRemovePhoto();
@@ -135,7 +142,11 @@ function MarkupEditorSheet({
   };
 
   return (
-    <Sheet open={open} onClose={onClose} title="Зона ремонта на фотографии">
+    <Sheet
+      open={open}
+      onClose={onClose}
+      title={fresh ? 'Отметьте зону ремонта' : 'Зона ремонта на фотографии'}
+    >
       <div className="pdr-stack">
         {hasMarkup ? <Badge tone="success">Зона отмечена</Badge> : null}
         <div className="pdr-hint">
@@ -176,19 +187,32 @@ function MarkupEditorSheet({
 
         {canEdit ? (
           <Button block loading={saving} disabled={!src} onClick={() => void save()}>
-            Сохранить зону
+            {fresh ? 'Готово' : 'Сохранить зону'}
+          </Button>
+        ) : null}
+
+        {fresh ? (
+          <Button variant="secondary" block disabled={saving} onClick={onClose}>
+            Пропустить разметку
           </Button>
         ) : null}
 
         {canEdit ? (
-          <Button variant="danger" block loading={removing} onClick={() => void remove()}>
-            Удалить фотографию
+          <Button
+            variant={fresh ? 'ghost' : 'danger'}
+            block
+            loading={removing}
+            onClick={() => void remove()}
+          >
+            {fresh ? 'Не добавлять это фото' : 'Удалить фотографию'}
           </Button>
         ) : null}
 
-        <Button variant="secondary" block onClick={onClose}>
-          Закрыть
-        </Button>
+        {fresh ? null : (
+          <Button variant="secondary" block onClick={onClose}>
+            Закрыть
+          </Button>
+        )}
       </div>
     </Sheet>
   );
@@ -303,6 +327,7 @@ export function PhotoMarkupSheet({
 export function DraftPhotoMarkupSheet({
   open,
   onClose,
+  fresh = false,
   workspaceId,
   src,
   name,
@@ -313,6 +338,8 @@ export function DraftPhotoMarkupSheet({
 }: {
   open: boolean;
   onClose: () => void;
+  /** Открыт сразу после съёмки или выбора из галереи. */
+  fresh?: boolean;
   workspaceId: string;
   /** Локальная ссылка на снимок с устройства. */
   src: string | null;
@@ -326,6 +353,7 @@ export function DraftPhotoMarkupSheet({
     <MarkupEditorSheet
       open={open}
       onClose={onClose}
+      fresh={fresh}
       src={src}
       loading={false}
       initialMarkup={value?.annotation ?? null}
