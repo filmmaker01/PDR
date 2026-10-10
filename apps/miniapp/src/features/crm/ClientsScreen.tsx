@@ -10,10 +10,12 @@ import {
   Field,
   Input,
   ListItem,
+  PhoneInput,
   Sheet,
   SkeletonList,
 } from '@pdr/ui';
 import { api } from '@/shared/api';
+import { phoneInputToSubmit } from '@pdr/shared';
 import { formatMinor, formatPhoneRu } from '@/shared/format';
 import { alertDialog, confirmDialog, haptic } from '@/shared/telegram';
 import { useStickyState } from '@/shared/navigation';
@@ -38,7 +40,7 @@ export function ClientsScreen() {
     mutationFn: () =>
       api.post<{ id: string }>(`/workspaces/${workspaceId}/clients`, {
         name,
-        phone: phone || null,
+        phone: phoneInputToSubmit(phone),
       }),
     onSuccess: async (client) => {
       setSheet(false);
@@ -121,12 +123,7 @@ export function ClientsScreen() {
             />
           </Field>
           <Field label="Телефон">
-            <Input
-              value={phone}
-              onChange={(e) => setPhone(e.target.value)}
-              placeholder="+7 999 123-45-67"
-              inputMode="tel"
-            />
+            <PhoneInput value={phone} onChange={setPhone} placeholder="+7 999 123-45-67" />
           </Field>
           <Button
             block

@@ -2,8 +2,9 @@ import { useEffect, useRef, useState } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { ApiError } from '@pdr/api-client';
-import { Button, Card, EmptyState, Field, Input, Spinner } from '@pdr/ui';
+import { Button, Card, EmptyState, Field, PhoneInput, Spinner } from '@pdr/ui';
 import { api } from '@/shared/api';
+import { formatPhoneRu } from '@/shared/format';
 import { haptic } from '@/shared/telegram';
 import { useAuth } from '../auth/AuthProvider';
 
@@ -18,7 +19,7 @@ export function InviteScreen() {
   const navigate = useNavigate();
   const queryClient = useQueryClient();
   const { me, reload, clearStartAction } = useAuth();
-  const [phone, setPhone] = useState(me?.user.phone ?? '');
+  const [phone, setPhone] = useState(formatPhoneRu(me?.user.phone));
   const [error, setError] = useState<string | null>(null);
 
   useEffect(() => clearStartAction, [clearStartAction]);
@@ -119,12 +120,7 @@ export function InviteScreen() {
         <Card>
           <div className="pdr-stack">
             <Field label="Телефон" hint="Приглашение выдано на конкретный номер — подтвердите его">
-              <Input
-                value={phone}
-                onChange={(e) => setPhone(e.target.value)}
-                placeholder="+7 999 123-45-67"
-                inputMode="tel"
-              />
+              <PhoneInput value={phone} onChange={setPhone} placeholder="+7 999 123-45-67" />
             </Field>
             <Button
               onClick={() => savePhone.mutate()}

@@ -1,9 +1,10 @@
 import { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { Badge, Button, Card, Field, Input, ListItem } from '@pdr/ui';
+import { Badge, Button, Card, Field, ListItem, PhoneInput } from '@pdr/ui';
 import { useMutation, useQueryClient } from '@tanstack/react-query';
 import { ApiError } from '@pdr/api-client';
 import { api } from '@/shared/api';
+import { normalizePhone, phoneInputToSubmit } from '@pdr/shared';
 import { formatPhoneRu } from '@/shared/format';
 import { alertDialog, confirmDialog, requestWriteAccess } from '@/shared/telegram';
 import { useAuth, useMe } from '../auth/AuthProvider';
@@ -13,11 +14,11 @@ export function ProfileScreen() {
   const { reload, logout } = useAuth();
   const queryClient = useQueryClient();
   const navigate = useNavigate();
-  const [phone, setPhone] = useState(me.user.phone ?? '');
+  const [phone, setPhone] = useState(formatPhoneRu(me.user.phone));
   const [phoneError, setPhoneError] = useState<string | null>(null);
 
   const savePhone = useMutation({
-    mutationFn: () => api.patch('/me', { phone: phone.trim() === '' ? null : phone }),
+    mutationFn: () => api.patch('/me', { phone: phoneInputToSubmit(phone) }),
     onSuccess: async () => {
       setPhoneError(null);
       await reload();
@@ -97,18 +98,12 @@ export function ProfileScreen() {
                 : 'Нужен для приглашений и связи. Telegram не передаёт его автоматически.'
             }
           >
-            <Input
-              value={phone}
-              onChange={(e) => setPhone(e.target.value)}
-              placeholder="+7 999 123-45-67"
-              inputMode="tel"
-              autoComplete="tel"
-            />
+            <PhoneInput value={phone} onChange={setPhone} placeholder="+7 999 123-45-67" />
           </Field>
           <Button
             onClick={() => savePhone.mutate()}
             loading={savePhone.isPending}
-            disabled={phone === (me.user.phone ?? '')}
+            disabled={(normalizePhone(phone) ?? '') === (me.user.phone ?? '')}
             block
           >
             Сохранить

@@ -5,3 +5,4 @@ export * from './MediaUploader';
 export * from './CarScheme';
 export * from './MonthCalendar';
 export * from './PhotoMarkup';
+export * from './PhoneInput';

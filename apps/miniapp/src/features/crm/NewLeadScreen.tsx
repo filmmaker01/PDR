@@ -2,8 +2,24 @@ import { useState } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
 import { useMutation, useQueryClient } from '@tanstack/react-query';
 import { ApiError } from '@pdr/api-client';
-import { LEAD_CHANNEL_SOURCES, damageTypeLabel, describeDamageSize, panelLabel } from '@pdr/shared';
-import { Badge, Button, CarScheme, Card, Field, Input, ListItem, Textarea } from '@pdr/ui';
+import {
+  LEAD_CHANNEL_SOURCES,
+  damageTypeLabel,
+  describeDamageSize,
+  panelLabel,
+  phoneInputToSubmit,
+} from '@pdr/shared';
+import {
+  Badge,
+  Button,
+  CarScheme,
+  Card,
+  Field,
+  Input,
+  ListItem,
+  PhoneInput,
+  Textarea,
+} from '@pdr/ui';
 import { api } from '@/shared/api';
 import { formatPhoneRu } from '@/shared/format';
 import { alertDialog, haptic } from '@/shared/telegram';
@@ -76,7 +92,7 @@ export function NewLeadScreen() {
             ? { clientId: selectedClient.id }
             : {
                 contactName: contactName.trim() || null,
-                contactPhone: contactPhone.trim() || null,
+                contactPhone: phoneInputToSubmit(contactPhone),
                 contactExtra: contactExtra.trim() || null,
               }),
           ...(vehicleId
@@ -128,7 +144,7 @@ export function NewLeadScreen() {
   const contactReady =
     selectedClient !== null ||
     contactName.trim().length > 0 ||
-    contactPhone.trim().length > 0 ||
+    phoneInputToSubmit(contactPhone) !== null ||
     contactExtra.trim().length > 0;
 
   return (
@@ -197,11 +213,10 @@ export function NewLeadScreen() {
                 />
               </Field>
               <Field label="Телефон">
-                <Input
+                <PhoneInput
                   value={contactPhone}
-                  onChange={(e) => setContactPhone(e.target.value)}
+                  onChange={setContactPhone}
                   placeholder="+7 999 123-45-67"
-                  inputMode="tel"
                 />
               </Field>
               <Field label="Другой контакт" hint="Ник в мессенджере или ссылка">

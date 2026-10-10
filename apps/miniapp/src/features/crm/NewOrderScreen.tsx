@@ -2,8 +2,18 @@ import { useState } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
 import { useMutation, useQueryClient } from '@tanstack/react-query';
 import { ApiError } from '@pdr/api-client';
-import { Badge, Button, CarScheme, Card, Field, Input, ListItem, Textarea } from '@pdr/ui';
-import { damageTypeLabel, describeDamageSize, panelLabel } from '@pdr/shared';
+import {
+  Badge,
+  Button,
+  CarScheme,
+  Card,
+  Field,
+  Input,
+  ListItem,
+  PhoneInput,
+  Textarea,
+} from '@pdr/ui';
+import { damageTypeLabel, describeDamageSize, panelLabel, phoneInputToSubmit } from '@pdr/shared';
 import { api } from '@/shared/api';
 import { formatPhoneRu } from '@/shared/format';
 import { alertDialog, confirmDialog, haptic } from '@/shared/telegram';
@@ -83,7 +93,12 @@ export function NewOrderScreen() {
         {
           ...(selectedClient
             ? { clientId: selectedClient.id }
-            : { newClient: { name: newClientName.trim(), phone: newClientPhone || null } }),
+            : {
+                newClient: {
+                  name: newClientName.trim(),
+                  phone: phoneInputToSubmit(newClientPhone),
+                },
+              }),
           ...(vehicleId
             ? { vehicleId }
             : make.trim() && model.trim()
@@ -229,11 +244,10 @@ export function NewOrderScreen() {
                 />
               </Field>
               <Field label="Телефон" hint="Необязательно, но помогает найти клиента позже">
-                <Input
+                <PhoneInput
                   value={newClientPhone}
-                  onChange={(e) => setNewClientPhone(e.target.value)}
+                  onChange={setNewClientPhone}
                   placeholder="+7 999 123-45-67"
-                  inputMode="tel"
                 />
               </Field>
             </div>
