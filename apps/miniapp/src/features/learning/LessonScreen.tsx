@@ -26,9 +26,16 @@ export function LessonScreen() {
   });
 
   const lastSent = useRef({ at: 0, percent: 0 });
+  // Сколько досмотрено в этом открытии: от этого зависит кнопка «Урок
+  // пройден». Запрос урока после отправки прогресса не перечитывается, и без
+  // этого кнопка оставалась неактивной до повторного открытия урока.
+  const [watchedPercent, setWatchedPercent] = useState(0);
+  const latest = useRef<{ positionSec: number; percent: number } | null>(null);
 
   const sendProgress = useCallback(
     (positionSec: number, percent: number, force = false) => {
+      latest.current = { positionSec, percent };
+      setWatchedPercent((current) => Math.max(current, Math.round(percent)));
       const now = Date.now();
       if (!force && now - lastSent.current.at < PROGRESS_INTERVAL_MS) return;
       lastSent.current = { at: now, percent };
@@ -45,8 +52,17 @@ export function LessonScreen() {
   );
 
   const complete = useMutation({
-    mutationFn: () =>
-      api.post(`/learning/enrollments/${enrollmentId}/lessons/${lessonKey}/complete`),
+    mutationFn: async () => {
+      // Последняя позиция могла не уйти из-за паузы между отправками, а
+      // сервер проверяет порог просмотра по своим данным: дошлём её сначала.
+      if (latest.current) {
+        await api.put(`/learning/enrollments/${enrollmentId}/lessons/${lessonKey}/progress`, {
+          positionSec: Math.round(latest.current.positionSec),
+          percent: Math.round(latest.current.percent),
+        });
+      }
+      return api.post(`/learning/enrollments/${enrollmentId}/lessons/${lessonKey}/complete`);
+    },
     onSuccess: async () => {
       haptic('success');
       setError(null);
@@ -81,8 +97,8 @@ export function LessonScreen() {
   }
 
   const data = lesson.data!;
-  const canComplete =
-    data.minWatchPercent === 0 || data.progress.watchPercent >= data.minWatchPercent;
+  const watched = Math.max(data.progress.watchPercent, watchedPercent);
+  const canComplete = data.minWatchPercent === 0 || watched >= data.minWatchPercent;
 
   return (
     <div className="pdr-stack">
@@ -182,9 +198,7 @@ export function LessonScreen() {
           loading={complete.isPending}
           onClick={() => complete.mutate()}
         >
-          {canComplete
-            ? 'Урок пройден'
-            : `Посмотрите ещё ${data.minWatchPercent - data.progress.watchPercent}% урока`}
+          {canComplete ? 'Урок пройден' : `Посмотрите ещё ${data.minWatchPercent - watched}% урока`}
         </Button>
       )}
 

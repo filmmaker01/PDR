@@ -24,11 +24,11 @@ import {
   Tooltip,
 } from '@mantine/core';
 import { useDisclosure } from '@mantine/hooks';
-import { IconArrowDown, IconArrowUp, IconTrash } from '@tabler/icons-react';
+import { IconArrowDown, IconArrowUp, IconPencil, IconTrash } from '@tabler/icons-react';
 import { api } from '@/shared/api';
 import { VideoUploadField } from './VideoUploadField';
 import { useApiMutation, useApiQuery } from '@/shared/query';
-import type { ExamNode, PublishIssue, StageNode, VersionTree } from './types';
+import type { ExamNode, LessonNode, PublishIssue, StageNode, VersionTree } from './types';
 import { QuestionEditor } from './QuestionEditor';
 
 export function CourseEditorPage() {
@@ -361,6 +361,19 @@ function LessonsTab({
   const remove = useApiMutation((lessonId: string) => api.delete(`/admin/lessons/${lessonId}`), {
     invalidate: [invalidate as unknown[]],
   });
+  const reorder = useApiMutation(
+    (order: string[]) => api.post(`/admin/stages/${stage.id}/lessons/reorder`, { order }),
+    { invalidate: [invalidate as unknown[]] },
+  );
+  const [editing, setEditing] = useState<LessonNode | null>(null);
+
+  const move = (index: number, delta: number): void => {
+    const ids = stage.lessons.map((l) => l.id);
+    const target = index + delta;
+    if (target < 0 || target >= ids.length) return;
+    [ids[index], ids[target]] = [ids[target]!, ids[index]!];
+    reorder.mutate(ids);
+  };
 
   return (
     <Stack>
@@ -389,14 +402,41 @@ function LessonsTab({
                 </Badge>
               )}
               {editable ? (
-                <ActionIcon color="red" variant="subtle" onClick={() => remove.mutate(lesson.id)}>
-                  <IconTrash size={16} />
-                </ActionIcon>
+                <>
+                  <Tooltip label="Выше">
+                    <ActionIcon
+                      variant="subtle"
+                      disabled={index === 0}
+                      onClick={() => move(index, -1)}
+                    >
+                      <IconArrowUp size={16} />
+                    </ActionIcon>
+                  </Tooltip>
+                  <Tooltip label="Ниже">
+                    <ActionIcon
+                      variant="subtle"
+                      disabled={index === stage.lessons.length - 1}
+                      onClick={() => move(index, 1)}
+                    >
+                      <IconArrowDown size={16} />
+                    </ActionIcon>
+                  </Tooltip>
+                  <Tooltip label="Изменить урок">
+                    <ActionIcon variant="subtle" onClick={() => setEditing(lesson)}>
+                      <IconPencil size={16} />
+                    </ActionIcon>
+                  </Tooltip>
+                  <ActionIcon color="red" variant="subtle" onClick={() => remove.mutate(lesson.id)}>
+                    <IconTrash size={16} />
+                  </ActionIcon>
+                </>
               ) : null}
             </Group>
           </Group>
         </Card>
       ))}
+
+      <LessonEditModal lesson={editing} onClose={() => setEditing(null)} invalidate={invalidate} />
 
       {editable ? (
         <Card withBorder>
@@ -427,6 +467,116 @@ function LessonsTab({
           </Group>
         </Card>
       ) : null}
+    </Stack>
+  );
+}
+
+/**
+ * Правка урока в черновике: название, описание, видео, обязательность и
+ * порог просмотра. Ключ не меняется — по нему хранится прогресс учеников,
+ * и при переносе группы на новую версию урок узнаётся именно по ключу.
+ */
+function LessonEditModal({
+  lesson,
+  onClose,
+  invalidate,
+}: {
+  lesson: LessonNode | null;
+  onClose: () => void;
+  invalidate: readonly unknown[];
+}) {
+  return (
+    <Modal opened={lesson !== null} onClose={onClose} title="Урок" size="lg">
+      {lesson ? (
+        <LessonEditForm key={lesson.id} lesson={lesson} onDone={onClose} invalidate={invalidate} />
+      ) : null}
+    </Modal>
+  );
+}
+
+function LessonEditForm({
+  lesson,
+  onDone,
+  invalidate,
+}: {
+  lesson: LessonNode;
+  onDone: () => void;
+  invalidate: readonly unknown[];
+}) {
+  const [title, setTitle] = useState(lesson.title);
+  const [description, setDescription] = useState(lesson.description ?? '');
+  const [videoId, setVideoId] = useState<string | null>(lesson.video?.id ?? null);
+  const [isRequired, setIsRequired] = useState(lesson.isRequired);
+  const [minWatchPercent, setMinWatchPercent] = useState<number>(lesson.minWatchPercent);
+  const [estimatedMinutes, setEstimatedMinutes] = useState<number | ''>(
+    lesson.estimatedMinutes ?? '',
+  );
+
+  const save = useApiMutation(
+    () =>
+      api.patch(`/admin/lessons/${lesson.id}`, {
+        title: title.trim(),
+        description: description.trim() || null,
+        videoAssetId: videoId,
+        isRequired,
+        minWatchPercent,
+        estimatedMinutes: estimatedMinutes === '' ? null : estimatedMinutes,
+      }),
+    { invalidate: [invalidate as unknown[]], successMessage: 'Урок сохранён', onSuccess: onDone },
+  );
+
+  return (
+    <Stack>
+      <Text size="sm" c="dimmed">
+        Ключ урока: {lesson.key}. Он не меняется — по нему хранится прогресс учеников.
+      </Text>
+      <TextInput
+        label="Название урока"
+        value={title}
+        onChange={(e) => setTitle(e.currentTarget.value)}
+      />
+      <Textarea
+        label="Описание"
+        autosize
+        minRows={3}
+        value={description}
+        onChange={(e) => setDescription(e.currentTarget.value)}
+      />
+      <VideoUploadField value={videoId} onChange={setVideoId} />
+      <Checkbox
+        label="Обязательный урок"
+        checked={isRequired}
+        onChange={(e) => setIsRequired(e.currentTarget.checked)}
+      />
+      <Group grow>
+        <NumberInput
+          label="Порог просмотра, %"
+          description="0 — отметить можно сразу"
+          min={0}
+          max={100}
+          value={minWatchPercent}
+          onChange={(value) => setMinWatchPercent(typeof value === 'number' ? value : 0)}
+        />
+        <NumberInput
+          label="Длительность, мин"
+          min={1}
+          max={600}
+          value={estimatedMinutes}
+          onChange={(value) => setEstimatedMinutes(typeof value === 'number' ? value : '')}
+        />
+      </Group>
+      <Group justify="flex-end">
+        <Button variant="default" onClick={onDone}>
+          Отмена
+        </Button>
+        <Button
+          disabled={!title.trim()}
+          loading={save.isPending}
+          onClick={() => save.mutate(undefined)}
+        >
+          Сохранить
+        </Button>
+      </Group>
     </Stack>
   );
 }

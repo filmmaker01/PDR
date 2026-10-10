@@ -422,6 +422,73 @@ describe('редактор курса', () => {
     });
   });
 
+  describe('правка уроков', () => {
+    it('в черновике меняются название, описание, видео и порядок; ключ остаётся', async () => {
+      const { versionId } = await createCourseWithDraft();
+      const stageId = await buildPublishableStage(versionId);
+      const second = await http()
+        .post(`/v1/admin/stages/${stageId}/lessons`)
+        .set(...admin.authHeader)
+        .send({ key: 'tools', title: 'Инструмент', videoAssetId: await readyVideo('Инструмент') })
+        .expect(201);
+
+      const replacement = await readyVideo('Новый монтаж');
+      await http()
+        .patch(`/v1/admin/lessons/${second.body.id}`)
+        .set(...admin.authHeader)
+        .send({
+          title: 'Крючки и лампа',
+          description: 'Что купить в первую очередь',
+          videoAssetId: replacement,
+        })
+        .expect(200);
+
+      const tree = await http()
+        .get(`/v1/admin/course-versions/${versionId}`)
+        .set(...admin.authHeader)
+        .expect(200);
+      const lessons = tree.body.stages[0].lessons;
+      await http()
+        .post(`/v1/admin/stages/${stageId}/lessons/reorder`)
+        .set(...admin.authHeader)
+        .send({ order: [lessons[1].id, lessons[0].id] })
+        .expect(204);
+
+      const after = await http()
+        .get(`/v1/admin/course-versions/${versionId}`)
+        .set(...admin.authHeader)
+        .expect(200);
+      const reordered = after.body.stages[0].lessons;
+      expect(reordered.map((l: { key: string }) => l.key)).toEqual(['tools', 'light']);
+      expect(reordered[0]).toMatchObject({
+        title: 'Крючки и лампа',
+        description: 'Что купить в первую очередь',
+        video: expect.objectContaining({ id: replacement }),
+      });
+    });
+
+    it('опубликованный урок не правится — только через новый черновик', async () => {
+      const { versionId } = await createCourseWithDraft();
+      const stageId = await buildPublishableStage(versionId);
+      await http()
+        .post(`/v1/admin/course-versions/${versionId}/publish`)
+        .set(...admin.authHeader)
+        .send({})
+        .expect(201);
+      const tree = await http()
+        .get(`/v1/admin/course-versions/${versionId}`)
+        .set(...admin.authHeader)
+        .expect(200);
+      const lessonId = tree.body.stages.find((s: { id: string }) => s.id === stageId).lessons[0].id;
+
+      const res = await http()
+        .patch(`/v1/admin/lessons/${lessonId}`)
+        .set(...admin.authHeader)
+        .send({ title: 'Правка вживую' });
+      expect(res.status).toBeGreaterThanOrEqual(400);
+    });
+  });
+
   describe('видео', () => {
     it('нельзя удалить видео, использованное в уроке', async () => {
       const { versionId } = await createCourseWithDraft();
