@@ -2,7 +2,11 @@ import { Injectable, Logger } from '@nestjs/common';
 import { Prisma } from '@prisma/client';
 import { AppConfigService } from '@/config/config.service';
 import { PrismaService } from '@/infra/prisma/prisma.service';
+import { parseMinuteKey } from './cron-match';
 import { type JobName, type JobPayloads } from './job-queue';
+
+/** Префикс ключа уникальности задач, поставленных по расписанию. */
+export const CRON_KEY_PREFIX = 'cron:';
 
 export interface EnqueueOptions {
   /** Задержка перед выполнением, секунды. */
@@ -40,6 +44,12 @@ export interface ClaimedJob {
 export class JobsService {
   private readonly logger = new Logger(JobsService.name);
 
+  /**
+   * Вызывается, когда поставлена задача, которую можно выполнять сразу.
+   * Подписывается `JobRunnerService`: прямая зависимость была бы циклической.
+   */
+  private readyListener: (() => void) | null = null;
+
   constructor(
     private readonly config: AppConfigService,
     private readonly prisma: PrismaService,
@@ -51,6 +61,10 @@ export class JobsService {
    */
   get isEnabled(): boolean {
     return !this.config.isTest || process.env.JOBS_ENABLED === 'true';
+  }
+
+  onReady(listener: () => void): void {
+    this.readyListener = listener;
   }
 
   /** Постановка задачи. Если очередь отключена (тесты) — no-op с записью в лог. */
@@ -80,6 +94,7 @@ export class JobsService {
         },
         select: { id: true },
       });
+      if (runAt.getTime() <= Date.now()) this.readyListener?.();
       return job.id;
     } catch (err) {
       // Нарушение уникальности ключа означает, что такая задача уже ждёт
@@ -90,6 +105,30 @@ export class JobsService {
       }
       throw err;
     }
+  }
+
+  /**
+   * Минута последнего запуска по расписанию для каждой задачи.
+   *
+   * Отдельной отметки «докуда расписание разобрано» нет: её роль играют сами
+   * задачи — ключ уникальности содержит минуту запуска, а ISO-запись минуты
+   * сортируется как строка. Завершённые задачи тоже учитываются, иначе
+   * выполненный запуск поставился бы повторно.
+   */
+  async lastCronRuns(): Promise<Map<string, Date>> {
+    const rows = await this.prisma.$queryRaw<{ name: string; key: string }[]>(Prisma.sql`
+      SELECT "name", MAX("singleton_key") AS "key"
+      FROM "job_queue"
+      WHERE "singleton_key" LIKE ${`${CRON_KEY_PREFIX}%`}
+      GROUP BY "name"
+    `);
+
+    const runs = new Map<string, Date>();
+    for (const row of rows) {
+      const at = parseMinuteKey(row.key.slice(`${CRON_KEY_PREFIX}${row.name}:`.length));
+      if (at) runs.set(row.name, at);
+    }
+    return runs;
   }
 
   /**

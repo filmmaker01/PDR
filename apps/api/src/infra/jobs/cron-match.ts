@@ -83,3 +83,30 @@ export function cronMatches(expression: string, at: Date): boolean {
 export function minuteKey(at: Date): string {
   return at.toISOString().slice(0, 16);
 }
+
+/** Обратное к `minuteKey`: начало минуты из ключа или `null`, если ключ чужой. */
+export function parseMinuteKey(key: string): Date | null {
+  if (!/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}$/.test(key)) return null;
+  const at = new Date(`${key}:00Z`);
+  return Number.isNaN(at.getTime()) ? null : at;
+}
+
+const MINUTE_MS = 60_000;
+
+/**
+ * Последняя минута окна `(after, upTo]`, попадающая в расписание.
+ *
+ * Планировщик вызывает разбор очереди реже, чем раз в минуту, поэтому минута
+ * запуска почти никогда не совпадает с минутой вызова. Вместо точного
+ * совпадения ищется последний пропущенный запуск: задачи по расписанию
+ * обрабатывают всё накопившееся, и несколько пропущенных запусков
+ * сливаются в один.
+ */
+export function latestCronMatch(expression: string, after: Date, upTo: Date): Date | null {
+  const first = Math.floor(after.getTime() / MINUTE_MS) + 1;
+  for (let minute = Math.floor(upTo.getTime() / MINUTE_MS); minute >= first; minute -= 1) {
+    const at = new Date(minute * MINUTE_MS);
+    if (cronMatches(expression, at)) return at;
+  }
+  return null;
+}

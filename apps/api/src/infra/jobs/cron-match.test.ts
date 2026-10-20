@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { cronMatches, minuteKey } from './cron-match';
+import { cronMatches, latestCronMatch, minuteKey, parseMinuteKey } from './cron-match';
 
 /** Момент UTC из читаемой записи. */
 const at = (iso: string): Date => new Date(`${iso}Z`);
@@ -98,5 +98,86 @@ describe('minuteKey', () => {
     expect(minuteKey(new Date('2026-09-15T10:05:00Z'))).not.toBe(
       minuteKey(new Date('2026-09-15T10:06:00Z')),
     );
+  });
+});
+
+describe('parseMinuteKey', () => {
+  it('обратен minuteKey', () => {
+    const t = new Date('2026-09-15T10:05:00Z');
+    expect(parseMinuteKey(minuteKey(t))?.toISOString()).toBe(t.toISOString());
+  });
+
+  it('чужой ключ не разбирается', () => {
+    expect(parseMinuteKey('')).toBeNull();
+    expect(parseMinuteKey('2026-09-15')).toBeNull();
+    expect(parseMinuteKey('2026-13-45T99:99')).toBeNull();
+  });
+});
+
+describe('latestCronMatch', () => {
+  it('находит запуск, пропущенный между редкими вызовами', () => {
+    // Вызов раз в 15 минут: 10:00 → 10:15. Ежечасная задача в :05 и :10
+    // попадает в окно, хотя ни один вызов не пришёлся на её минуту.
+    expect(latestCronMatch('5 * * * *', at('2026-09-15T10:00'), at('2026-09-15T10:15'))).toEqual(
+      at('2026-09-15T10:05'),
+    );
+    expect(latestCronMatch('10 * * * *', at('2026-09-15T10:00'), at('2026-09-15T10:15'))).toEqual(
+      at('2026-09-15T10:10'),
+    );
+    expect(latestCronMatch('20 4 * * *', at('2026-09-15T04:15'), at('2026-09-15T04:30'))).toEqual(
+      at('2026-09-15T04:20'),
+    );
+  });
+
+  it('сливает несколько пропущенных запусков в последний', () => {
+    expect(
+      latestCronMatch('*/5 * * * *', at('2026-09-15T10:00'), at('2026-09-15T10:14:59')),
+    ).toEqual(at('2026-09-15T10:10'));
+  });
+
+  it('левая граница не включается, правая включается', () => {
+    expect(latestCronMatch('5 * * * *', at('2026-09-15T10:05'), at('2026-09-15T10:20'))).toBeNull();
+    expect(
+      latestCronMatch('5 * * * *', at('2026-09-15T10:04:30'), at('2026-09-15T10:05:10')),
+    ).toEqual(at('2026-09-15T10:05'));
+  });
+
+  it('пустое окно и окно без запусков дают null', () => {
+    expect(latestCronMatch('* * * * *', at('2026-09-15T10:05'), at('2026-09-15T10:05'))).toBeNull();
+    expect(
+      latestCronMatch('30 3 * * *', at('2026-09-15T04:00'), at('2026-09-15T05:00')),
+    ).toBeNull();
+  });
+
+  it('при вызове раз в 15 минут ни одно расписание обработчиков не теряется', () => {
+    const used = [
+      '5 * * * *',
+      '30 3 * * *',
+      '15 3 * * *',
+      '0 6 * * *',
+      '*/5 * * * *',
+      '20 4 * * *',
+      '45 3 * * *',
+      '*/10 * * * *',
+      '10 * * * *',
+    ];
+    const start = Date.UTC(2026, 8, 15, 0, 0);
+
+    for (const expr of used) {
+      let runs = 0;
+      for (let i = 0; i < 24 * 4; i += 1) {
+        const after = new Date(start + i * 15 * 60_000);
+        const upTo = new Date(start + (i + 1) * 15 * 60_000);
+        if (latestCronMatch(expr, after, upTo)) runs += 1;
+      }
+      // Ровно столько запусков, сколько окон содержит хотя бы одну минуту расписания.
+      const expected = [...Array(24 * 4)].filter((_, i) =>
+        [...Array(15)].some((__, m) =>
+          cronMatches(expr, new Date(start + (i * 15 + m + 1) * 60_000)),
+        ),
+      ).length;
+      expect(runs, expr).toBe(expected);
+      expect(runs, expr).toBeGreaterThan(0);
+    }
   });
 });

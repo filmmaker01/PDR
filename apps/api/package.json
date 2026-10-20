@@ -29,6 +29,7 @@
     "@pdr/shared": "workspace:*",
     "@prisma/client": "^6.2.1",
     "@vercel/blob": "^2.8.0",
+    "@vercel/functions": "^3.9.10",
     "grammy": "^1.32.0",
     "helmet": "^8.0.0",
     "jszip": "^3.10.2",

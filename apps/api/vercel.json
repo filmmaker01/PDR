@@ -21,7 +21,7 @@
   "crons": [
     {
       "path": "/v1/jobs/tick",
-      "schedule": "* * * * *"
+      "schedule": "*/15 * * * *"
     }
   ]
 }
