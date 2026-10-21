@@ -236,6 +236,26 @@ select {
   font: inherit;
   color: inherit;
 }
+/* Отметка чек-листа: крупный круг, который видно и нажимают пальцем. */
+.pdr-check {
+  flex: none;
+  width: 26px;
+  height: 26px;
+  border-radius: 50%;
+  border: 2px solid var(--pdr-hint);
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 15px;
+  font-weight: 700;
+  line-height: 1;
+  color: transparent;
+}
+.pdr-check--on {
+  border-color: var(--pdr-success);
+  background: var(--pdr-success);
+  color: #fff;
+}
 
 /* ── Коэффициент цены и формула расчёта ───────────────────────────────────── */
 
@@ -893,6 +913,47 @@ select {
   pointer-events: none;
 }
 .pdr-markup__layer {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  pointer-events: none;
+}
+.pdr-markup__palette {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+  align-items: center;
+}
+.pdr-markup__swatch {
+  width: 28px;
+  height: 28px;
+  padding: 0;
+  border-radius: 50%;
+  background: var(--pdr-swatch);
+  /* Тонкий контур: белый кружок не должен пропадать на светлой теме. */
+  border: 1px solid rgba(0, 0, 0, 0.25);
+  cursor: pointer;
+  -webkit-tap-highlight-color: transparent;
+}
+.pdr-markup__swatch--active {
+  /* Выбранный цвет — кольцо цвета темы вокруг кружка. */
+  box-shadow:
+    0 0 0 2px var(--pdr-bg),
+    0 0 0 4px var(--pdr-button);
+}
+
+/* Снимок с разметкой поверх: миниатюры и превью. */
+.pdr-marked {
+  position: relative;
+  overflow: hidden;
+}
+.pdr-marked__image {
+  display: block;
+  width: 100%;
+  height: 100%;
+}
+.pdr-marked__layer {
   position: absolute;
   inset: 0;
   width: 100%;

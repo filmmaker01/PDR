@@ -5,6 +5,7 @@ import type {
   LeadChannel,
   LeadSource,
   LeadStatus,
+  VehicleConditionItem,
 } from '@pdr/shared';
 
 export type OrderStatus =
@@ -41,6 +42,9 @@ export interface OrderListItem {
 export interface OrderCard extends OrderListItem {
   appointments: OrderAppointment[];
   damageSummary: string | null;
+  /** Чек-лист состояния автомобиля при приёмке и примечание к нему. */
+  vehicleCondition: VehicleConditionItem[];
+  vehicleConditionNote: string | null;
   internalNotes: string | null;
   clientNotes: string | null;
   startedAt: string | null;

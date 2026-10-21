@@ -264,6 +264,63 @@ describe('CRM: клиенты, автомобили, заказы', () => {
     });
   });
 
+  describe('состояние автомобиля при приёмке', () => {
+    it('сохраняет чек-лист и примечание при создании и отдаёт их в карточке', async () => {
+      const order = await createOrder(owner, {
+        vehicleCondition: ['battery_disconnected', 'dirty', 'no_valuables'],
+        vehicleConditionNote: 'Детское кресло в салоне',
+      });
+
+      const res = await http()
+        .get(`/v1/workspaces/${workspaceId}/orders/${order.id}`)
+        .set(...owner.authHeader)
+        .expect(200);
+      // Порядок — как в справочнике, а не как нажимали.
+      expect(res.body.vehicleCondition).toEqual(['dirty', 'no_valuables', 'battery_disconnected']);
+      expect(res.body.vehicleConditionNote).toBe('Детское кресло в салоне');
+    });
+
+    it('заказ без чек-листа получает пустой список', async () => {
+      const order = await createOrder();
+      const res = await http()
+        .get(`/v1/workspaces/${workspaceId}/orders/${order.id}`)
+        .set(...owner.authHeader)
+        .expect(200);
+      expect(res.body.vehicleCondition).toEqual([]);
+      expect(res.body.vehicleConditionNote).toBeNull();
+    });
+
+    it('правка меняет отметки, не трогая остальное; грязный и чистый не уживаются', async () => {
+      const order = await createOrder(owner, {
+        vehicleCondition: ['dirty'],
+        vehicleConditionNote: 'Было',
+      });
+
+      await http()
+        .patch(`/v1/workspaces/${workspaceId}/orders/${order.id}`)
+        .set(...owner.authHeader)
+        .send({ vehicleCondition: ['dirty', 'clean', 'no_valuables'] })
+        .expect(200);
+
+      const res = await http()
+        .get(`/v1/workspaces/${workspaceId}/orders/${order.id}`)
+        .set(...owner.authHeader)
+        .expect(200);
+      expect(res.body.vehicleCondition).toEqual(['clean', 'no_valuables']);
+      expect(res.body.vehicleConditionNote).toBe('Было');
+      expect(res.body.title).toBe('Град на капоте');
+    });
+
+    it('отклоняет пункт не из справочника', async () => {
+      const order = await createOrder();
+      await http()
+        .patch(`/v1/workspaces/${workspaceId}/orders/${order.id}`)
+        .set(...owner.authHeader)
+        .send({ vehicleCondition: ['broken_glass'] })
+        .expect(422);
+    });
+  });
+
   describe('статусы заказа', () => {
     it('проходит полный путь от нового до выданного', async () => {
       const order = await createOrder();

@@ -14,6 +14,7 @@ import {
   PAYMENT_PURPOSES,
   PHOTO_CATEGORIES,
   PRICE_UNITS,
+  VEHICLE_CONDITION_ITEMS,
   nonEmptyString,
   optionalString,
 } from '@pdr/shared';
@@ -82,6 +83,12 @@ export const orderListQuerySchema = z.object({
   cursor: z.string().optional(),
 });
 
+/** Отмеченные пункты чек-листа: только из справочника, без повторов по смыслу. */
+const vehicleConditionField = z
+  .array(z.enum(VEHICLE_CONDITION_ITEMS))
+  .max(VEHICLE_CONDITION_ITEMS.length * 2)
+  .optional();
+
 export const createOrderSchema = z
   .object({
     clientId: z.string().uuid().optional(),
@@ -102,6 +109,9 @@ export const createOrderSchema = z
       .optional(),
     title: optionalString(300),
     damageSummary: optionalString(4000),
+    /** Чек-лист состояния автомобиля при приёмке и примечание к нему. */
+    vehicleCondition: vehicleConditionField,
+    vehicleConditionNote: optionalString(2000),
     /** Откуда пришёл клиент — отмечается прямо в заказе, без обращения. */
     source: z.enum(LEAD_SOURCES).nullable().optional(),
     channel: z.enum(LEAD_CHANNELS).nullable().optional(),
@@ -132,6 +142,8 @@ export const updateOrderSchema = z
   .object({
     title: optionalString(300),
     damageSummary: optionalString(4000),
+    vehicleCondition: vehicleConditionField,
+    vehicleConditionNote: optionalString(2000),
     internalNotes: optionalString(4000),
     clientNotes: optionalString(4000),
     vehicleId: z.string().uuid().nullable().optional(),

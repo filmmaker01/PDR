@@ -13,7 +13,13 @@ import {
   PhoneInput,
   Textarea,
 } from '@pdr/ui';
-import { damageTypeLabel, describeDamageSize, panelLabel, phoneInputToSubmit } from '@pdr/shared';
+import {
+  damageTypeLabel,
+  describeDamageSize,
+  panelLabel,
+  phoneInputToSubmit,
+  type VehicleConditionItem,
+} from '@pdr/shared';
 import { api } from '@/shared/api';
 import { formatPhoneRu } from '@/shared/format';
 import { alertDialog, confirmDialog, haptic } from '@/shared/telegram';
@@ -26,6 +32,7 @@ import {
   withoutDraftKey,
   type DraftDamage,
 } from './DraftPhotos';
+import { VehicleConditionCard } from './VehicleCondition';
 import {
   APPOINTMENT_KIND_OPTIONS,
   LEAD_CHANNEL_OPTIONS,
@@ -56,9 +63,15 @@ export function NewOrderScreen() {
   const [assigneeMemberId, setAssigneeMemberId] = useState<string>('');
   const [idempotencyKey] = useState(() => crypto.randomUUID());
 
+  const [vehicleCondition, setVehicleCondition] = useState<VehicleConditionItem[]>([]);
+  const [vehicleConditionNote, setVehicleConditionNote] = useState('');
+
   const [damages, setDamages] = useState<DraftDamage[]>([]);
   const [panelCode, setPanelCode] = useState<string | null>(null);
   const [damageSheet, setDamageSheet] = useState(false);
+  // Схема повреждений нужна для оценки, но в форме приёмки свёрнута:
+  // главное здесь — фото и состояние автомобиля.
+  const [schemeOpen, setSchemeOpen] = useState(false);
 
   const [withAppointment, setWithAppointment] = useState(false);
   const [day, setDay] = useState(() => new Date().toISOString().slice(0, 10));
@@ -106,6 +119,8 @@ export function NewOrderScreen() {
               : {}),
           title: title || null,
           damageSummary: damageSummary || null,
+          vehicleCondition,
+          vehicleConditionNote: vehicleConditionNote.trim() || null,
           // Источник — характеристика заказа: обращение ради него не создаётся.
           ...(channel ? { channel } : {}),
           ...(assigneeMemberId ? { assigneeMemberId } : {}),
@@ -368,18 +383,46 @@ export function NewOrderScreen() {
         />
       </Card>
 
-      <h2 className="pdr-subtitle">Повреждения</h2>
-      <Card>
-        <CarScheme
-          counts={damageCounts}
-          activeCode={damageSheet ? panelCode : null}
-          onSelect={(code) => {
-            setPanelCode(code);
-            setDamageSheet(true);
-          }}
-          hint="Отметьте повреждённые детали — их можно будет оценить сразу после создания заказа."
-        />
+      <h2 className="pdr-subtitle">Состояние автомобиля</h2>
+      <VehicleConditionCard
+        value={vehicleCondition}
+        onChange={setVehicleCondition}
+        note={vehicleConditionNote}
+        onNoteChange={setVehicleConditionNote}
+      />
+
+      <Card flat>
+        <button
+          type="button"
+          className="pdr-list__item pdr-list__item--button"
+          aria-expanded={schemeOpen}
+          onClick={() => setSchemeOpen((open) => !open)}
+        >
+          <span className="pdr-grow">
+            <span style={{ display: 'block', fontWeight: 600 }}>Схема повреждений</span>
+            <span className="pdr-hint">
+              {damages.length > 0
+                ? `Отмечено деталей: ${damages.length}`
+                : 'Для оценки — можно отметить и позже, во вкладке «Повреждения»'}
+            </span>
+          </span>
+          <span aria-hidden>{schemeOpen ? '▴' : '▾'}</span>
+        </button>
       </Card>
+
+      {schemeOpen ? (
+        <Card>
+          <CarScheme
+            counts={damageCounts}
+            activeCode={damageSheet ? panelCode : null}
+            onSelect={(code) => {
+              setPanelCode(code);
+              setDamageSheet(true);
+            }}
+            hint="Отметьте повреждённые детали — их можно будет оценить сразу после создания заказа."
+          />
+        </Card>
+      ) : null}
 
       {damages.length > 0 ? (
         <Card flat>

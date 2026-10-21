@@ -28,6 +28,11 @@ export interface MediaUploaderProps {
    * снимок можно разметить ещё до того, как запись сохранена в базе.
    */
   renderTileFooter?: (item: UploadItem) => ReactNode;
+  /**
+   * Чем заменить картинку в плитке: например, снимком с разметкой поверх.
+   * Вернул null — показывается сам снимок.
+   */
+  renderTileMedia?: (item: UploadItem) => ReactNode;
 }
 
 export function MediaUploader({
@@ -44,6 +49,7 @@ export function MediaUploader({
   disabled,
   maxFiles,
   renderTileFooter,
+  renderTileMedia,
 }: MediaUploaderProps) {
   const cameraRef = useRef<HTMLInputElement>(null);
   const galleryRef = useRef<HTMLInputElement>(null);
@@ -66,7 +72,9 @@ export function MediaUploader({
               {item.file.type.startsWith('video/') ? (
                 <video src={item.previewUrl} className="pdr-uploader__media" muted playsInline />
               ) : (
-                <img src={item.previewUrl} alt="" className="pdr-uploader__media" />
+                (renderTileMedia?.(item) ?? (
+                  <img src={item.previewUrl} alt="" className="pdr-uploader__media" />
+                ))
               )}
 
               {item.status === 'uploading' || item.status === 'queued' ? (

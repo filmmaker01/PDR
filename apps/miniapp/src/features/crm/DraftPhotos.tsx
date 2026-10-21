@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react';
 import { damageTypeLabel, describeDamageSize, panelLabel } from '@pdr/shared';
-import { Badge, Button, MediaUploader, useUploadQueue } from '@pdr/ui';
+import { Badge, Button, MarkedImage, MediaUploader, useUploadQueue } from '@pdr/ui';
 import { createUploadTransport } from '@/shared/uploads';
 import { useFreshMarkupQueue } from './FreshPhotoMarkup';
 import { DraftPhotoMarkupSheet, draftHasMarkup, type DraftPhotoMarkup } from './PhotoMarkupSheet';
@@ -122,6 +122,18 @@ export function DraftPhotoUploader({
         cameraLabel="📷 Снять фото"
         galleryLabel="🖼 Выбрать из галереи"
         hint={hint}
+        renderTileMedia={(item) => {
+          // Плитка показывает снимок с разметкой сразу после «Готово»:
+          // оригинал при этом остаётся отдельным файлом.
+          const markup = photos.markups[item.localId];
+          return draftHasMarkup(markup) ? (
+            <MarkedImage
+              src={item.previewUrl}
+              markup={markup!.annotation}
+              className="pdr-uploader__media"
+            />
+          ) : null;
+        }}
         renderTileFooter={(item) => {
           if (item.status === 'error' || item.status === 'cancelled') return null;
           const marked = draftHasMarkup(photos.markups[item.localId]);

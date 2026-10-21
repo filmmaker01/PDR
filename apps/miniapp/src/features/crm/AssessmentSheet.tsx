@@ -18,6 +18,7 @@ import { formatMinor, parseMajorToMinor } from '@/shared/format';
 import { alertDialog, haptic } from '@/shared/telegram';
 import { useAssessmentCapabilities, useDamages, useLeadPhotos, useOrderPhotos } from './api';
 import { ExtraWorkPickerSheet } from './ExtraWorkPicker';
+import { PhotoThumb } from './PhotoThumb';
 import type { DamageParent } from './DamageSheet';
 import type {
   AssessmentAnalysis,
@@ -348,15 +349,7 @@ export function AssessmentSheet({
                           )
                         }
                       >
-                        {photo.thumbUrl ? (
-                          <img
-                            src={photo.thumbUrl}
-                            alt=""
-                            style={{ width: '100%', aspectRatio: '1', objectFit: 'cover' }}
-                          />
-                        ) : (
-                          <div className="pdr-skeleton" style={{ aspectRatio: '1' }} />
-                        )}
+                        <PhotoThumb photo={photo} radius={0} />
                       </button>
                     );
                   })}

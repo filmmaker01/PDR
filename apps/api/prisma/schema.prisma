@@ -1196,38 +1196,42 @@ model Vehicle {
 }
 
 model Order {
-  id               String        @id @default(uuid()) @db.Uuid
-  workspaceId      String        @map("workspace_id") @db.Uuid
+  id                   String        @id @default(uuid()) @db.Uuid
+  workspaceId          String        @map("workspace_id") @db.Uuid
   /// Порядковый номер внутри мастерской.
-  number           Int
-  clientId         String        @map("client_id") @db.Uuid
-  vehicleId        String?       @map("vehicle_id") @db.Uuid
-  assigneeMemberId String?       @map("assignee_member_id") @db.Uuid
-  status           OrderStatus   @default(new)
+  number               Int
+  clientId             String        @map("client_id") @db.Uuid
+  vehicleId            String?       @map("vehicle_id") @db.Uuid
+  assigneeMemberId     String?       @map("assignee_member_id") @db.Uuid
+  status               OrderStatus   @default(new)
   /// Денормализовано: пересчитывается в транзакции с оплатой.
-  paymentStatus    PaymentStatus @default(unpaid) @map("payment_status")
-  agreedEstimateId String?       @map("agreed_estimate_id") @db.Uuid
-  agreedTotalMinor BigInt?       @map("agreed_total_minor")
-  paidMinor        BigInt        @default(0) @map("paid_minor")
-  currency         String        @db.Char(3)
-  title            String?
-  damageSummary    String?       @map("damage_summary")
+  paymentStatus        PaymentStatus @default(unpaid) @map("payment_status")
+  agreedEstimateId     String?       @map("agreed_estimate_id") @db.Uuid
+  agreedTotalMinor     BigInt?       @map("agreed_total_minor")
+  paidMinor            BigInt        @default(0) @map("paid_minor")
+  currency             String        @db.Char(3)
+  title                String?
+  damageSummary        String?       @map("damage_summary")
+  /// Состояние автомобиля при приёмке: отмеченные пункты чек-листа
+  /// (справочник VEHICLE_CONDITION_ITEMS) и свободное примечание к нему.
+  vehicleCondition     String[]      @default([]) @map("vehicle_condition")
+  vehicleConditionNote String?       @map("vehicle_condition_note")
   /// Откуда пришёл клиент. Тот же справочник, что у обращения: заказ часто
   /// создаётся сразу, без обращения, а источник всё равно нужен.
-  source           LeadSource?
-  channel          LeadChannel?
-  internalNotes    String?       @map("internal_notes")
-  clientNotes      String?       @map("client_notes")
-  scheduledStartAt DateTime?     @map("scheduled_start_at") @db.Timestamptz(6)
-  startedAt        DateTime?     @map("started_at") @db.Timestamptz(6)
-  readyAt          DateTime?     @map("ready_at") @db.Timestamptz(6)
-  deliveredAt      DateTime?     @map("delivered_at") @db.Timestamptz(6)
-  cancelledAt      DateTime?     @map("cancelled_at") @db.Timestamptz(6)
-  cancelReason     String?       @map("cancel_reason")
-  archivedAt       DateTime?     @map("archived_at") @db.Timestamptz(6)
-  createdById      String?       @map("created_by") @db.Uuid
-  createdAt        DateTime      @default(now()) @map("created_at") @db.Timestamptz(6)
-  updatedAt        DateTime      @updatedAt @map("updated_at") @db.Timestamptz(6)
+  source               LeadSource?
+  channel              LeadChannel?
+  internalNotes        String?       @map("internal_notes")
+  clientNotes          String?       @map("client_notes")
+  scheduledStartAt     DateTime?     @map("scheduled_start_at") @db.Timestamptz(6)
+  startedAt            DateTime?     @map("started_at") @db.Timestamptz(6)
+  readyAt              DateTime?     @map("ready_at") @db.Timestamptz(6)
+  deliveredAt          DateTime?     @map("delivered_at") @db.Timestamptz(6)
+  cancelledAt          DateTime?     @map("cancelled_at") @db.Timestamptz(6)
+  cancelReason         String?       @map("cancel_reason")
+  archivedAt           DateTime?     @map("archived_at") @db.Timestamptz(6)
+  createdById          String?       @map("created_by") @db.Uuid
+  createdAt            DateTime      @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt            DateTime      @updatedAt @map("updated_at") @db.Timestamptz(6)
 
   workspace      Workspace            @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
   client         Client               @relation(fields: [workspaceId, clientId], references: [workspaceId, id], onDelete: Restrict)

@@ -14,6 +14,7 @@ import { createUploadTransport } from '@/shared/uploads';
 import { photosPath, useDamages, useLeadPhotos, useOrderPhotos } from './api';
 import { useFreshMarkupQueue, useMarkupAfterUpload } from './FreshPhotoMarkup';
 import { DraftPhotoMarkupSheet, PhotoMarkupSheet } from './PhotoMarkupSheet';
+import { PhotoThumb } from './PhotoThumb';
 import { panelLabel } from '@pdr/shared';
 import type { DamageParent } from './DamageSheet';
 import { PHOTO_CATEGORY_OPTIONS, type OrderPhoto, type PhotoCategory } from './types';
@@ -93,6 +94,7 @@ export function PhotosTab({
             cameraLabel="📷 Снять фото"
             galleryLabel="🖼 Выбрать из галереи"
             hint={`Раздел «${PHOTO_CATEGORY_OPTIONS.find((o) => o.value === category)?.label}». Снимки загружаются в фоне: можно продолжать работу, не дожидаясь конца загрузки.`}
+            renderTileMedia={markupAfterUpload.renderTile}
           />
         </Card>
       ) : null}
@@ -139,20 +141,7 @@ export function PhotosTab({
                   style={{ all: 'unset', position: 'relative', cursor: 'pointer' }}
                   onClick={() => setOpened(photo)}
                 >
-                  {photo.thumbUrl ? (
-                    <img
-                      src={photo.thumbUrl}
-                      alt={photo.caption ?? ''}
-                      style={{
-                        width: '100%',
-                        aspectRatio: '1',
-                        objectFit: 'cover',
-                        borderRadius: 8,
-                      }}
-                    />
-                  ) : (
-                    <div className="pdr-skeleton" style={{ aspectRatio: '1' }} />
-                  )}
+                  <PhotoThumb photo={photo} />
                 </button>
                 {photo.hasMarkup ? <Badge tone="success">Зона отмечена</Badge> : null}
                 {/* Действие названо словами: «нажмите на снимок» догадкой

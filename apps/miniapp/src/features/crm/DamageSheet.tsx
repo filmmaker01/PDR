@@ -28,6 +28,7 @@ import { photosPath, useDamagePhotos } from './api';
 import { ExtraWorkPickerSheet } from './ExtraWorkPicker';
 import { useFreshMarkupQueue, useMarkupAfterUpload } from './FreshPhotoMarkup';
 import { DraftPhotoMarkupSheet, PhotoMarkupSheet } from './PhotoMarkupSheet';
+import { PhotoThumb } from './PhotoThumb';
 import {
   ACCESS_OPTIONS,
   MATERIAL_OPTIONS,
@@ -562,20 +563,7 @@ export function DamageSheet({
               >
                 {photos.map((photo) => (
                   <div key={photo.id} className="pdr-stack" style={{ gap: 4 }}>
-                    {photo.thumbUrl ? (
-                      <img
-                        src={photo.thumbUrl}
-                        alt=""
-                        style={{
-                          width: '100%',
-                          aspectRatio: '1',
-                          objectFit: 'cover',
-                          borderRadius: 6,
-                        }}
-                      />
-                    ) : (
-                      <div className="pdr-skeleton" style={{ aspectRatio: '1' }} />
-                    )}
+                    <PhotoThumb photo={photo} radius={6} />
                     {photo.hasMarkup ? <Badge tone="success">Зона отмечена</Badge> : null}
                     <Button size="sm" variant="secondary" onClick={() => setMarkupPhoto(photo)}>
                       {photo.hasMarkup ? 'Изменить зону' : 'Отметить зону ремонта'}
@@ -595,6 +583,7 @@ export function DamageSheet({
                 cameraLabel="📷 Снять фото"
                 galleryLabel="🖼 Выбрать из галереи"
                 hint="Снимок привяжется к этому повреждению. Сразу после съёмки откроется разметка зоны ремонта."
+                renderTileMedia={markupAfterUpload.renderTile}
               />
             ) : null}
           </>

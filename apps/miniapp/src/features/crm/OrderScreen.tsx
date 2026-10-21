@@ -26,6 +26,8 @@ import { AppointmentSheet } from './AppointmentSheet';
 import { EstimatesTab } from './EstimatesTab';
 import { PaymentsTab } from './PaymentsTab';
 import { PhotosTab } from './PhotosTab';
+import { VehicleConditionCard } from './VehicleCondition';
+import type { VehicleConditionItem } from '@pdr/shared';
 import { APPOINTMENT_STATUS_TONES, PAYMENT_LABELS, STATUS_TONES, type OrderStatus } from './types';
 
 type Tab = 'work' | 'photos' | 'damages' | 'estimate' | 'payments' | 'documents';
@@ -272,6 +274,17 @@ export function OrderScreen() {
             </Button>
           ) : null}
 
+          <h2 className="pdr-subtitle">Состояние автомобиля</h2>
+          <VehicleConditionEditor
+            key={orderId}
+            workspaceId={workspaceId}
+            orderId={orderId}
+            initial={data.vehicleCondition ?? []}
+            initialNote={data.vehicleConditionNote ?? ''}
+            disabled={!canEdit}
+            onSaved={invalidate}
+          />
+
           {data.damageSummary ? (
             <Card>
               <div className="pdr-hint">Повреждения</div>
@@ -416,6 +429,76 @@ export function OrderScreen() {
         </div>
       </Sheet>
     </div>
+  );
+}
+
+/**
+ * Чек-лист состояния в карточке заказа. Отметка сохраняется сразу —
+ * мастер у машины не ищет кнопку «Сохранить»; примечание — при уходе из поля.
+ * Если сохранить не удалось, отметка возвращается как была.
+ */
+function VehicleConditionEditor({
+  workspaceId,
+  orderId,
+  initial,
+  initialNote,
+  disabled,
+  onSaved,
+}: {
+  workspaceId: string;
+  orderId: string;
+  initial: VehicleConditionItem[];
+  initialNote: string;
+  disabled: boolean;
+  onSaved: () => Promise<void>;
+}) {
+  const [checked, setChecked] = useState<VehicleConditionItem[]>(initial);
+  const [note, setNote] = useState(initialNote);
+  const [savedNote, setSavedNote] = useState(initialNote);
+
+  const save = useMutation({
+    mutationFn: (input: {
+      vehicleCondition?: VehicleConditionItem[];
+      vehicleConditionNote?: string | null;
+    }) => api.patch(`/workspaces/${workspaceId}/orders/${orderId}`, input),
+    onSuccess: onSaved,
+  });
+
+  return (
+    <VehicleConditionCard
+      value={checked}
+      disabled={disabled}
+      onChange={(next) => {
+        const previous = checked;
+        setChecked(next);
+        save.mutate(
+          { vehicleCondition: next },
+          {
+            onError: async (e) => {
+              setChecked(previous);
+              await alertDialog(e instanceof ApiError ? e.message : 'Не удалось сохранить отметку');
+            },
+          },
+        );
+      }}
+      note={note}
+      onNoteChange={setNote}
+      onNoteBlur={() => {
+        if (disabled || note === savedNote) return;
+        const value = note;
+        save.mutate(
+          { vehicleConditionNote: value.trim() || null },
+          {
+            onSuccess: () => setSavedNote(value),
+            onError: async (e) => {
+              await alertDialog(
+                e instanceof ApiError ? e.message : 'Не удалось сохранить примечание',
+              );
+            },
+          },
+        );
+      }}
+    />
   );
 }
 

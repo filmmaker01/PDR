@@ -1,6 +1,6 @@
 import { useRef, useState } from 'react';
 import { ApiError } from '@pdr/api-client';
-import type { UploadItem } from '@pdr/ui';
+import { MarkedImage, type MarkupDoc, type UploadItem } from '@pdr/ui';
 import { api } from '@/shared/api';
 import { alertDialog } from '@/shared/telegram';
 import type { DraftPhotoMarkup } from './PhotoMarkupSheet';
@@ -43,6 +43,8 @@ export function useMarkupAfterUpload(workspaceId: string, invalidate: () => Prom
   const photoIds = useRef(new Map<string, string>());
   const pending = useRef(new Map<string, DraftPhotoMarkup>());
   const discarded = useRef(new Set<string>());
+  // Разметка, которую надо показать на плитке, пока снимок ещё в пути.
+  const [shown, setShown] = useState<Record<string, MarkupDoc>>({});
 
   const apply = async (localId: string): Promise<void> => {
     const photoId = photoIds.current.get(localId);
@@ -84,10 +86,23 @@ export function useMarkupAfterUpload(workspaceId: string, invalidate: () => Prom
       await apply(localId);
     },
     save: (localId: string, markup: DraftPhotoMarkup): void => {
+      if (markup.annotation) {
+        const annotation = markup.annotation;
+        setShown((current) => ({ ...current, [localId]: annotation }));
+      }
       if (!markup.annotation && !markup.damageKey) return;
       pending.current.set(localId, markup);
       void apply(localId);
     },
+    /** Плитка загружаемого снимка: с разметкой, если её уже сделали. */
+    renderTile: (item: UploadItem) =>
+      shown[item.localId] ? (
+        <MarkedImage
+          src={item.previewUrl}
+          markup={shown[item.localId]}
+          className="pdr-uploader__media"
+        />
+      ) : null,
     /** «Не добавлять это фото» из редактора. */
     discard: async (localId: string, removeUpload: (localId: string) => void): Promise<void> => {
       pending.current.delete(localId);

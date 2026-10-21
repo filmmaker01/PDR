@@ -1,6 +1,11 @@
 import { Injectable, Logger } from '@nestjs/common';
 import type { LeadChannel, LeadSource, Order, OrderStatus, Prisma } from '@prisma/client';
-import { LEAD_CHANNEL_SOURCES, ownsRecord } from '@pdr/shared';
+import {
+  LEAD_CHANNEL_SOURCES,
+  normalizeVehicleCondition,
+  ownsRecord,
+  type VehicleConditionItem,
+} from '@pdr/shared';
 import { PrismaService } from '@/infra/prisma/prisma.service';
 import { AppError } from '@/common/errors/app.error';
 import { NotificationsService } from '@/modules/notifications/notifications.service';
@@ -45,6 +50,8 @@ export interface CreateOrderInput {
   };
   title?: string | null;
   damageSummary?: string | null;
+  vehicleCondition?: VehicleConditionItem[];
+  vehicleConditionNote?: string | null;
   /** Откуда пришёл клиент: заказ часто создаётся сразу, без обращения. */
   source?: LeadSource | null;
   channel?: LeadChannel | null;
@@ -198,6 +205,8 @@ export class OrdersService {
           currency: ctx.workspace.currency,
           title: input.title ?? null,
           damageSummary: input.damageSummary ?? null,
+          vehicleCondition: normalizeVehicleCondition(input.vehicleCondition ?? []),
+          vehicleConditionNote: input.vehicleConditionNote ?? null,
           // Источник подсказывается каналом, как у обращения: из MAX лично не приходят.
           channel: input.channel ?? null,
           source: input.source ?? (input.channel ? LEAD_CHANNEL_SOURCES[input.channel] : null),
@@ -269,6 +278,8 @@ export class OrdersService {
     input: {
       title?: string | null;
       damageSummary?: string | null;
+      vehicleCondition?: VehicleConditionItem[];
+      vehicleConditionNote?: string | null;
       internalNotes?: string | null;
       clientNotes?: string | null;
       vehicleId?: string | null;
@@ -281,6 +292,12 @@ export class OrdersService {
     const data: Prisma.OrderUncheckedUpdateInput = {
       ...(input.title !== undefined ? { title: input.title } : {}),
       ...(input.damageSummary !== undefined ? { damageSummary: input.damageSummary } : {}),
+      ...(input.vehicleCondition !== undefined
+        ? { vehicleCondition: normalizeVehicleCondition(input.vehicleCondition) }
+        : {}),
+      ...(input.vehicleConditionNote !== undefined
+        ? { vehicleConditionNote: input.vehicleConditionNote }
+        : {}),
       ...(input.internalNotes !== undefined ? { internalNotes: input.internalNotes } : {}),
       ...(input.clientNotes !== undefined ? { clientNotes: input.clientNotes } : {}),
     };

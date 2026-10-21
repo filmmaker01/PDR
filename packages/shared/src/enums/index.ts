@@ -80,6 +80,18 @@ export const ORDER_STATUSES = [
 ] as const;
 export type OrderStatus = (typeof ORDER_STATUSES)[number];
 
+/**
+ * Состояние автомобиля при приёмке: отметки чек-листа в заказе.
+ * Хранится список отмеченных пунктов — порядок и подписи задаёт справочник.
+ */
+export const VEHICLE_CONDITION_ITEMS = [
+  'dirty',
+  'clean',
+  'no_valuables',
+  'battery_disconnected',
+] as const;
+export type VehicleConditionItem = (typeof VEHICLE_CONDITION_ITEMS)[number];
+
 export const PAYMENT_STATUSES = ['unpaid', 'partial', 'paid', 'overpaid'] as const;
 export type PaymentStatus = (typeof PAYMENT_STATUSES)[number];
 

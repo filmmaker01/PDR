@@ -3,6 +3,7 @@ export * from './errors.js';
 export * from './permissions.js';
 export * from './pdr.js';
 export * from './leads.js';
+export * from './vehicle-condition.js';
 export * from './utils/money.js';
 export * from './utils/assessment.js';
 export * from './utils/datetime.js';

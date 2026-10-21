@@ -151,6 +151,8 @@ export class OrdersController {
     return {
       ...serializeListItem(order),
       damageSummary: order.damageSummary,
+      vehicleCondition: order.vehicleCondition,
+      vehicleConditionNote: order.vehicleConditionNote,
       internalNotes: order.internalNotes,
       clientNotes: order.clientNotes,
       startedAt: order.startedAt?.toISOString() ?? null,
@@ -209,7 +211,13 @@ export class OrdersController {
     @Body(zodBody(updateOrderSchema)) body: Record<string, never>,
   ) {
     const order = await this.orders.update(ws, orderId, body as never);
-    return { id: order.id, title: order.title, assigneeMemberId: order.assigneeMemberId };
+    return {
+      id: order.id,
+      title: order.title,
+      assigneeMemberId: order.assigneeMemberId,
+      vehicleCondition: order.vehicleCondition,
+      vehicleConditionNote: order.vehicleConditionNote,
+    };
   }
 
   @Post('orders/:orderId/transition')

@@ -3,6 +3,7 @@ import {
   useEffect,
   useRef,
   useState,
+  type CSSProperties,
   type PointerEvent as ReactPointerEvent,
 } from 'react';
 import clsx from 'clsx';
@@ -61,6 +62,20 @@ export const EMPTY_MARKUP: MarkupDoc = { v: 1, shapes: [] };
 const DEFAULT_WIDTH = 0.008;
 const DEFAULT_COLOR = '#ff3b30';
 
+/**
+ * Цвета разметки. Насыщенные и далеко друг от друга по тону, чтобы отметка
+ * читалась и на тёмной, и на светлой детали; белый — для чёрных машин.
+ */
+export const MARKUP_COLORS: readonly { value: string; label: string }[] = [
+  { value: '#ff3b30', label: 'Красный' },
+  { value: '#ff9500', label: 'Оранжевый' },
+  { value: '#ffcc00', label: 'Жёлтый' },
+  { value: '#34c759', label: 'Зелёный' },
+  { value: '#0a84ff', label: 'Синий' },
+  { value: '#af52de', label: 'Фиолетовый' },
+  { value: '#ffffff', label: 'Белый' },
+];
+
 const TOOLS: { value: MarkupTool; label: string }[] = [
   { value: 'free', label: 'Кисть' },
   { value: 'circle', label: 'Обводка' },
@@ -72,6 +87,7 @@ export interface PhotoMarkupProps {
   src: string;
   value: MarkupDoc;
   onChange: (next: MarkupDoc) => void;
+  /** Цвет, выбранный при открытии. Дальше мастер меняет его палитрой. */
   color?: string;
   disabled?: boolean;
 }
@@ -90,16 +106,108 @@ function freePath(shape: MarkupFreeShape, size: { w: number; h: number }): strin
     .join(' ');
 }
 
+/** Наконечник стрелки — та же геометрия, что при сведении в картинку. */
+function arrowHead(x1: number, y1: number, x2: number, y2: number, lineWidth: number): string {
+  const angle = Math.atan2(y2 - y1, x2 - x1);
+  const head = Math.max(10, lineWidth * 3);
+  const point = (a: number): string =>
+    `${(x2 - head * Math.cos(a)).toFixed(2)},${(y2 - head * Math.sin(a)).toFixed(2)}`;
+  return `${x2.toFixed(2)},${y2.toFixed(2)} ${point(angle - Math.PI / 7)} ${point(angle + Math.PI / 7)}`;
+}
+
+/**
+ * Фигуры разметки в системе координат снимка.
+ *
+ * Одна отрисовка и для редактора, и для превью: что мастер нарисовал, то
+ * и видит на миниатюре, без второй реализации, которая может разойтись.
+ */
+export function MarkupShapes({
+  shapes,
+  size,
+  color = DEFAULT_COLOR,
+}: {
+  shapes: readonly MarkupShape[];
+  size: { w: number; h: number };
+  color?: string;
+}) {
+  return (
+    <>
+      {shapes.map((shape, index) => {
+        const stroke = shape.color ?? color;
+        const strokeWidth = Math.max(2, (shape.width ?? DEFAULT_WIDTH) * size.w);
+
+        if (shape.type === 'free') {
+          return (
+            <path
+              key={index}
+              d={freePath(shape, size)}
+              fill="none"
+              stroke={stroke}
+              strokeWidth={strokeWidth}
+              strokeLinecap="round"
+              strokeLinejoin="round"
+            />
+          );
+        }
+        if (shape.type === 'circle') {
+          return (
+            <ellipse
+              key={index}
+              cx={shape.cx * size.w}
+              cy={shape.cy * size.h}
+              rx={shape.rx * size.w}
+              ry={shape.ry * size.h}
+              fill="none"
+              stroke={stroke}
+              strokeWidth={strokeWidth}
+            />
+          );
+        }
+        const x1 = shape.x1 * size.w;
+        const y1 = shape.y1 * size.h;
+        const x2 = shape.x2 * size.w;
+        const y2 = shape.y2 * size.h;
+        return (
+          <g key={index}>
+            <line
+              x1={x1}
+              y1={y1}
+              x2={x2}
+              y2={y2}
+              stroke={stroke}
+              strokeWidth={strokeWidth}
+              strokeLinecap="round"
+            />
+            <polygon points={arrowHead(x1, y1, x2, y2, strokeWidth)} fill={stroke} />
+          </g>
+        );
+      })}
+    </>
+  );
+}
+
 export function PhotoMarkup({
   src,
   value,
   onChange,
-  color = DEFAULT_COLOR,
+  color: initialColor = DEFAULT_COLOR,
   disabled,
 }: PhotoMarkupProps) {
   const surfaceRef = useRef<HTMLDivElement>(null);
   const [tool, setTool] = useState<MarkupTool>('free');
+  const [color, setColor] = useState(initialColor);
   const [draft, setDraft] = useState<MarkupShape | null>(null);
+  /**
+   * Незавершённая фигура. Источник правды — ссылка: `finish` читает её
+   * сразу, не дожидаясь рендера, а отдавать фигуру наверх изнутри
+   * функции-обновителя setDraft нельзя — React вызывает её во время
+   * рендера и вправе вызвать дважды или позже. Состояние нужно для отрисовки.
+   */
+  const draftRef = useRef<MarkupShape | null>(null);
+  const updateDraft = useCallback((next: MarkupShape | null) => {
+    draftRef.current = next;
+    setDraft(next);
+  }, []);
   /**
    * Пропорции снимка. Слой разметки рисуется в системе координат самой
    * фотографии, иначе на широком кадре круг превратился бы в овал, а
@@ -127,71 +235,68 @@ export function PhotoMarkup({
       const [x, y] = toLocal(event);
 
       if (tool === 'free')
-        setDraft({ type: 'free', color, width: DEFAULT_WIDTH, points: [[x, y]] });
+        updateDraft({ type: 'free', color, width: DEFAULT_WIDTH, points: [[x, y]] });
       if (tool === 'circle') {
-        setDraft({ type: 'circle', color, width: DEFAULT_WIDTH, cx: x, cy: y, rx: 0, ry: 0 });
+        updateDraft({ type: 'circle', color, width: DEFAULT_WIDTH, cx: x, cy: y, rx: 0, ry: 0 });
       }
       if (tool === 'arrow') {
-        setDraft({ type: 'arrow', color, width: DEFAULT_WIDTH, x1: x, y1: y, x2: x, y2: y });
+        updateDraft({ type: 'arrow', color, width: DEFAULT_WIDTH, x1: x, y1: y, x2: x, y2: y });
       }
     },
-    [color, disabled, tool, toLocal],
+    [color, disabled, tool, toLocal, updateDraft],
   );
 
   const move = useCallback(
     (event: ReactPointerEvent<HTMLDivElement>) => {
       if (!drawing.current || disabled) return;
       const [x, y] = toLocal(event);
+      const current = draftRef.current;
+      if (!current) return;
 
-      setDraft((current) => {
-        if (!current) return current;
-        if (current.type === 'free') {
-          const last = current.points.at(-1);
-          // Точки ближе четверти процента ширины ничего не добавляют к линии,
-          // зато раздувают сохраняемый документ в разы.
-          if (last && Math.abs(last[0] - x) < 0.0025 && Math.abs(last[1] - y) < 0.0025) {
-            return current;
-          }
-          return { ...current, points: [...current.points, [x, y]] };
-        }
-        if (current.type === 'circle') {
-          return { ...current, rx: Math.abs(x - current.cx), ry: Math.abs(y - current.cy) };
-        }
-        return { ...current, x2: x, y2: y };
-      });
+      if (current.type === 'free') {
+        const last = current.points.at(-1);
+        // Точки ближе четверти процента ширины ничего не добавляют к линии,
+        // зато раздувают сохраняемый документ в разы.
+        if (last && Math.abs(last[0] - x) < 0.0025 && Math.abs(last[1] - y) < 0.0025) return;
+        updateDraft({ ...current, points: [...current.points, [x, y]] });
+      } else if (current.type === 'circle') {
+        updateDraft({ ...current, rx: Math.abs(x - current.cx), ry: Math.abs(y - current.cy) });
+      } else {
+        updateDraft({ ...current, x2: x, y2: y });
+      }
     },
-    [disabled, toLocal],
+    [disabled, toLocal, updateDraft],
   );
 
   const finish = useCallback(() => {
     if (!drawing.current) return;
     drawing.current = false;
 
-    setDraft((current) => {
-      if (!current) return null;
-      // Случайный тап не должен оставлять точку-артефакт поверх снимка.
-      const meaningful =
-        current.type === 'free'
-          ? current.points.length > 1
-          : current.type === 'circle'
-            ? current.rx > 0.01 && current.ry > 0.01
-            : Math.hypot(current.x2 - current.x1, current.y2 - current.y1) > 0.02;
+    const current = draftRef.current;
+    updateDraft(null);
+    if (!current) return;
 
-      if (meaningful) onChange({ v: 1, shapes: [...value.shapes, current] });
-      return null;
-    });
-  }, [onChange, value.shapes]);
+    // Случайный тап не должен оставлять точку-артефакт поверх снимка.
+    const meaningful =
+      current.type === 'free'
+        ? current.points.length > 1
+        : current.type === 'circle'
+          ? current.rx > 0.01 && current.ry > 0.01
+          : Math.hypot(current.x2 - current.x1, current.y2 - current.y1) > 0.02;
+
+    if (meaningful) onChange({ v: 1, shapes: [...value.shapes, current] });
+  }, [onChange, updateDraft, value.shapes]);
 
   useEffect(() => {
     // Страховка: если указатель потерялся (свернули приложение), незавершённая
     // фигура не должна висеть на экране до следующего касания.
     const cancel = () => {
       drawing.current = false;
-      setDraft(null);
+      updateDraft(null);
     };
     window.addEventListener('pointercancel', cancel);
     return () => window.removeEventListener('pointercancel', cancel);
-  }, []);
+  }, [updateDraft]);
 
   const undo = () => onChange({ v: 1, shapes: value.shapes.slice(0, -1) });
   const clear = () => onChange({ v: 1, shapes: [] });
@@ -232,65 +337,7 @@ export function PhotoMarkup({
           preserveAspectRatio="none"
           aria-hidden
         >
-          <defs>
-            <marker
-              id="pdr-markup-arrow"
-              viewBox="0 0 10 10"
-              refX="8"
-              refY="5"
-              markerWidth="5"
-              markerHeight="5"
-              orient="auto-start-reverse"
-            >
-              <path d="M 0 0 L 10 5 L 0 10 z" fill={color} />
-            </marker>
-          </defs>
-
-          {shapes.map((shape, index) => {
-            const stroke = shape.color ?? color;
-            const strokeWidth = Math.max(2, (shape.width ?? DEFAULT_WIDTH) * size.w);
-
-            if (shape.type === 'free') {
-              return (
-                <path
-                  key={index}
-                  d={freePath(shape, size)}
-                  fill="none"
-                  stroke={stroke}
-                  strokeWidth={strokeWidth}
-                  strokeLinecap="round"
-                  strokeLinejoin="round"
-                />
-              );
-            }
-            if (shape.type === 'circle') {
-              return (
-                <ellipse
-                  key={index}
-                  cx={shape.cx * size.w}
-                  cy={shape.cy * size.h}
-                  rx={shape.rx * size.w}
-                  ry={shape.ry * size.h}
-                  fill="none"
-                  stroke={stroke}
-                  strokeWidth={strokeWidth}
-                />
-              );
-            }
-            return (
-              <line
-                key={index}
-                x1={shape.x1 * size.w}
-                y1={shape.y1 * size.h}
-                x2={shape.x2 * size.w}
-                y2={shape.y2 * size.h}
-                stroke={stroke}
-                strokeWidth={strokeWidth}
-                strokeLinecap="round"
-                markerEnd="url(#pdr-markup-arrow)"
-              />
-            );
-          })}
+          <MarkupShapes shapes={shapes} size={size} color={color} />
         </svg>
       </div>
 
@@ -306,6 +353,24 @@ export function PhotoMarkup({
               >
                 {option.label}
               </button>
+            ))}
+          </div>
+          <div className="pdr-markup__palette" role="radiogroup" aria-label="Цвет разметки">
+            {MARKUP_COLORS.map((option) => (
+              <button
+                key={option.value}
+                type="button"
+                role="radio"
+                aria-checked={color === option.value}
+                aria-label={option.label}
+                title={option.label}
+                className={clsx(
+                  'pdr-markup__swatch',
+                  color === option.value && 'pdr-markup__swatch--active',
+                )}
+                style={{ '--pdr-swatch': option.value } as CSSProperties}
+                onClick={() => setColor(option.value)}
+              />
             ))}
           </div>
           <div className="pdr-row">
@@ -330,6 +395,75 @@ export function PhotoMarkup({
             Оригинал фотографии сохраняется отдельно — разметку можно поправить или снять.
           </div>
         </>
+      ) : null}
+    </div>
+  );
+}
+
+export interface MarkedImageProps {
+  src: string;
+  /** Разметка поверх снимка; пустая или null — просто снимок. */
+  markup: MarkupDoc | null | undefined;
+  /** Как снимок вписан в рамку: миниатюра обрезается, просмотр — целиком. */
+  fit?: 'cover' | 'contain';
+  alt?: string;
+  className?: string;
+  style?: CSSProperties;
+}
+
+/**
+ * Снимок с разметкой поверх — для миниатюр и превью.
+ *
+ * Оригинал показывается как есть, а разметка рисуется из векторного
+ * документа: так она видна сразу после «Готово», ещё до загрузки сведённой
+ * картинки, и на любой миниатюре ложится туда же, где её нарисовали.
+ * Слой обрезается и масштабируется ровно как снимок (`slice` = `cover`).
+ */
+export function MarkedImage({
+  src,
+  markup,
+  fit = 'cover',
+  alt = '',
+  className,
+  style,
+}: MarkedImageProps) {
+  const imageRef = useRef<HTMLImageElement>(null);
+  const [size, setSize] = useState<{ w: number; h: number } | null>(null);
+
+  const measure = useCallback((img: HTMLImageElement | null) => {
+    if (img && img.naturalWidth > 0 && img.naturalHeight > 0) {
+      setSize({ w: img.naturalWidth, h: img.naturalHeight });
+    }
+  }, []);
+
+  // Снимок из кэша мог загрузиться раньше, чем подписался onLoad.
+  useEffect(() => {
+    setSize(null);
+    if (imageRef.current?.complete) measure(imageRef.current);
+  }, [src, measure]);
+
+  const shapes = markup?.shapes ?? [];
+
+  return (
+    <div className={clsx('pdr-marked', className)} style={style}>
+      <img
+        ref={imageRef}
+        className="pdr-marked__image"
+        style={{ objectFit: fit }}
+        src={src}
+        alt={alt}
+        draggable={false}
+        onLoad={(event) => measure(event.currentTarget)}
+      />
+      {size && shapes.length > 0 ? (
+        <svg
+          className="pdr-marked__layer"
+          viewBox={`0 0 ${size.w} ${size.h}`}
+          preserveAspectRatio={fit === 'cover' ? 'xMidYMid slice' : 'xMidYMid meet'}
+          aria-hidden
+        >
+          <MarkupShapes shapes={shapes} size={size} />
+        </svg>
       ) : null}
     </div>
   );
