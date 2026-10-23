@@ -25,10 +25,18 @@ import { DocumentsTab } from './DocumentsTab';
 import { AppointmentSheet } from './AppointmentSheet';
 import { EstimatesTab } from './EstimatesTab';
 import { PaymentsTab } from './PaymentsTab';
+import { openOrdersTab } from './OrdersScreen';
 import { PhotosTab } from './PhotosTab';
 import { VehicleConditionCard } from './VehicleCondition';
 import type { VehicleConditionItem } from '@pdr/shared';
-import { APPOINTMENT_STATUS_TONES, PAYMENT_LABELS, STATUS_TONES, type OrderStatus } from './types';
+import {
+  APPOINTMENT_STATUS_TONES,
+  CLOSED_ORDER_STATUSES,
+  ORDER_STATUS_TABS,
+  PAYMENT_LABELS,
+  STATUS_TONES,
+  type OrderStatus,
+} from './types';
 
 type Tab = 'work' | 'photos' | 'damages' | 'estimate' | 'payments' | 'documents';
 
@@ -43,6 +51,8 @@ export function OrderScreen() {
   const [sendSheet, setSendSheet] = useState(false);
   const [pendingStatus, setPendingStatus] = useState<OrderStatus | null>(null);
   const [comment, setComment] = useState('');
+  // Куда заказ переехал после смены статуса: подсказка, где его искать.
+  const [movedTo, setMovedTo] = useState<OrderStatus | null>(null);
 
   const order = useOrder(workspaceId, orderId);
   const workspace = useWorkspace(workspaceId);
@@ -55,12 +65,14 @@ export function OrderScreen() {
   const transition = useMutation({
     mutationFn: (input: { to: OrderStatus; comment?: string }) =>
       api.post(`/workspaces/${workspaceId}/orders/${orderId}/transition`, input),
-    onSuccess: async () => {
+    onSuccess: async (_result, input) => {
       haptic('success');
       setStatusSheet(false);
       setPendingStatus(null);
       setComment('');
       await invalidate();
+      // После обновления карточки: подсказка сразу показывает новый статус.
+      setMovedTo(input.to);
     },
     onError: async (e) => {
       haptic('error');
@@ -105,8 +117,39 @@ export function OrderScreen() {
   // Остаток к оплате: считается из согласованной сметы и принятых денег.
   const remainingMinor = Math.max(0, (data.agreedTotalMinor ?? 0) - data.paidMinor);
 
+  const closed = movedTo !== null && CLOSED_ORDER_STATUSES.includes(movedTo);
+
   return (
     <div className="pdr-stack">
+      {movedTo ? (
+        <Card>
+          <div className="pdr-stack" style={{ gap: 8 }}>
+            <div>
+              Статус: <b>{data.statusLabel}</b>.{' '}
+              {closed
+                ? `Заказ закрыт — в списке он во вкладке «Закрытые: ${ORDER_STATUS_TABS[movedTo]}» и находится поиском.`
+                : `В списке заказов он во «Активных» и во вкладке «${ORDER_STATUS_TABS[movedTo]}».`}
+            </div>
+            <div className="pdr-row">
+              <Button
+                size="sm"
+                variant="secondary"
+                className="pdr-grow"
+                onClick={() => {
+                  openOrdersTab(workspaceId, movedTo);
+                  navigate(`/workspace/${workspaceId}/orders`);
+                }}
+              >
+                Открыть «{ORDER_STATUS_TABS[movedTo]}»
+              </Button>
+              <Button size="sm" variant="ghost" onClick={() => setMovedTo(null)}>
+                Понятно
+              </Button>
+            </div>
+          </div>
+        </Card>
+      ) : null}
+
       <Card>
         <div className="pdr-row" style={{ marginBottom: 8 }}>
           <span className="pdr-grow">

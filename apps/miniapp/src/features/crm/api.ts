@@ -18,6 +18,7 @@ import type {
   Estimate,
   OrderPayments,
   OrderPhoto,
+  OrderStatus,
   PaymentJournalEntry,
   PdrDictionaries,
   PriceListItem,
@@ -50,6 +51,20 @@ export function useToday(workspaceId: string) {
   return useQuery({
     queryKey: ['crm', 'today', workspaceId],
     queryFn: () => api.get<TodaySummary>(`/workspaces/${workspaceId}/today`),
+  });
+}
+
+/** Сколько заказов в каждом статусе: для вкладок списка и сводки на главной. */
+export function useOrderCounts(
+  workspaceId: string,
+  filter: { q?: string; assigneeMemberId?: string } = {},
+) {
+  return useQuery({
+    queryKey: ['crm', 'orders', workspaceId, 'counts', filter],
+    queryFn: () =>
+      api.get<{ counts: Record<OrderStatus, number> }>(`/workspaces/${workspaceId}/orders/counts`, {
+        query: { q: filter.q, assigneeMemberId: filter.assigneeMemberId },
+      }),
   });
 }
 

@@ -168,6 +168,31 @@ export interface MemberInfo {
   isActive: boolean;
 }
 
+/**
+ * Рабочие статусы: заказ в них ещё не закрыт, и мастер должен его видеть.
+ * Список «Активные» и главная показывают их все, а не часть.
+ */
+export const ACTIVE_ORDER_STATUSES: OrderStatus[] = [
+  'new',
+  'pending_approval',
+  'scheduled',
+  'in_progress',
+  'ready',
+];
+
+export const CLOSED_ORDER_STATUSES: OrderStatus[] = ['delivered', 'cancelled'];
+
+/** Подписи вкладок списка заказов: во множественном числе, как «На согласовании · 3». */
+export const ORDER_STATUS_TABS: Record<OrderStatus, string> = {
+  new: 'Новые',
+  pending_approval: 'На согласовании',
+  scheduled: 'Запланированы',
+  in_progress: 'В работе',
+  ready: 'Готовы',
+  delivered: 'Выданы',
+  cancelled: 'Отменены',
+};
+
 export const STATUS_TONES: Record<
   OrderStatus,
   'info' | 'success' | 'warning' | 'muted' | 'danger'

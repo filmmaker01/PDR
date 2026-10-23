@@ -46,6 +46,10 @@ export class OrdersRepository extends WorkspaceScopedRepository {
   private buildWhere(workspaceId: string, filter: OrderListFilter): Prisma.OrderWhereInput {
     const term = filter.q?.trim();
     const asNumber = term && /^\d+$/.test(term) ? Number(term) : null;
+    // Телефон сравнивается по цифрам. Без этой проверки запрос без цифр
+    // («Kia») давал пустую строку, которая есть в любом телефоне, и поиск
+    // возвращал почти все заказы.
+    const phoneDigits = term ? term.replace(/\D/g, '') : '';
 
     return {
       workspaceId,
@@ -79,8 +83,11 @@ export class OrdersRepository extends WorkspaceScopedRepository {
                   ...(asNumber !== null ? [{ number: asNumber }] : []),
                   { title: { contains: term, mode: 'insensitive' as const } },
                   { client: { name: { contains: term, mode: 'insensitive' as const } } },
-                  { client: { phone: { contains: term.replace(/\D/g, '') } } },
+                  ...(phoneDigits.length >= 3
+                    ? [{ client: { phone: { contains: phoneDigits } } }]
+                    : []),
                   { vehicle: { plate: { contains: term.toUpperCase() } } },
+                  { vehicle: { make: { contains: term, mode: 'insensitive' as const } } },
                   { vehicle: { model: { contains: term, mode: 'insensitive' as const } } },
                 ],
               },
@@ -111,6 +118,19 @@ export class OrdersRepository extends WorkspaceScopedRepository {
       filter.limit,
       filter.cursor,
     );
+  }
+
+  /** Сколько заказов в каждом статусе — с теми же поиском и ограничениями, что у списка. */
+  async countByStatus(
+    workspaceId: string,
+    filter: Omit<OrderListFilter, 'limit' | 'cursor' | 'statuses'>,
+  ): Promise<Partial<Record<OrderStatus, number>>> {
+    const rows = await this.prisma.order.groupBy({
+      by: ['status'],
+      where: this.buildWhere(workspaceId, { ...filter, limit: 1 }),
+      _count: { _all: true },
+    });
+    return Object.fromEntries(rows.map((row) => [row.status, row._count._all]));
   }
 
   async count(

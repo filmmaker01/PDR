@@ -72,6 +72,18 @@ export function BackBar({ fallback }: { fallback: string }) {
  * выбранная вкладка заказа. Хранится до закрытия Mini App — вернувшись
  * «Назад», мастер видит список таким, каким его оставил.
  */
+/**
+ * Задать запомненное значение экрана заранее — например, открыть список
+ * заказов сразу на нужной вкладке. Ключ тот же, что у `useStickyState`.
+ */
+export function setStickyValue<T>(key: string, value: T): void {
+  try {
+    window.sessionStorage.setItem(`pdr.screen.${key}`, JSON.stringify(value));
+  } catch {
+    // Не запомнилось — экран откроется как обычно.
+  }
+}
+
 export function useStickyState<T>(
   key: string,
   initial: T | (() => T),

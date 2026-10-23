@@ -2,6 +2,7 @@ import { Injectable, Logger } from '@nestjs/common';
 import type { LeadChannel, LeadSource, Order, OrderStatus, Prisma } from '@prisma/client';
 import {
   LEAD_CHANNEL_SOURCES,
+  ORDER_STATUSES,
   normalizeVehicleCondition,
   ownsRecord,
   type VehicleConditionItem,
@@ -106,6 +107,23 @@ export class OrdersService {
 
   async list(ctx: WorkspaceContext, filter: OrderListFilter) {
     return this.orders.list(ctx.workspaceId, this.scopeFilter(ctx, filter));
+  }
+
+  /**
+   * Счётчики для вкладок списка по статусам. Считаются по тем же правилам,
+   * что и сам список, — иначе вкладка обещала бы заказы, которых в ней нет.
+   */
+  async statusCounts(
+    ctx: WorkspaceContext,
+    filter: Pick<OrderListFilter, 'q' | 'assigneeMemberId'>,
+  ): Promise<Record<OrderStatus, number>> {
+    const counts = await this.orders.countByStatus(
+      ctx.workspaceId,
+      this.scopeFilter(ctx, { ...filter, limit: 1 }),
+    );
+    return Object.fromEntries(
+      ORDER_STATUSES.map((status) => [status, counts[status] ?? 0]),
+    ) as Record<OrderStatus, number>;
   }
 
   async getById(ctx: WorkspaceContext, orderId: string): Promise<OrderWithRelations> {

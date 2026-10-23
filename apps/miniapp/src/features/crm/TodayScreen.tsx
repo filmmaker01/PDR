@@ -3,24 +3,32 @@ import { useNavigate, useParams } from 'react-router-dom';
 import { Badge, Button, Card, EmptyState, ListItem, SkeletonList } from '@pdr/ui';
 import { todayInZone, zonedTimeToUtc } from '@pdr/shared';
 import { plural } from '@/shared/format';
-import { useAppointments, useLeadsSummary, useOrders, useToday, useWorkspace } from './api';
+import { useAppointments, useLeadsSummary, useOrderCounts, useOrders, useWorkspace } from './api';
+import { openOrdersTab, type OrdersTab } from './OrdersScreen';
 import { ScreenError } from './ScreenError';
-import { APPOINTMENT_STATUS_TONES, STATUS_TONES } from './types';
+import {
+  ACTIVE_ORDER_STATUSES,
+  APPOINTMENT_STATUS_TONES,
+  ORDER_STATUS_TABS,
+  STATUS_TONES,
+} from './types';
 
 /**
  * Главная мастерской.
  *
- * Показывает только то, чем мастер занимается прямо сейчас: что в работе, что
- * готово к выдаче, кто обратился и кого ждём сегодня. Задолженности здесь нет
- * намеренно — в PDR работы оплачиваются сразу, и этот показатель не помогал.
+ * Показывает то, чем мастер занимается прямо сейчас: заказы по рабочим
+ * статусам, кто обратился и кого ждём сегодня. Активными считаются все
+ * незакрытые заказы — и новые, и на согласовании: иначе заказ, переведённый
+ * в «На согласовании», пропадал с главной, хотя работа по нему не кончилась.
+ * Задолженности здесь нет намеренно — в PDR работы оплачиваются сразу.
  */
 export function TodayScreen() {
   const { workspaceId = '' } = useParams();
   const navigate = useNavigate();
 
-  const summary = useToday(workspaceId);
+  const counts = useOrderCounts(workspaceId);
   const workspace = useWorkspace(workspaceId);
-  const active = useOrders(workspaceId, { status: ['in_progress', 'ready'] });
+  const active = useOrders(workspaceId, { status: ACTIVE_ORDER_STATUSES });
   const leads = useLeadsSummary(workspaceId);
 
   const timezone = workspace.data?.timezone ?? 'Europe/Moscow';
@@ -31,14 +39,21 @@ export function TodayScreen() {
   }, [timezone]);
   const appointments = useAppointments(workspaceId, todayRange);
 
-  if (summary.isError) {
-    return <ScreenError error={summary.error} onRetry={() => void summary.refetch()} />;
+  if (counts.isError) {
+    return <ScreenError error={counts.error} onRetry={() => void counts.refetch()} />;
   }
 
-  if (summary.isLoading) return <SkeletonList rows={3} />;
+  if (counts.isLoading) return <SkeletonList rows={3} />;
 
-  const data = summary.data!;
+  const byStatus = counts.data!.counts;
+  const activeTotal = ACTIVE_ORDER_STATUSES.reduce((sum, status) => sum + byStatus[status], 0);
   const leadStats = leads.data;
+
+  /** Список заказов сразу на нужной вкладке. */
+  const openOrders = (tab: OrdersTab): void => {
+    openOrdersTab(workspaceId, tab);
+    navigate(`/workspace/${workspaceId}/orders`);
+  };
 
   return (
     <div className="pdr-stack">
@@ -57,16 +72,24 @@ export function TodayScreen() {
         </Button>
       </div>
 
-      <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 8 }}>
-        <Card>
-          <div className="pdr-hint">В работе</div>
-          <div style={{ fontSize: 24, fontWeight: 700 }}>{data.activeCount}</div>
-        </Card>
-        <Card>
-          <div className="pdr-hint">Готовы к выдаче</div>
-          <div style={{ fontSize: 24, fontWeight: 700 }}>{data.readyCount}</div>
-        </Card>
-      </div>
+      {/* Все рабочие статусы с количеством: видно, где каждый заказ, и
+          одним нажатием открывается нужная вкладка списка. */}
+      <Card flat>
+        <div className="pdr-list">
+          {ACTIVE_ORDER_STATUSES.map((status) => (
+            <ListItem
+              key={status}
+              title={ORDER_STATUS_TABS[status]}
+              right={
+                <Badge tone={byStatus[status] > 0 ? STATUS_TONES[status] : 'muted'}>
+                  {byStatus[status]}
+                </Badge>
+              }
+              onClick={() => openOrders(status)}
+            />
+          ))}
+        </div>
+      </Card>
 
       <Card>
         <button
@@ -135,7 +158,12 @@ export function TodayScreen() {
         </Card>
       )}
 
-      <h2 className="pdr-subtitle">Активные заказы</h2>
+      <div className="pdr-row">
+        <h2 className="pdr-subtitle pdr-grow">Активные заказы · {activeTotal}</h2>
+        <Button size="sm" variant="ghost" onClick={() => openOrders('active')}>
+          Все заказы
+        </Button>
+      </div>
       {active.isLoading ? (
         <SkeletonList rows={3} />
       ) : (active.data?.items.length ?? 0) === 0 ? (

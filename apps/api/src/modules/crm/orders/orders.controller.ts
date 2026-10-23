@@ -106,6 +106,21 @@ export class OrdersController {
     return { items: result.items.map(serializeListItem), nextCursor: result.nextCursor };
   }
 
+  // Объявлен до `orders/:orderId`: иначе «counts» приняли бы за номер заказа.
+  @Get('orders/counts')
+  @Can('orders.read_own')
+  @AllowExpiredAccess()
+  @ApiOperation({ summary: 'Сколько заказов в каждом статусе — для вкладок списка' })
+  async counts(@Ws() ws: WorkspaceContext, @Query() query: Record<string, string>) {
+    const parsed = orderListQuerySchema.parse(query);
+    return {
+      counts: await this.orders.statusCounts(ws, {
+        q: parsed.q,
+        assigneeMemberId: parsed.assigneeMemberId,
+      }),
+    };
+  }
+
   @Post('orders')
   @Can('orders.create')
   @Idempotent()

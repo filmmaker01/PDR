@@ -321,6 +321,105 @@ describe('CRM: клиенты, автомобили, заказы', () => {
     });
   });
 
+  describe('список по статусам', () => {
+    async function moveTo(orderId: string, to: string): Promise<void> {
+      await http()
+        .post(`/v1/workspaces/${workspaceId}/orders/${orderId}/transition`)
+        .set(...owner.authHeader)
+        .send({ to })
+        .expect(201);
+    }
+
+    it('заказ «На согласовании» остаётся в списке и в счётчике своего статуса', async () => {
+      const order = await createOrder();
+      await createOrder(owner, { newVehicle: { make: 'Lada', model: 'Vesta' } });
+      await moveTo(order.id, 'pending_approval');
+
+      const counts = await http()
+        .get(`/v1/workspaces/${workspaceId}/orders/counts`)
+        .set(...owner.authHeader)
+        .expect(200);
+      expect(counts.body.counts).toMatchObject({
+        new: 1,
+        pending_approval: 1,
+        scheduled: 0,
+        in_progress: 0,
+        ready: 0,
+        delivered: 0,
+        cancelled: 0,
+      });
+
+      const list = await http()
+        .get(`/v1/workspaces/${workspaceId}/orders`)
+        .query({ status: ['new', 'pending_approval', 'scheduled', 'in_progress', 'ready'] })
+        .set(...owner.authHeader)
+        .expect(200);
+      expect(list.body.items.map((o: { id: string }) => o.id)).toContain(order.id);
+    });
+
+    it('поиск находит заказ по марке и телефону в любом статусе', async () => {
+      const order = await createOrder(owner, {
+        newVehicle: { make: 'Kia', model: 'Rio', plate: 'в777ор77' },
+      });
+      const other = await createOrder(owner, {
+        newClient: { name: 'Пётр Сидоров', phone: '+7 916 555-44-33' },
+        newVehicle: { make: 'Lada', model: 'Vesta' },
+      });
+      await moveTo(order.id, 'pending_approval');
+
+      // Запрос без цифр не должен совпадать с любым телефоном.
+      const byMake = await http()
+        .get(`/v1/workspaces/${workspaceId}/orders`)
+        .query({ q: 'kia' })
+        .set(...owner.authHeader)
+        .expect(200);
+      expect(byMake.body.items.map((o: { id: string }) => o.id)).not.toContain(other.id);
+
+      for (const q of ['kia', '999123', 'В777']) {
+        const res = await http()
+          .get(`/v1/workspaces/${workspaceId}/orders`)
+          .query({ q })
+          .set(...owner.authHeader)
+          .expect(200);
+        expect(
+          res.body.items.map((o: { id: string }) => o.id),
+          q,
+        ).toContain(order.id);
+      }
+
+      const counts = await http()
+        .get(`/v1/workspaces/${workspaceId}/orders/counts`)
+        .query({ q: 'kia' })
+        .set(...owner.authHeader)
+        .expect(200);
+      expect(counts.body.counts.pending_approval).toBe(1);
+      expect(counts.body.counts.new).toBe(0);
+    });
+
+    it('счётчики сотрудника считаются по тем же правилам видимости, что и список', async () => {
+      await createOrder();
+      await createOrder(employee);
+
+      const all = await http()
+        .get(`/v1/workspaces/${workspaceId}/orders/counts`)
+        .set(...employee.authHeader)
+        .expect(200);
+      expect(all.body.counts.new).toBe(2);
+
+      await http()
+        .patch(`/v1/workspaces/${workspaceId}`)
+        .set(...owner.authHeader)
+        .send({ settings: { employees_see_all_orders: false } })
+        .expect(200);
+
+      const own = await http()
+        .get(`/v1/workspaces/${workspaceId}/orders/counts`)
+        .set(...employee.authHeader)
+        .expect(200);
+      expect(own.body.counts.new).toBe(1);
+    });
+  });
+
   describe('статусы заказа', () => {
     it('проходит полный путь от нового до выданного', async () => {
       const order = await createOrder();
