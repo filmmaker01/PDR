@@ -35,6 +35,20 @@ export class OrderPhotosRepository extends WorkspaceScopedRepository {
     });
   }
 
+  /** Первый снимок каждого заказа — обложка для списка. Один запрос на все заказы. */
+  async firstForOrders(
+    workspaceId: string,
+    orderIds: readonly string[],
+  ): Promise<{ orderId: string | null; fileId: string; annotation: Prisma.JsonValue }[]> {
+    if (orderIds.length === 0) return [];
+    return this.prisma.orderPhoto.findMany({
+      where: { workspaceId, orderId: { in: [...orderIds] } },
+      orderBy: [{ orderId: 'asc' }, { createdAt: 'asc' }, { id: 'asc' }],
+      distinct: ['orderId'],
+      select: { orderId: true, fileId: true, annotation: true },
+    });
+  }
+
   async listForOrder(workspaceId: string, orderId: string): Promise<OrderPhotoWithFile[]> {
     return this.listFor(workspaceId, { orderId });
   }

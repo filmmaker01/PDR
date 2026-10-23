@@ -79,6 +79,11 @@ export const orderListQuerySchema = z.object({
   from: z.coerce.date().optional(),
   to: z.coerce.date().optional(),
   archived: z.coerce.boolean().optional(),
+  /** Добавить к каждому заказу обложку — первый снимок с разметкой. */
+  withCover: z
+    .enum(['true', 'false'])
+    .optional()
+    .transform((v) => v === 'true'),
   limit: z.coerce.number().int().min(1).max(200).default(50),
   cursor: z.string().optional(),
 });

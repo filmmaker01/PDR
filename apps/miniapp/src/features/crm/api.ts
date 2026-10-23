@@ -70,7 +70,14 @@ export function useOrderCounts(
 
 export function useOrders(
   workspaceId: string,
-  filter: { status?: string[]; q?: string; assigneeMemberId?: string; paymentStatus?: string },
+  filter: {
+    status?: string[];
+    q?: string;
+    assigneeMemberId?: string;
+    paymentStatus?: string;
+    /** Добавить обложку — первый снимок заказа с разметкой. */
+    withCover?: boolean;
+  },
 ) {
   return useQuery({
     queryKey: ['crm', 'orders', workspaceId, filter],
@@ -83,6 +90,7 @@ export function useOrders(
             q: filter.q,
             assigneeMemberId: filter.assigneeMemberId,
             paymentStatus: filter.paymentStatus,
+            withCover: filter.withCover ? 'true' : undefined,
             limit: 100,
           },
         },

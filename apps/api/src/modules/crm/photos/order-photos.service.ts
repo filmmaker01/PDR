@@ -87,6 +87,34 @@ export class OrderPhotosService {
     return { items: items.map((photo) => ({ ...photo, thumbUrl: urls[photo.fileId] ?? null })) };
   }
 
+  /**
+   * Обложки заказов для списка: миниатюра первого снимка и его разметка.
+   * Права на заказы проверены тем, кто составил список, — сюда приходят
+   * только номера уже видимых заказов этой мастерской.
+   */
+  async coversFor(
+    ctx: WorkspaceContext,
+    orderIds: readonly string[],
+    auth: { user: User; platformRoles: string[] },
+  ): Promise<Map<string, { thumbUrl: string | null; annotation: unknown }>> {
+    const first = await this.photos.firstForOrders(ctx.workspaceId, orderIds);
+    if (first.length === 0) return new Map();
+    const urls = await this.files.downloadUrls(
+      first.map((photo) => photo.fileId),
+      auth.user,
+      auth.platformRoles,
+      'thumb',
+    );
+    return new Map(
+      first
+        .filter((photo) => photo.orderId)
+        .map((photo) => [
+          photo.orderId as string,
+          { thumbUrl: urls[photo.fileId] ?? null, annotation: photo.annotation ?? null },
+        ]),
+    );
+  }
+
   async listForOrder(
     ctx: WorkspaceContext,
     orderId: string,

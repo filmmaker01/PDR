@@ -44,3 +44,332 @@
 .pdr-backbar__button:active {
   opacity: 0.7;
 }
+
+/* ── Мастерская: шапка, разделы и главная ───────────────────────────────────
+   Всё рассчитано на 320–430 px: шапка в одну строку, разделы — пять иконок,
+   чтобы записи и активные заказы были видны уже на первом экране. */
+
+.ws-stack {
+  gap: 10px;
+}
+
+.ws-header {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+}
+.ws-header__title {
+  flex: 1 1 auto;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+}
+.ws-header__name {
+  margin: 0;
+  font-size: 19px;
+  font-weight: 700;
+  line-height: 1.2;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.ws-icon-btn {
+  flex: none;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 40px;
+  height: 40px;
+  border-radius: 50%;
+  color: var(--pdr-text);
+  -webkit-tap-highlight-color: transparent;
+}
+.ws-icon-btn:active {
+  background: var(--pdr-secondary-bg);
+}
+
+.ws-nav {
+  display: grid;
+  grid-template-columns: repeat(5, minmax(0, 1fr));
+  gap: 4px;
+  padding: 4px;
+  border-radius: var(--pdr-radius);
+  background: var(--pdr-section-bg);
+}
+.ws-nav__item {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 2px;
+  min-height: 52px;
+  padding: 6px 2px 5px;
+  border-radius: var(--pdr-radius-sm);
+  color: var(--pdr-hint);
+  font-size: 11px;
+  font-weight: 500;
+  text-decoration: none;
+  -webkit-tap-highlight-color: transparent;
+}
+.ws-nav__item span {
+  max-width: 100%;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.ws-nav__item--active {
+  background: var(--pdr-button);
+  color: var(--pdr-button-text);
+}
+
+.ws-search {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-height: 42px;
+  padding: 0 12px;
+  border-radius: var(--pdr-radius-sm);
+  background: var(--pdr-section-bg);
+  color: var(--pdr-hint);
+}
+.ws-search input {
+  flex: 1 1 auto;
+  min-width: 0;
+  height: 40px;
+  border: 0;
+  outline: none;
+  background: transparent;
+  color: var(--pdr-text);
+  font: inherit;
+  font-size: 15px;
+}
+
+.ws-stats {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 8px;
+}
+.ws-stat {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 0;
+  padding: 10px 10px 9px;
+  border: 0;
+  border-radius: var(--pdr-radius);
+  background: var(--pdr-section-bg);
+  color: var(--pdr-text);
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+  -webkit-tap-highlight-color: transparent;
+}
+.ws-stat__label {
+  font-size: 12px;
+  color: var(--pdr-hint);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.ws-stat__value {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  font-size: 24px;
+  font-weight: 700;
+  line-height: 1.1;
+}
+.ws-stat__note {
+  font-size: 11px;
+  line-height: 1.2;
+  color: var(--pdr-warning);
+}
+
+/* Полоса статусов: один ряд, прокручивается пальцем — не растит экран. */
+.ws-strip {
+  display: flex;
+  gap: 6px;
+  overflow-x: auto;
+  scrollbar-width: none;
+}
+.ws-strip::-webkit-scrollbar {
+  display: none;
+}
+.ws-strip .pdr-chip {
+  flex: none;
+}
+
+.ws-create {
+  min-height: 48px;
+  font-size: 16px;
+  font-weight: 600;
+}
+
+.ws-actions {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+.ws-action {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  width: 100%;
+  min-height: 60px;
+  padding: 10px 12px;
+  border: 0;
+  border-radius: var(--pdr-radius);
+  background: var(--pdr-section-bg);
+  color: var(--pdr-text);
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+  -webkit-tap-highlight-color: transparent;
+}
+.ws-action:active {
+  opacity: 0.75;
+}
+.ws-action__icon {
+  flex: none;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 40px;
+  height: 40px;
+  border-radius: 12px;
+  color: #fff;
+}
+.ws-action__text {
+  flex: 1 1 auto;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+}
+.ws-action__title {
+  font-weight: 600;
+}
+.ws-action__hint {
+  font-size: 13px;
+  color: var(--pdr-hint);
+}
+.ws-chevron {
+  flex: none;
+  color: var(--pdr-hint);
+}
+
+.ws-section-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-top: 4px;
+}
+
+.ws-row {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  width: 100%;
+  min-height: 56px;
+  padding: 10px 12px;
+  border: 0;
+  border-bottom: 1px solid var(--pdr-separator);
+  background: var(--pdr-section-bg);
+  color: var(--pdr-text);
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+  -webkit-tap-highlight-color: transparent;
+}
+.ws-row:last-child {
+  border-bottom: 0;
+}
+.ws-row__time {
+  flex: none;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  min-width: 58px;
+  font-weight: 600;
+  font-variant-numeric: tabular-nums;
+}
+.ws-row__dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: var(--pdr-link);
+}
+.ws-row__body {
+  flex: 1 1 auto;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+}
+.ws-row__title,
+.ws-row__line {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.ws-row__title {
+  font-weight: 600;
+}
+.ws-row__line {
+  font-size: 13px;
+  color: var(--pdr-hint);
+}
+.ws-row__thumb {
+  flex: none;
+  width: 56px;
+  height: 56px;
+  border-radius: 10px;
+  overflow: hidden;
+  background: var(--pdr-secondary-bg);
+  color: var(--pdr-hint);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+.ws-row__side {
+  flex: none;
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  gap: 4px;
+}
+.ws-row__avatar {
+  flex: none;
+  width: 36px;
+  height: 36px;
+  border-radius: 50%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: #fff;
+  background: #ff9500;
+}
+
+@media (max-width: 340px) {
+  .ws-nav {
+    gap: 2px;
+    padding: 3px;
+  }
+  .ws-nav__item {
+    padding-left: 0;
+    padding-right: 0;
+    font-size: 10px;
+    letter-spacing: -0.2px;
+  }
+  .ws-stat {
+    padding: 9px 8px 8px;
+  }
+  .ws-stat__value {
+    font-size: 21px;
+  }
+  .ws-row__thumb {
+    width: 48px;
+    height: 48px;
+  }
+}
+.ws-chip--empty {
+  opacity: 0.55;
+}

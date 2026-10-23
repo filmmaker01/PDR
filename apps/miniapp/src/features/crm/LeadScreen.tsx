@@ -1,5 +1,5 @@
-import { useState } from 'react';
-import { useNavigate, useParams } from 'react-router-dom';
+import { useEffect, useState } from 'react';
+import { useNavigate, useParams, useSearchParams } from 'react-router-dom';
 import { useMutation, useQueryClient } from '@tanstack/react-query';
 import { ApiError } from '@pdr/api-client';
 import { LEAD_STATUS_LABELS, requiresNextContact } from '@pdr/shared';
@@ -48,6 +48,13 @@ export function LeadScreen() {
   const [comment, setComment] = useState('');
   const [nextContactAt, setNextContactAt] = useState('');
   const [assessmentOpen, setAssessmentOpen] = useState(false);
+  // Пришли из «Быстрой оценки»: оценка по фото открывается сразу.
+  const [searchParams, setSearchParams] = useSearchParams();
+  useEffect(() => {
+    if (searchParams.get('assess') !== '1') return;
+    setAssessmentOpen(true);
+    setSearchParams({}, { replace: true });
+  }, [searchParams, setSearchParams]);
   const [scheduleOpen, setScheduleOpen] = useState(false);
 
   const lead = useLead(workspaceId, leadId);

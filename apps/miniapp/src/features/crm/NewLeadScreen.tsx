@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { useNavigate, useParams } from 'react-router-dom';
+import { useNavigate, useParams, useSearchParams } from 'react-router-dom';
 import { useMutation, useQueryClient } from '@tanstack/react-query';
 import { ApiError } from '@pdr/api-client';
 import {
@@ -43,6 +43,8 @@ import { LEAD_CHANNEL_OPTIONS, type ClientListItem, type LeadChannel } from './t
  */
 export function NewLeadScreen() {
   const { workspaceId = '' } = useParams();
+  const [searchParams] = useSearchParams();
+  const quickAssessment = searchParams.get('assess') === '1';
   const navigate = useNavigate();
   const queryClient = useQueryClient();
 
@@ -133,7 +135,10 @@ export function NewLeadScreen() {
           'Обращение создано, но разметка на части фото не сохранилась. Отметьте зону заново во вкладке «Фото».',
         );
       }
-      navigate(`/workspace/${workspaceId}/leads/${lead.id}`, { replace: true });
+      // Быстрая оценка: обращение сразу открывается с оценкой по фото.
+      navigate(`/workspace/${workspaceId}/leads/${lead.id}${quickAssessment ? '?assess=1' : ''}`, {
+        replace: true,
+      });
     },
     onError: async (e) => {
       haptic('error');
@@ -149,7 +154,15 @@ export function NewLeadScreen() {
 
   return (
     <div className="pdr-stack">
-      <h1 className="pdr-title">Новое обращение</h1>
+      <h1 className="pdr-title">{quickAssessment ? 'Быстрая оценка' : 'Новое обращение'}</h1>
+      {quickAssessment ? (
+        <Card>
+          <div className="pdr-hint">
+            Снимите повреждение и укажите, как связаться с клиентом. После сохранения сразу
+            откроется оценка по фото — обращение сохранится, чтобы не потерять клиента.
+          </div>
+        </Card>
+      ) : null}
 
       <h2 className="pdr-subtitle">Клиент</h2>
       {selectedClient ? (

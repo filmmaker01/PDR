@@ -30,6 +30,13 @@ export function openOrdersTab(workspaceId: string, tab: OrdersTab): void {
   setStickyValue(`${workspaceId}.orders.query`, '');
 }
 
+/** Открыть список заказов сразу с результатом поиска — по всем статусам. */
+export function openOrdersSearch(workspaceId: string, query: string): void {
+  setStickyValue(ordersTabKey(workspaceId), 'active');
+  setStickyValue(`${workspaceId}.orders.search`, query);
+  setStickyValue(`${workspaceId}.orders.query`, query);
+}
+
 /**
  * Заказы мастерской по статусам.
  *

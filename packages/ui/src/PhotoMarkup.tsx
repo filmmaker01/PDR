@@ -5,6 +5,7 @@ import {
   useState,
   type CSSProperties,
   type PointerEvent as ReactPointerEvent,
+  type ReactNode,
 } from 'react';
 import clsx from 'clsx';
 
@@ -409,6 +410,8 @@ export interface MarkedImageProps {
   alt?: string;
   className?: string;
   style?: CSSProperties;
+  /** Что показать, если снимок не загрузился (истекла ссылка, нет сети). */
+  fallback?: ReactNode;
 }
 
 /**
@@ -426,9 +429,11 @@ export function MarkedImage({
   alt = '',
   className,
   style,
+  fallback,
 }: MarkedImageProps) {
   const imageRef = useRef<HTMLImageElement>(null);
   const [size, setSize] = useState<{ w: number; h: number } | null>(null);
+  const [failed, setFailed] = useState(false);
 
   const measure = useCallback((img: HTMLImageElement | null) => {
     if (img && img.naturalWidth > 0 && img.naturalHeight > 0) {
@@ -439,10 +444,19 @@ export function MarkedImage({
   // Снимок из кэша мог загрузиться раньше, чем подписался onLoad.
   useEffect(() => {
     setSize(null);
+    setFailed(false);
     if (imageRef.current?.complete) measure(imageRef.current);
   }, [src, measure]);
 
   const shapes = markup?.shapes ?? [];
+
+  if (failed && fallback !== undefined) {
+    return (
+      <div className={clsx('pdr-marked', className)} style={style}>
+        <span className="pdr-marked__fallback">{fallback}</span>
+      </div>
+    );
+  }
 
   return (
     <div className={clsx('pdr-marked', className)} style={style}>
@@ -454,6 +468,7 @@ export function MarkedImage({
         alt={alt}
         draggable={false}
         onLoad={(event) => measure(event.currentTarget)}
+        onError={() => setFailed(true)}
       />
       {size && shapes.length > 0 ? (
         <svg

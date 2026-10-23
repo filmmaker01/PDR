@@ -37,6 +37,8 @@ export interface OrderListItem {
   assignee: { id: string; name: string; color: string | null } | null;
   scheduledStartAt: string | null;
   createdAt: string;
+  /** Первый снимок с разметкой — приходит, только если список запросили с обложкой. */
+  cover?: { thumbUrl: string | null; annotation: MarkupDoc | null } | null;
 }
 
 export interface OrderCard extends OrderListItem {

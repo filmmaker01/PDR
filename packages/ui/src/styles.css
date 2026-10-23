@@ -948,6 +948,13 @@ select {
   position: relative;
   overflow: hidden;
 }
+.pdr-marked__fallback {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
 .pdr-marked__image {
   display: block;
   width: 100%;

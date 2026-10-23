@@ -90,7 +90,11 @@ export class OrdersController {
   @Can('orders.read_own')
   @AllowExpiredAccess()
   @ApiOperation({ summary: 'Заказы с поиском и фильтрами' })
-  async list(@Ws() ws: WorkspaceContext, @Query() query: Record<string, string>) {
+  async list(
+    @Ws() ws: WorkspaceContext,
+    @Query() query: Record<string, string>,
+    @CurrentAuth() auth: AuthContext,
+  ) {
     const parsed = orderListQuerySchema.parse(query);
     const result = await this.orders.list(ws, {
       statuses: parsed.status,
@@ -103,7 +107,22 @@ export class OrdersController {
       limit: parsed.limit,
       cursor: parsed.cursor,
     });
-    return { items: result.items.map(serializeListItem), nextCursor: result.nextCursor };
+    // Обложка (первый снимок) — только по запросу: она нужна главной, а не
+    // каждому списку, и стоит отдельного запроса к хранилищу.
+    const covers = parsed.withCover
+      ? await this.photos.coversFor(
+          ws,
+          result.items.map((order) => order.id),
+          auth,
+        )
+      : null;
+    return {
+      items: result.items.map((order) => ({
+        ...serializeListItem(order),
+        ...(covers ? { cover: covers.get(order.id) ?? null } : {}),
+      })),
+      nextCursor: result.nextCursor,
+    };
   }
 
   // Объявлен до `orders/:orderId`: иначе «counts» приняли бы за номер заказа.

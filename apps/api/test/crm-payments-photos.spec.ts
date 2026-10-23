@@ -310,6 +310,49 @@ describe('CRM: оплаты и фотографии заказа', () => {
   });
 
   describe('фотографии заказа', () => {
+    it('список заказов с withCover отдаёт первый снимок с разметкой', async () => {
+      const without = await http()
+        .get(`/v1/workspaces/${workspaceId}/orders`)
+        .query({ withCover: 'true' })
+        .set(...owner.authHeader)
+        .expect(200);
+      expect(without.body.items[0].cover).toBeNull();
+
+      const first = await uploadPng();
+      const photo = await http()
+        .post(`/v1/workspaces/${workspaceId}/orders/${orderId}/photos`)
+        .set(...owner.authHeader)
+        .send({ fileId: first, category: 'before' })
+        .expect(201);
+      const annotation = { v: 1, shapes: [{ type: 'circle', cx: 0.5, cy: 0.5, rx: 0.1, ry: 0.1 }] };
+      await http()
+        .post(`/v1/workspaces/${workspaceId}/photos/${photo.body.id}/markup`)
+        .set(...owner.authHeader)
+        .send({ annotation })
+        .expect(201);
+      await http()
+        .post(`/v1/workspaces/${workspaceId}/orders/${orderId}/photos`)
+        .set(...owner.authHeader)
+        .send({ fileId: await uploadPng(), category: 'after' })
+        .expect(201);
+
+      const withCover = await http()
+        .get(`/v1/workspaces/${workspaceId}/orders`)
+        .query({ withCover: 'true' })
+        .set(...owner.authHeader)
+        .expect(200);
+      const item = withCover.body.items.find((o: { id: string }) => o.id === orderId);
+      expect(item.cover.thumbUrl).toBeTruthy();
+      expect(item.cover.annotation).toEqual(annotation);
+
+      // Без параметра список прежний: обложку не запрашивают.
+      const plain = await http()
+        .get(`/v1/workspaces/${workspaceId}/orders`)
+        .set(...owner.authHeader)
+        .expect(200);
+      expect(plain.body.items[0]).not.toHaveProperty('cover');
+    });
+
     it('привязывает снимок к заказу и отдаёт ссылку на миниатюру', async () => {
       const fileId = await uploadPng();
 

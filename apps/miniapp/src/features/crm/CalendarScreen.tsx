@@ -1,5 +1,5 @@
-import { useMemo, useState } from 'react';
-import { useNavigate, useParams } from 'react-router-dom';
+import { useEffect, useMemo, useState } from 'react';
+import { useNavigate, useParams, useSearchParams } from 'react-router-dom';
 import { useMutation, useQueryClient } from '@tanstack/react-query';
 import { ApiError } from '@pdr/api-client';
 import {
@@ -79,6 +79,14 @@ export function CalendarScreen() {
   const [monthOpen, setMonthOpen] = useState(false);
   const [month, setMonth] = useState(() => todayInZone(timezone).slice(0, 7));
   const [createOpen, setCreateOpen] = useState(false);
+  // «Создать → Запись в календарь» с главной открывает ту же форму, что и
+  // кнопка «+ Новая запись». Параметр убирается, чтобы «Назад» не открыл её снова.
+  const [searchParams, setSearchParams] = useSearchParams();
+  useEffect(() => {
+    if (searchParams.get('new') !== '1') return;
+    setCreateOpen(true);
+    setSearchParams({}, { replace: true });
+  }, [searchParams, setSearchParams]);
   const [selected, setSelected] = useState<Appointment | null>(null);
   const [rescheduling, setRescheduling] = useState<Appointment | null>(null);
 

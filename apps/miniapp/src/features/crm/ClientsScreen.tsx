@@ -1,5 +1,5 @@
-import { useState } from 'react';
-import { useNavigate, useParams } from 'react-router-dom';
+import { useEffect, useState } from 'react';
+import { useNavigate, useParams, useSearchParams } from 'react-router-dom';
 import { useMutation, useQueryClient } from '@tanstack/react-query';
 import { ApiError } from '@pdr/api-client';
 import {
@@ -30,6 +30,13 @@ export function ClientsScreen() {
   const [search, setSearch] = useStickyState(`${workspaceId}.clients.search`, '');
   const [query, setQuery] = useStickyState(`${workspaceId}.clients.query`, '');
   const [sheet, setSheet] = useState(false);
+  // «Создать → Клиент» с главной открывает форму «Новый клиент» этого экрана.
+  const [searchParams, setSearchParams] = useSearchParams();
+  useEffect(() => {
+    if (searchParams.get('new') !== '1') return;
+    setSheet(true);
+    setSearchParams({}, { replace: true });
+  }, [searchParams, setSearchParams]);
   const [name, setName] = useState('');
   const [phone, setPhone] = useState('');
 
